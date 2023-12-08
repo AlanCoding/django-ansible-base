@@ -16,6 +16,7 @@ As of this writing there are three django application features:
   * authentication
   * rest_filters
   * resource_registry
+  * RBAC
 
 So if you only wanted api_docs and filtering you could install the library like:
 ```
@@ -47,6 +48,7 @@ See the following table for a mapping.
 | ansible_base.api_documentation | dab_api_documentation | api_documentation       |
 | ansible_base.rest_filters      | dab_rest_filters      | rest_filters            |
 | ansible_base.resource_registry | dab_resource_registry | resource_registry       |
+| ansible_base.rbac              | dab_rbac              | rbac                    |
 
 ## settings.py
 

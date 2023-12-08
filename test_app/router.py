@@ -2,6 +2,7 @@ from rest_framework.routers import SimpleRouter
 
 from test_app import views
 
+
 router = SimpleRouter()
 
 router.register(r'organizations', views.UserViewSet, basename='organization')
@@ -12,3 +13,6 @@ router.register(r'encrypted_models', views.EncryptionModelViewSet, basename='enc
 # this uses standard registration
 router.register(r'related_fields_test_models', views.RelatedFieldsTestModelViewSet)
 # intentionally not registering ResourceMigrationTestModel to test lack of URLs
+router.register(r'inventories', views.InventoryViewSet, basename='inventory')
+router.register(r'cows', views.CowViewSet, basename='cow')
+router.register(r'uuidmodels', views.UUIDModelViewSet, basename='uuidmodel')
