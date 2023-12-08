@@ -22,7 +22,7 @@ class UserSerializer(ModelSerializer):
         fields = '__all__'
 
 
-class EncryptionTestSerializer(NamedCommonModelSerializer):
+class EncryptionModelSerializer(NamedCommonModelSerializer):
     class Meta:
         model = models.EncryptionModel
         fields = NamedCommonModelSerializer.Meta.fields + [x.name for x in models.EncryptionModel._meta.concrete_fields]
@@ -37,4 +37,22 @@ class RelatedFieldsTestModelSerializer(CommonModelSerializer):
 class ResourceMigrationTestModelSerializer(CommonModelSerializer):
     class Meta:
         model = models.ResourceMigrationTestModel
+        fields = '__all__'
+
+
+class InventorySerializer(ModelSerializer):
+    class Meta:
+        model = models.Inventory
+        fields = '__all__'
+
+
+class CowSerializer(ModelSerializer):
+    class Meta:
+        model = models.Cow
+        fields = '__all__'
+
+
+class UUIDModelSerializer(ModelSerializer):
+    class Meta:
+        model = models.UUIDModel
         fields = '__all__'
