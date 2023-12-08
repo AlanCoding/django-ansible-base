@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     'ansible_base.rest_filters',
     'ansible_base.jwt_consumer',
     'ansible_base.resource_registry',
+    'ansible_base.rbac',
     'test_app',
     'django_extensions',
     'debug_toolbar',
@@ -114,6 +115,7 @@ DEMO_DATA_COUNTS = {'organization': 150, 'user': 379, 'team': 43}
 
 ANSIBLE_BASE_TEAM_MODEL = 'test_app.Team'
 ANSIBLE_BASE_ORGANIZATION_MODEL = 'test_app.Organization'
+ANSIBLE_BASE_PERMISSION_MODEL = 'auth.Permission'
 
 STATIC_URL = '/static/'
 
@@ -131,3 +133,7 @@ include(settings_file)
 ANSIBLE_BASE_RESOURCE_CONFIG_MODULE = "test_app.resource_api"
 
 SYSTEM_USERNAME = '_system'
+
+ANSIBLE_BASE_ROLE_PRECREATE = {}  # tested in individual tests
+ANSIBLE_BASE_ALLOW_SINGLETON_USER_ROLES = True
+ANSIBLE_BASE_ALLOW_SINGLETON_TEAM_ROLES = True
