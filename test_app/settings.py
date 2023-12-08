@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     'ansible_base.authentication',
     'ansible_base.rest_filters',
     'ansible_base.jwt_consumer',
+    'ansible_base.rbac',
     'test_app',
 ]
 
@@ -104,6 +105,7 @@ USE_TZ = True
 
 ANSIBLE_BASE_TEAM_MODEL = 'test_app.Team'
 ANSIBLE_BASE_ORGANIZATION_MODEL = 'test_app.Organization'
+ANSIBLE_BASE_PERMISSION_MODEL = 'auth.Permission'
 
 STATIC_URL = '/static/'
 
@@ -117,3 +119,8 @@ from ansible_base.lib import dynamic_config  # noqa: E402
 
 settings_file = os.path.join(os.path.dirname(dynamic_config.__file__), 'dynamic_settings.py')
 include(settings_file)
+
+AUTH_USER_MODEL = 'test_app.User'
+ANSIBLE_BASE_ROLE_PRECREATE = {}  # tested in individual tests
+ANSIBLE_BASE_SINGLETON_USER_RELATIONSHIP = 'singleton_roles'
+ANSIBLE_BASE_SINGLETON_TEAM_RELATIONSHIP = 'singleton_roles'

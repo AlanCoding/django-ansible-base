@@ -69,12 +69,27 @@ class Migration(migrations.Migration):
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('created_on', models.DateTimeField(default=None, editable=False, help_text='The date/time this resource was created')),
                 ('modified_on', models.DateTimeField(default=None, editable=False, help_text='The date/time this resource was created')),
-                ('name', models.CharField(help_text='The name of this resource', max_length=512)),
-                ('testing1', models.CharField(default='a', max_length=1, null=True)),
-                ('testing2', models.CharField(default='b', max_length=1, null=True)),
+                ('name', models.CharField(help_text='The name of this resource', max_length=512, unique=True)),
+                ('description', models.TextField(default='', help_text='The organization description.')),
                 ('created_by', models.ForeignKey(default=None, editable=False, help_text='The user who created this resource', null=True, on_delete=django.db.models.deletion.DO_NOTHING, related_name='%(app_label)s_%(class)s_created+', to=settings.AUTH_USER_MODEL)),
                 ('modified_by', models.ForeignKey(default=None, editable=False, help_text='The user who last modified this resource', null=True, on_delete=django.db.models.deletion.DO_NOTHING, related_name='%(app_label)s_%(class)s_modified+', to=settings.AUTH_USER_MODEL)),
             ],
+            options={
+                'abstract': False,
+            },
+        ),
+        migrations.CreateModel(
+            name='Team',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('name', models.CharField(max_length=512)),
+                ('organization', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='test_app.organization')),
+                ('team_parents', models.ManyToManyField(related_name='team_children', to='test_app.team')),
+                ('tracked_users', models.ManyToManyField(related_name='tracked_teams', to=settings.AUTH_USER_MODEL)),
+            ],
+            options={
+                'permissions': [('member_team', 'Has all roles assigned to this team')],
+            },
         ),
         migrations.CreateModel(
             name='Team',
