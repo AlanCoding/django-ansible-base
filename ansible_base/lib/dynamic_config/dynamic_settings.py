@@ -107,3 +107,34 @@ if 'ansible_base.authentication' in INSTALLED_APPS:
     SOCIAL_AUTH_STORAGE = "ansible_base.authentication.social_auth.AuthenticatorStorage"
     SOCIAL_AUTH_STRATEGY = "ansible_base.authentication.social_auth.AuthenticatorStrategy"
     SOCIAL_AUTH_LOGIN_REDIRECT_URL = "/"
+
+
+if 'ansible_base.rbac' in INSTALLED_APPS:
+    # Settings for the RBAC system, override as necessary in app
+    ANSIBLE_BASE_ROLE_PRECREATE = {
+        'object_admin': '{cls._meta.model_name}-admin',
+        'org_admin': 'organization-admin',
+        'org_children': 'organization-{cls._meta.model_name}-admin',
+        'special': '{cls._meta.model_name}-{action}',
+    }
+
+    # Permissions a user will get when creating a new item
+    ANSIBLE_BASE_CREATOR_DEFAULTS = ['change', 'delete', 'view']
+
+    # Specific feature enablement bits
+    ANSIBLE_BASE_TEAM_TEAM_ALLOWED = True
+    ANSIBLE_BASE_TEAM_ORG_ALLOWED = True
+    ANSIBLE_BASE_TEAM_ORG_TEAM_ALLOWED = True
+
+    # User flags that can grant permission before consulting roles
+    ANSIBLE_BASE_BYPASS_SUPERUSER_FLAGS = ['is_superuser']
+    ANSIBLE_BASE_BYPASS_ACTION_FLAGS = {}
+
+    # Allow using a custom permission model
+    ANSIBLE_BASE_PERMISSION_MODEL = 'auth.Permission'
+
+    # Allows managing singleton permissions with a user-defined relationship
+    ANSIBLE_BASE_SINGLETON_USER_RELATIONSHIP = ''
+    ANSIBLE_BASE_SINGLETON_TEAM_RELATIONSHIP = ''
+
+    ANSIBLE_BASE_SERVICE_PREFIX = 'local'
