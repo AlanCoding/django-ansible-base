@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'social_django',
     'ansible_base',
+    'ansible_base.tests.functional',
 ]
 
 MIDDLEWARE = [
@@ -99,3 +100,5 @@ TEMPLATES = [
 ]
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+ROLE_ORGANIZATION_MODEL = 'functional.Organization'
+ROLE_TEAM_MODEL = 'functional.Team'

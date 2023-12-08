@@ -59,3 +59,18 @@ if ANSIBLE_BASE_FEATURES.get('FILTERING', False):  # noqa: F821
             )
         }
     )
+
+if ANSIBLE_BASE_FEATURES.get('RBAC', False):  # noqa: F821
+    # Settings for the RBAC system, override as necessary in app
+    GATEWAY_ROLE_PRECREATE = {
+        'object_admin': '{cls._meta.model_name}-admin',
+        'org_admin': 'organization-admin',
+        'org_children': 'organization-{cls._meta.model_name}-admin',
+        'special': '{cls._meta.model_name}-{action}',
+    }
+
+    # Define models to be used by permission system
+    ROLE_TEAM_MODEL = 'auth.Group'
+
+    # Permissions a user will get when creating a new item
+    ROLE_CREATOR_DEFAULTS = ['change', 'delete', 'view']
