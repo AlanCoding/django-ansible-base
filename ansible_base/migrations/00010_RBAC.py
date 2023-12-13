@@ -8,7 +8,7 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('ansible_base', '0008_authenticatormap_name_and_more'),
+        ('ansible_base', '0009_authenticator_users'),
         ('contenttypes', '0002_remove_content_type_name'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
         migrations.swappable_dependency(settings.ROLE_TEAM_MODEL),

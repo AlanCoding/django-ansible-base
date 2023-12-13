@@ -70,12 +70,13 @@ def compute_team_member_roles():
     # build out the direct member roles for teams
     direct_member_roles = {}
     team_ct = ContentType.objects.get_for_model(permission_registry.team_model)
-    org_ct = ContentType.objects.get_for_model(org_type)
+    team_parent_model = permission_registry.get_parent_model(permission_registry.team_model)
+    team_parent_ct = ContentType.objects.get_for_model(team_parent_model)
     for object_role in ObjectRole.objects.filter(role_definition__permissions__codename=permission_registry.team_permission).iterator():
         if object_role.content_type_id == team_ct.id:
             direct_member_roles.setdefault(object_role.object_id, [])
             direct_member_roles[object_role.object_id].append(object_role.id)
-        elif object_role.content_type_id == org_ct.id:
+        elif object_role.content_type_id == team_parent_ct.id:
             if object_role.object_id not in org_team_mapping:
                 continue  # this means the organization has no team but has member_team as a listed permission
             for team_id in org_team_mapping[object_role.object_id]:
