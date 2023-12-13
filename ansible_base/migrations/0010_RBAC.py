@@ -35,30 +35,10 @@ class Migration(migrations.Migration):
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('object_id', models.PositiveIntegerField()),
                 ('content_type', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='contenttypes.contenttype')),
-                (
-                    'users',
-                    models.ManyToManyField(
-                        help_text='Users who have access to the permissions defined by this object role',
-                        related_name='has_roles',
-                        to=settings.AUTH_USER_MODEL,
-                    ),
-                ),
-                (
-                    'role_definition',
-                    models.ForeignKey(
-                        help_text='The role definition which defines what permissions this object role grants',
-                        on_delete=django.db.models.deletion.CASCADE,
-                        to='ansible_base.roledefinition',
-                    ),
-                ),
-                (
-                    'teams',
-                    models.ManyToManyField(
-                        help_text='Teams or groups who have access to the permissions defined by this object role',
-                        related_name='has_roles',
-                        to=settings.ROLE_TEAM_MODEL,
-                    ),
-                ),
+                ('provides_teams', models.ManyToManyField(help_text='Users who have this role obtain member access to these teams, and inherit all their permissions', related_name='member_roles', to=settings.ROLE_TEAM_MODEL)),
+                ('role_definition', models.ForeignKey(help_text='The role definition which defines what permissions this object role grants', on_delete=django.db.models.deletion.CASCADE, to='ansible_base.roledefinition')),
+                ('teams', models.ManyToManyField(help_text='Teams or groups who have access to the permissions defined by this object role', related_name='has_roles', to=settings.ROLE_TEAM_MODEL)),
+                ('users', models.ManyToManyField(help_text='Users who have access to the permissions defined by this object role', related_name='has_roles', to=settings.AUTH_USER_MODEL)),
             ],
             options={
                 'verbose_name_plural': 'object_roles',
@@ -90,25 +70,16 @@ class Migration(migrations.Migration):
                 ],
             },
         ),
+        migrations.AddConstraint(
+            model_name='roleevaluation',
+            constraint=models.UniqueConstraint(fields=('object_id', 'content_type_id', 'codename', 'role'), name='one_entry_per_object_permission_and_role'),
+        ),
         migrations.AddIndex(
             model_name='objectrole',
             index=models.Index(fields=['content_type', 'object_id'], name='ansible_bas_content_0088d6_idx'),
         ),
-        migrations.AddField(
-            model_name='objectrole',
-            name='provides_teams',
-            field=models.ManyToManyField(
-                help_text='Users who have this role obtain member access to these teams, and inherit all their permissions',
-                related_name='member_roles',
-                to=settings.ROLE_TEAM_MODEL,
-            ),
-        ),
         migrations.AddConstraint(
             model_name='objectrole',
             constraint=models.UniqueConstraint(fields=('object_id', 'content_type', 'role_definition'), name='one_object_role_per_object_and_role'),
-        ),
-        migrations.AddConstraint(
-            model_name='roleevaluation',
-            constraint=models.UniqueConstraint(fields=('object_id', 'content_type_id', 'codename', 'role'), name='one_entry_per_object_permission_and_role'),
         ),
     ]
