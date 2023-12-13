@@ -1,7 +1,5 @@
 import logging
 
-from django.apps import apps
-from django.conf import settings
 from django.contrib.contenttypes.models import ContentType
 
 from ansible_base.models.rbac import ObjectRole, RoleDefinition, RoleEvaluation
