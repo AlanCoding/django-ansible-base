@@ -1,6 +1,4 @@
 import logging
-import os
-import sys
 
 from django.apps import apps
 from django.conf import settings
@@ -196,11 +194,7 @@ def post_migration_rbac_setup(*args, **kwargs):
     Return if running django or py.test unit tests.
     Logic is taken from AWX is_testing, it could be cut down on
     """
-    if 'PYTEST_CURRENT_TEST' in os.environ.keys():
-        return
-    if len(sys.argv) >= 1 and ('py.test' in sys.argv[0] or 'py/test.py' in sys.argv[0]):
-        return
-    elif len(sys.argv) >= 2 and sys.argv[1] == 'test':
+    if not settings.GATEWAY_ROLE_PRECREATE:
         return
 
     try:

@@ -103,3 +103,4 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 ROLE_TEAM_MODEL = 'functional.Team'
 ROLE_ORGANIZATION_MODEL = 'functional.Organization'
 ROLE_CREATOR_DEFAULTS = ['change', 'delete', 'view']
+GATEWAY_ROLE_PRECREATE = {}  # tested in individual tests
