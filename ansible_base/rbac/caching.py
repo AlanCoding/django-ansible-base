@@ -56,7 +56,6 @@ def compute_team_member_roles():
     # If a team-level role lists "member_team" then that also convers
     # the member permissions to the user
     # these are called "direct" membership roles to a team, and we need them in-memory
-    org_type = apps.get_model(settings.ROLE_ORGANIZATION_MODEL)
 
     # manually prefetch the team and org memberships
     org_team_mapping = {}
@@ -98,7 +97,7 @@ def compute_team_member_roles():
             if object_role.content_type_id == team_ct.id:
                 team_team_parents.setdefault(object_role.object_id, [])
                 team_team_parents[object_role.object_id].append(actor_team.id)
-            elif object_role.content_type_id == org_ct.id:
+            elif object_role.content_type_id == team_parent_ct.id:
                 # NOTE: this is supporting something we intend to disable when assigning the team to the object role
                 logger.warning(
                     f'The role {object_role.role_definition.name} on {object_role.content_object} gives {actor_team} '
