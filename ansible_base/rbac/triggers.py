@@ -23,6 +23,10 @@ Sounds simple, but is actually more complicated that the caching logic itself.
 
 
 def team_ancestor_roles(team):
+    """
+    Return a queryset of all roles that directly or indirectly grant any form of permission to a team.
+    This is generally used when invalidating a team membership for one reason or another.
+    """
     return set(
         ObjectRole.objects.filter(
             permission_partials__in=RoleEvaluation.objects.filter(

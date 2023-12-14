@@ -31,14 +31,14 @@ def all_team_parents(team_id, team_team_parents, seen=None):
     """
     parent_team_ids = set()
     if seen is None:
-        seen = set()
+        seen = set([team_id])
     for parent_id in team_team_parents.get(team_id, []):
         if parent_id in seen:
             # will be combined in a lower level of the call stack
             # this condition prevents infinite recursion in the event of loops in the graph
             continue
         parent_team_ids.add(parent_id)
-        parent_team_ids.update(all_team_parents(parent_id, team_team_parents, seen=parent_team_ids))
+        parent_team_ids.update(all_team_parents(parent_id, team_team_parents, seen=seen))
     return parent_team_ids
 
 
