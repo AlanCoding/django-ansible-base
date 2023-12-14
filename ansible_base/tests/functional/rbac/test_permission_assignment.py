@@ -128,6 +128,18 @@ class TestTeamAssignment:
         assert set(member_or.provides_teams.all()) == set(teams)
         assert set(RoleEvaluation.accessible_objects(Inventory, rando, 'change_inventory')) == set([inv])
 
+        # remove a team in the middle and confirm the effect works
+        member_rd.remove_permission(teams[2], teams[3])
+        assert set(RoleEvaluation.accessible_objects(Inventory, rando, 'change_inventory')) == set([])
+        # confirm that adding the team back also works
+        member_or = member_rd.give_permission(teams[2], teams[3])
+        assert set(RoleEvaluation.accessible_objects(Inventory, rando, 'change_inventory')) == set([inv])
+        # now delete a middle team should have a similar effecct, also breaking the chain
+        teams[3].delete()
+        # print(teams[3].member_roles.all())
+        assert set(RoleEvaluation.accessible_objects(Inventory, rando, 'change_inventory')) == set([])
+
+
     @pytest.mark.parametrize('order', ['role_first', 'obj_first'])
     def test_team_assignment_to_organization(self, rando, member_rd, inv_rd, order):
         inv_org = Organization.objects.create(name='inv-org')

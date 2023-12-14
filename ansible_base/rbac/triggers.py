@@ -4,7 +4,7 @@ from django.apps import apps
 from django.conf import settings
 from django.contrib.auth.models import Permission
 from django.contrib.contenttypes.models import ContentType
-from django.db.models.signals import m2m_changed, post_delete, post_init, post_save
+from django.db.models.signals import m2m_changed, pre_delete, post_delete, post_init, post_save
 from django.db.utils import ProgrammingError
 
 from ansible_base.migrations._managed_definitions import setup_managed_role_definitions
@@ -20,6 +20,15 @@ As the caching module will fill in cached data,
 this module shall manage the calling of the caching methods.
 Sounds simple, but is actually more complicated that the caching logic itself.
 '''
+
+def team_ancestor_roles(team):
+    return set(
+        ObjectRole.objects.filter(
+            permission_partials__in=RoleEvaluation.objects.filter(
+                codename=permission_registry.team_permission, object_id=team.id, content_type_id=ContentType.objects.get_for_model(team).id
+            )
+        )
+    )
 
 
 def needed_updates_on_assignment(role_definition, actor, object_role, created=False, giving=True):
@@ -39,15 +48,7 @@ def needed_updates_on_assignment(role_definition, actor, object_role, created=Fa
 
     # If permissions for team are changed. That tends to affect a lot.
     if actor._meta.model_name != 'user':
-        to_update.update(
-            set(
-                ObjectRole.objects.filter(
-                    permission_partials__in=RoleEvaluation.objects.filter(
-                        codename=permission_registry.team_permission, object_id=actor.id, content_type_id=ContentType.objects.get_for_model(actor).id
-                    )
-                )
-            )
-        )
+        to_update.update(team_ancestor_roles(actor))
         if not giving:
             # this will delete some permission assignments that will be removed from this relationship
             to_update.update(object_role.descendent_roles())
@@ -136,8 +137,7 @@ def post_save_update_obj_permissions(instance):
 
     # If the actual object changed (created or modified) was a team, any org role
     # that has member_team needs to be updated, and any parent teams that have that role
-    team_type = apps.get_model(settings.ROLE_TEAM_MODEL)
-    if instance._meta.model_name == team_type._meta.model_name:
+    if instance._meta.model_name == permission_registry.team_model._meta.model_name:
         compute_team_member_roles()
 
     if to_update:
@@ -172,15 +172,19 @@ def recompute_object_role_permissions(instance, created, *args, **kwargs):
         post_save_update_obj_permissions(instance)
 
 
+def team_pre_delete(instance, *args, **kwargs):
+    instance.__rbac_stashed_member_roles = list(instance.member_roles.all())
+
+
 def remove_object_roles(instance, *args, **kwargs):
     """
     Call this when deleting an object to cascade delete its object roles
     Deleting a team can have consequences for the rest of the graph
     """
-    indirectly_affected_roles = set()
-    team_type = apps.get_model(settings.ROLE_TEAM_MODEL)
-    if instance._meta.model_name == team_type._meta.model_name:
-        for team_role in instance.member_roles.all():
+    if instance._meta.model_name == permission_registry.team_model._meta.model_name:
+        indirectly_affected_roles = set()
+        indirectly_affected_roles.update(team_ancestor_roles(instance))
+        for team_role in instance.__rbac_stashed_member_roles:
             indirectly_affected_roles.update(team_role.descendent_roles())
         compute_team_member_roles()
         compute_object_role_permissions(object_roles=indirectly_affected_roles)
@@ -208,6 +212,8 @@ def post_migration_rbac_setup(*args, **kwargs):
 
 
 def connect_rbac_signals(cls):
+    if cls._meta.model_name == permission_registry.team_model._meta.model_name:
+        pre_delete.connect(team_pre_delete, sender=cls, dispatch_uid='stash-team-roles-before-delete')
     post_save.connect(recompute_object_role_permissions, sender=cls, dispatch_uid='permission-registry-post-save')
     post_delete.connect(remove_object_roles, sender=cls, dispatch_uid='permission-registry-post-delete')
     post_init.connect(set_original_parent, sender=cls, dispatch_uid='permission-registry-save-prior-parent')

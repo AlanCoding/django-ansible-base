@@ -82,8 +82,7 @@ class PermissionRegistry:
 
         post_migrate.connect(post_migration_rbac_setup, sender=self)
 
-        user_cls = apps.get_model(settings.AUTH_USER_MODEL)
-        user_cls.add_to_class('has_obj_perm', bound_has_obj_perm)
+        self.user_model.add_to_class('has_obj_perm', bound_has_obj_perm)
 
         for cls in self._registry:
             connect_rbac_signals(cls)
