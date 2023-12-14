@@ -136,9 +136,25 @@ class TestTeamAssignment:
         assert set(RoleEvaluation.accessible_objects(Inventory, rando, 'change_inventory')) == set([inv])
         # now delete a middle team should have a similar effecct, also breaking the chain
         teams[3].delete()
-        # print(teams[3].member_roles.all())
         assert set(RoleEvaluation.accessible_objects(Inventory, rando, 'change_inventory')) == set([])
 
+    def test_teams_with_loops(self, rando, inventory, organization, member_rd, inv_rd):
+        "This creates team memberships with a non-trivial loop and checks for infinite recursion"
+        teamA = permission_registry.team_model.objects.create(name='teamA', organization=organization)
+        teamB = permission_registry.team_model.objects.create(name='teamB', organization=organization)
+        teamC = permission_registry.team_model.objects.create(name='teamC', organization=organization)
+
+        member_rd.give_permission(teamA, teamB)
+        member_rd.give_permission(teamB, teamC)
+        member_rd.give_permission(teamC, teamA)
+
+        member_rd.give_permission(rando, teamA)
+        inv_rd.give_permission(teamC, inventory)
+
+        assert set(RoleEvaluation.accessible_objects(Inventory, rando, 'change_inventory')) == set([inventory])
+
+        teamC.delete()
+        assert set(RoleEvaluation.accessible_objects(Inventory, rando, 'change_inventory')) == set([])
 
     @pytest.mark.parametrize('order', ['role_first', 'obj_first'])
     def test_team_assignment_to_organization(self, rando, member_rd, inv_rd, order):

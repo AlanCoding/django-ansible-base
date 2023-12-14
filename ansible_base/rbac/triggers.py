@@ -4,7 +4,7 @@ from django.apps import apps
 from django.conf import settings
 from django.contrib.auth.models import Permission
 from django.contrib.contenttypes.models import ContentType
-from django.db.models.signals import m2m_changed, pre_delete, post_delete, post_init, post_save
+from django.db.models.signals import m2m_changed, post_delete, post_init, post_save, pre_delete
 from django.db.utils import ProgrammingError
 
 from ansible_base.migrations._managed_definitions import setup_managed_role_definitions
@@ -20,6 +20,7 @@ As the caching module will fill in cached data,
 this module shall manage the calling of the caching methods.
 Sounds simple, but is actually more complicated that the caching logic itself.
 '''
+
 
 def team_ancestor_roles(team):
     return set(
