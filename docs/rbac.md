@@ -7,7 +7,48 @@ This is derived from the RBAC system in AWX which was implemented roughly
 in the year 2015, and this remained stable until an overhaul, with early work
 proceeding in the year 2023.
 
-## Overview
+## Using
+
+Start with `docs/Installation.md` for the core ansible_base setup.
+
+### Django Settings for RBAC
+
+You can specify which model you want to use for Organization / User / Team models.
+The user model is obtained from the generic Django user setup, like the `AUTH_USER_MODEL` setting.
+
+CAUTION: these settings will be used in _migrations_ so if you change these
+settings later on, you will need to handle that in a new migration.
+
+```
+ROLE_TEAM_MODEL = 'auth.Group'
+ROLE_ORGANIZATION_MODEL = 'main.Organization'
+```
+
+You don't strictly need an organization model (the setting is only used
+for role pre-created roles), but a core feature of this
+system is maintaining a resource hierarchy. Organization is just an assumed
+root model for resources. You could use any model for as parent resources
+or have multiple hierarchies.
+
+If a user has `add` permission to a resource, they should get permissions
+to the object they created. Specify those with this setting.
+
+```
+ROLE_CREATOR_DEFAULTS = ['change', 'delete', 'view']
+```
+
+In a post_migrate signal, certain RoleDefinitions are pre-created.
+You can customize that with the following setting,
+or make it an empty dictionary to not create any.
+
+```
+GATEWAY_ROLE_PRECREATE = {
+    'object_admin': '{cls._meta.model_name}-admin',
+    'org_admin': 'organization-admin',
+    'org_children': 'organization-{cls._meta.model_name}-admin',
+    'special': '{cls._meta.model_name}-{action}',
+}
+```
 
 ### RBAC Usage at ORM layer
 
