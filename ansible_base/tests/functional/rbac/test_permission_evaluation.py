@@ -1,4 +1,5 @@
 import pytest
+from django.test.utils import override_settings
 
 from ansible_base.models.rbac import ObjectRole, RoleDefinition, RoleEvaluation
 from ansible_base.rbac.permission_registry import permission_registry
@@ -54,3 +55,17 @@ def test_visible_roles():
 
     # Likewise is not true in reverse, just having view permision to org does not mean you can see all the roles
     assert set(ObjectRole.visible_roles(u2)) == set([change_2, view_1])
+
+
+@pytest.mark.django_db
+@override_settings(ROLE_BYPASS_SUPERUSER_FLAGS=['is_superuser'])
+def test_superuser_can_do_anything(inventory):
+    user = permission_registry.user_model.objects.create(username='superuser', is_superuser=True)
+    assert user.has_obj_perm(inventory, 'change')
+
+
+@pytest.mark.django_db
+@override_settings(ROLE_BYPASS_SUPERUSER_FLAGS=[])
+def test_superuser_flag_not_considered(inventory):
+    user = permission_registry.user_model.objects.create(username='superuser', is_superuser=True)
+    assert not user.has_obj_perm(inventory, 'change')

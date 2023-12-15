@@ -11,6 +11,83 @@ proceeding in the year 2023.
 
 Start with `docs/Installation.md` for the core ansible_base setup.
 
+### RBAC Usage at ORM layer
+
+Developers should interact with the `RoleDefinition` as an ordinary model.
+Ordinarily, the `ObjectRole` or `RoleEvaluation` should not be interacted with.
+
+#### Creating a New Role Definition
+
+These are expected to be user-defined in many apps.
+Example of creating a custom role definition:
+
+```
+from django.contrib.auth.models import Permission
+from django.contrib.contenttypes.models import ContentType
+from awx.ansible_base.models.rbac import RoleDefinition
+
+# Create a new custom RoleDefinition
+jt_ct = ContentType.objects.get_for_model(JobTemplate)
+rd = RoleDefinition.objects.get_or_create(
+  name='all-job-template-permissions',
+  permissions=list(Permission.objects.filter(content_type=jt_ct))
+)
+```
+
+#### Giving User Role to Object
+
+Using the role definition from the last code block, give a user that role to
+an object using the `give_permission` method.
+
+```
+from awx.main.models import JobTemplate
+
+# Give permissions of the RoleDefinition to a user for an object
+jt = JobTemplate.objects.get(name='Demo Job Template')
+u = User.objects.get(username='alan')
+rd.give_permission(u, jt)
+```
+
+This would give the user "alan" all allowed permission types to the Demo JT.
+You can reverse this action with the `remove_permission` method.
+
+Both methods will return an `ObjectRole` as a result.
+The object roles are managed by the RBAC system, and created or deleted as needed.
+The object role maps a role definition to an object, and has a related association
+for users and teams who have that object role.
+
+#### Registering Models
+
+Any Django Model can
+be made into a resource in the RBAC system by registering that resource in the registry.
+
+```
+from awx.ansible_base.utils.permission_registry import permission_registry
+
+permission_registry.register(MyModel)
+```
+
+The Django auth app already creates permissions in a migration.
+If you need to manage special permissions beyond the default permissions, these need to
+be added in the model's `Meta` according to the Django documentation.
+
+#### Creator Permissions
+
+You can give a user add permission to an organization, like "add_mymodel".
+The Django `Permission` entry will link to `MyModel` but inside of roles,
+these permissions only apply to the parent model of the object,
+or act as singleton roles.
+
+After the object is created, you need to give the user creator permissions.
+Otherwise they won't even to be able to see what they created!
+
+```
+RoleDefinition.objects.give_creator_permissions(u, jt)
+```
+
+This will assign all valid permissions for the object they created from the
+list in `settings.ROLE_CREATOR_DEFAULTS`.
+
 ### Django Settings for RBAC
 
 You can specify which model you want to use for Organization / User / Team models.
@@ -30,6 +107,8 @@ system is maintaining a resource hierarchy. Organization is just an assumed
 root model for resources. You could use any model for as parent resources
 or have multiple hierarchies.
 
+#### Creator Permissions
+
 If a user has `add` permission to a resource, they should get permissions
 to the object they created. Specify those with this setting.
 
@@ -37,9 +116,10 @@ to the object they created. Specify those with this setting.
 ROLE_CREATOR_DEFAULTS = ['change', 'delete', 'view']
 ```
 
+#### Managed Pre-Created Role Definitions
+
 In a post_migrate signal, certain RoleDefinitions are pre-created.
-You can customize that with the following setting,
-or make it an empty dictionary to not create any.
+You can customize that with the following setting.
 
 ```
 GATEWAY_ROLE_PRECREATE = {
@@ -50,51 +130,23 @@ GATEWAY_ROLE_PRECREATE = {
 }
 ```
 
-### RBAC Usage at ORM layer
+Set this to `{}` if you will create role definitions in your own data migration,
+or if you want all roles to be user-defined.
 
-Developers should interact with the `RoleDefinition` as an ordinary model.
-Ordinarily, the `ObjectRole` or `RoleEvaluation` should not be interacted with.
+#### RBAC vs User Flag Responsibilities
 
-Example of assigning permissions using a custom role definition:
+With some user flags, like the standard `is_superuser` flag, the RBAC system does not
+need to be consulted to make an evaluation.
+You may or may not want this to be done as part of the attached methods
+like `accessible_objects` or `has_obj_perm`. That can be controlled with these.
 
-    from django.contrib.auth.models import Permission
-    from django.contrib.contenttypes.models import ContentType
-    from awx.main.models import JobTemplate
-    from awx.ansible_base.models.rbac import RoleDefinition
+```
+ROLE_BYPASS_SUPERUSER_FLAGS = ['is_superuser']
+ROLE_BYPASS_ACTION_FLAGS = {'view': 'is_system_auditor'}
+```
 
-    # Create a new custom RoleDefinition
-    jt_ct = ContentType.objects.get_for_model(JobTemplate)
-    rd = RoleDefinition.objects.get_or_create(
-      name='all-job-template-permissions',
-      permissions=list(Permission.objects.filter(content_type=jt_ct))
-    )
-
-    # Give permissions of the RoleDefinition to a user for an object
-    jt = JobTemplate.objects.get(name='Demo Job Template')
-    u = User.objects.get(username='alan')
-    rd.give_permission(u, jt)
-
-This would give the user "alan" all allowed permission types to the Demo JT.
-
-Any Django Model can
-be made into a resource in the RBAC system by registering that resource in the registry.
-
-    from awx.ansible_base.utils.permission_registry import permission_registry
-
-    permission_registry.register(MyModel)
-
-The Django auth app already creates permissions in a migration.
-If you need to manage special permissions beyond the default permissions, these need to
-be added in the model's `Meta` according to the Django documentation.
-
-You can give a user add permission to an organization, like "add_jobtemplate".
-After the object is created, you need to give the user creator permissions.
-Otherwise they won't even to be able to see what they created!
-
-    RoleDefinition.objects.give_creator_permissions(u, jt)
-
-This will assign all valid permissions for the object they created from the
-list in `settings.ROLE_CREATOR_DEFAULTS`.
+You can blank these with values `[]` and `{}`. In these cases, the querysets
+will produce nothing for the superuser if they have not been assigned any roles.
 
 ### RBAC - System Basics
 
@@ -134,14 +186,6 @@ A job template, like other resources, is considered to be in an organization.
 If you give someone an object role associated with the job template's organization,
 and that role's permissions list `execute_jobtemplate`, they will obtain the ability
 to launch that job template along with all other job templates in the organization.
-
-#### Singleton Permissions
-
-System admin is handled by the `is_superuser` flag on the user model.
-
-The system auditor permission does not have a field in the default `User` model,
-and because of this the `is_system_auditor` flag is managed on the related `Profile` model,
-which is specific to AWX. This needs to be changed as apps move to a common user model.
 
 ### Models
 

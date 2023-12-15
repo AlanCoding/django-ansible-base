@@ -184,6 +184,11 @@ class ObjectRole(models.Model):
     def __str__(self):
         return f'ObjectRole(pk={self.id}, {self.content_type.model}={self.object_id})'
 
+    def save(self, *args, **kwargs):
+        if self.id:
+            raise RuntimeError('ObjectRole model is immutable, use RoleDefinition.give_permission method')
+        return super().save(*args, **kwargs)
+
     @classmethod
     def visible_roles(cls, user):
         "Return a querset of object roles that this user should be allowed to view"
@@ -290,6 +295,11 @@ class RoleEvaluation(models.Model):
 
     def __str__(self):
         return f'RoleEvaluation(pk={self.id}, codename={self.codename}, object_id={self.object_id}, content_type_id={self.content_type_id})'
+
+    def save(self, *args, **kwargs):
+        if self.id:
+            raise RuntimeError('RoleEvaluation model is immutable and only used internally')
+        return super().save(*args, **kwargs)
 
     role = models.ForeignKey(
         ObjectRole, null=False, on_delete=models.CASCADE, related_name='permission_partials', help_text=_("The object role that grants this form of permission")

@@ -1,3 +1,5 @@
+from django.conf import settings
+
 from ansible_base.models.rbac import RoleEvaluation
 
 '''
@@ -40,11 +42,11 @@ class BaseEvaluationDescriptor:
 
 
 def has_super_permission(user, codename):
-    if user.is_superuser:
-        return True
-    # TODO: handle non-superuser flags in a more general way, setup in settings
-    if hasattr(user, 'is_system_auditor'):
-        if codename.startswith('view') and user.is_system_auditor:
+    for super_flag in settings.ROLE_BYPASS_SUPERUSER_FLAGS:
+        if getattr(user, super_flag):
+            return True
+    for action, super_flag in settings.ROLE_BYPASS_ACTION_FLAGS.items():
+        if codename.startswith(action) and getattr(user, super_flag):
             return True
     return False
 

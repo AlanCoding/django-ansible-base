@@ -45,7 +45,7 @@ def validate_assignment_enabled(actor, content_type, has_team_perm=False):
     if all([team_team_allowed, team_org_allowed, team_org_team_allowed]):
         return  # Everything is allowed
     team_model_name = permission_registry.team_model._meta.model_name
-    if not actor._meta.model_name == team_model_name:
+    if actor._meta.model_name != team_model_name:
         return  # Current prohibition settings only apply to team actors
 
     if not team_team_allowed and content_type.model == team_model_name:

@@ -79,3 +79,7 @@ if ANSIBLE_BASE_FEATURES.get('RBAC', False):  # noqa: F821
     ROLE_TEAM_TEAM_ALLOWED = True
     ROLE_TEAM_ORG_ALLOWED = True
     ROLE_TEAM_ORG_TEAM_ALLOWED = True
+
+    # User flags that can grant permission before consulting roles
+    ROLE_BYPASS_SUPERUSER_FLAGS = ['is_superuser']
+    ROLE_BYPASS_ACTION_FLAGS = {}
