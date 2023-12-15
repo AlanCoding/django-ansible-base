@@ -4,10 +4,9 @@ from django.apps import apps
 from django.conf import settings
 from django.contrib.auth.models import Permission
 from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import ValidationError
 from django.db.models.signals import m2m_changed, post_delete, post_init, post_save, pre_delete
 from django.db.utils import ProgrammingError
-
-from django.core.exceptions import ValidationError
 
 from ansible_base.migrations._managed_definitions import setup_managed_role_definitions
 from ansible_base.models.rbac import ObjectRole, RoleDefinition, RoleEvaluation

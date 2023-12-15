@@ -99,9 +99,7 @@ def compute_team_member_roles():
                 team_team_parents[object_role.object_id].append(actor_team.id)
             elif object_role.content_type_id == team_parent_ct.id:
                 if object_role.object_id not in org_team_mapping:
-                    logger.warning(
-                        f'{object_role} gives {permission_registry.team_permission} to an invalid type: {object_role.content_type.model}'
-                    )
+                    logger.warning(f'{object_role} gives {permission_registry.team_permission} to an invalid type')
                     continue
                 for team_id in org_team_mapping[object_role.object_id]:
                     team_team_parents.setdefault(team_id, [])
