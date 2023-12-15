@@ -58,11 +58,13 @@ def compute_team_member_roles():
     # manually prefetch the team and org memberships
     org_team_mapping = {}
     team_fields = ['id']
-    if hasattr(permission_registry.team_model, 'organization'):
-        team_fields.append('organization_id')
-    for team in permission_registry.team_model.objects.only(*team_fields):
-        org_team_mapping.setdefault(team.organization_id, [])
-        org_team_mapping[team.organization_id].append(team.id)
+    team_parent_fd = permission_registry.get_parent_fd_name(permission_registry.team_model)
+    if team_parent_fd:
+        team_fields.append(f'{team_parent_fd}_id')
+        for team in permission_registry.team_model.objects.only(*team_fields):
+            team_parent_id = getattr(team, f'{team_parent_fd}_id')
+            org_team_mapping.setdefault(team_parent_id, [])
+            org_team_mapping[team_parent_id].append(team.id)
 
     # build out the direct member roles for teams
     direct_member_roles = {}
