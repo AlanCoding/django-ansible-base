@@ -98,12 +98,10 @@ def compute_team_member_roles():
                 team_team_parents.setdefault(object_role.object_id, [])
                 team_team_parents[object_role.object_id].append(actor_team.id)
             elif object_role.content_type_id == team_parent_ct.id:
-                # NOTE: this is supporting something we intend to disable when assigning the team to the object role
-                logger.warning(
-                    f'The role {object_role.role_definition.name} on {object_role.content_object} gives {actor_team} '
-                    'an org-team permission, which should not have been allowed'
-                )
                 if object_role.object_id not in org_team_mapping:
+                    logger.warning(
+                        f'{object_role} gives {permission_registry.team_permission} to an invalid type: {object_role.content_type.model}'
+                    )
                     continue
                 for team_id in org_team_mapping[object_role.object_id]:
                     team_team_parents.setdefault(team_id, [])

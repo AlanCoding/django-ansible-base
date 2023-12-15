@@ -74,3 +74,8 @@ if ANSIBLE_BASE_FEATURES.get('RBAC', False):  # noqa: F821
 
     # Permissions a user will get when creating a new item
     ROLE_CREATOR_DEFAULTS = ['change', 'delete', 'view']
+
+    # Specific feature enablement bits
+    ROLE_TEAM_TEAM_ALLOWED = True
+    ROLE_TEAM_ORG_ALLOWED = True
+    ROLE_TEAM_ORG_TEAM_ALLOWED = True

@@ -1,5 +1,8 @@
 import pytest
+
 from django.contrib.auth.models import Permission
+from django.core.exceptions import ValidationError
+from django.test.utils import override_settings
 
 from ansible_base.models.rbac import RoleDefinition, RoleEvaluation
 from ansible_base.rbac.permission_registry import permission_registry
@@ -90,12 +93,28 @@ class TestTeamAssignment:
     def test_object_team_assignment(self, rando, inventory, team, member_rd, inv_rd):
         member_or = member_rd.give_permission(rando, team)
         assert set(member_or.provides_teams.all()) == set([team])
+        assert set(RoleEvaluation.accessible_objects(Inventory, rando, 'change_inventory')) == set([])
         inv_or = inv_rd.give_permission(team, inventory)
         assert team in inv_or.teams.all()
 
         assert set(RoleEvaluation.accessible_objects(Inventory, rando, 'change_inventory')) == set([inventory])
 
+        # revoking team access to inventory should revoke permissions obtained from the team
+        inv_rd.remove_permission(team, inventory)
+        assert set(RoleEvaluation.accessible_objects(Inventory, rando, 'change_inventory')) == set([])
+
+    def test_object_team_assignment_reverse(self, rando, inventory, team, member_rd, inv_rd):
+        "Same as test_object_team_assignment but with the order of operations reversed"
+        inv_or = inv_rd.give_permission(team, inventory)
+        assert team in inv_or.teams.all()
+        assert set(RoleEvaluation.accessible_objects(Inventory, rando, 'change_inventory')) == set([])
+        member_or = member_rd.give_permission(rando, team)
+        assert set(member_or.provides_teams.all()) == set([team])
+
+        assert set(RoleEvaluation.accessible_objects(Inventory, rando, 'change_inventory')) == set([inventory])
+
         # revoking team membership should revoke permissions obtained from the team
+        member_rd.remove_permission(rando, team)
         assert set(RoleEvaluation.accessible_objects(Inventory, rando, 'change_inventory')) == set([])
 
     def test_five_nested_teams(self, rando, organization, member_rd, inv_rd):
@@ -228,3 +247,53 @@ class TestOrgTeamMemberAssignment:
             inv_rd.remove_permission(child_team, inv)
 
         assert set(RoleEvaluation.accessible_objects(Inventory, rando, 'change_inventory')) == set([])
+
+    def test_team_member_to_own_org(self, rando, organization, inventory, member_rd):
+        assert set(RoleEvaluation.accessible_objects(permission_registry.team_model, rando, 'view')) == set([])
+
+        team = permission_registry.team_model.objects.create(name='example-team', organization=organization)
+        team_or = member_rd.give_permission(rando, team)
+        assert list(team_or.provides_teams.all()) == [team]
+        assert set(RoleEvaluation.accessible_objects(Organization, rando, 'view_organization')) == set([])
+        assert set(RoleEvaluation.accessible_objects(permission_registry.team_model, rando, 'view_team')) == set([team])
+
+        # this organization role will give permission to view inventories and to be a member of all teams in the org
+        team_perms = list(member_rd.permissions.values_list('codename', flat=True))
+        org_inv_team_rd = RoleDefinition.objects.create_from_permissions(
+            permissions=team_perms + ['view_organization', 'view_inventory'], name='org-multi-permission'
+        )
+        org_or = org_inv_team_rd.give_permission(team, organization)
+        assert list(org_or.provides_teams.all()) == [team]
+        assert set(RoleEvaluation.accessible_objects(Organization, rando, 'view_organization')) == set([organization])
+        assert set(RoleEvaluation.accessible_objects(Inventory, rando, 'view_inventory')) == set([inventory])
+
+        # confirm revoking the user membership removes all those permissions
+        member_rd.remove_permission(rando, team)
+        assert set(RoleEvaluation.accessible_objects(Organization, rando, 'view_organization')) == set([])
+        assert set(RoleEvaluation.accessible_objects(Inventory, rando, 'view_inventory')) == set([])
+
+
+@pytest.mark.django_db
+class TestProhibitedAssignments:
+    @override_settings(ROLE_TEAM_TEAM_ALLOWED=False)
+    def test_team_team_assignment(self, member_rd, organization):
+        teamA = permission_registry.team_model.objects.create(name='teamA', organization=organization)
+        teamB = permission_registry.team_model.objects.create(name='teamB', organization=organization)
+        with pytest.raises(ValidationError) as exc:
+            member_rd.give_permission(teamA, teamB)
+        assert 'Assigning team permissions to other teams is not allowed' in str(exc)
+
+    @override_settings(ROLE_TEAM_ORG_ALLOWED=False)
+    def test_team_org_assignment(self, organization):
+        team = permission_registry.team_model.objects.create(name='example-team', organization=organization)
+        view_rd = RoleDefinition.objects.create_from_permissions(permissions=['view_organization'], name='view-org')
+        with pytest.raises(ValidationError) as exc:
+            view_rd.give_permission(team, organization)
+        assert 'Assigning organization permissions to teams is not allowed' in str(exc)
+
+    @override_settings(ROLE_TEAM_ORG_TEAM_ALLOWED=False)
+    def test_team_org_member_assignment(self, member_rd, organization):
+        team = permission_registry.team_model.objects.create(name='example-team', organization=organization)
+        with pytest.raises(ValidationError) as exc:
+            member_rd.give_permission(team, organization)
+        assert 'Assigning organization permissions to teams is not allowed' in str(exc)

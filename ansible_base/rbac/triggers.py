@@ -7,6 +7,8 @@ from django.contrib.contenttypes.models import ContentType
 from django.db.models.signals import m2m_changed, post_delete, post_init, post_save, pre_delete
 from django.db.utils import ProgrammingError
 
+from django.core.exceptions import ValidationError
+
 from ansible_base.migrations._managed_definitions import setup_managed_role_definitions
 from ansible_base.models.rbac import ObjectRole, RoleDefinition, RoleEvaluation
 from ansible_base.rbac.caching import compute_object_role_permissions, compute_team_member_roles
@@ -36,6 +38,28 @@ def team_ancestor_roles(team):
     )
 
 
+def validate_assignment_enabled(actor, content_type, has_team_perm=False):
+    team_team_allowed = settings.ROLE_TEAM_TEAM_ALLOWED
+    team_org_allowed = settings.ROLE_TEAM_ORG_ALLOWED
+    team_org_team_allowed = settings.ROLE_TEAM_ORG_TEAM_ALLOWED
+
+    if all([team_team_allowed, team_org_allowed, team_org_team_allowed]):
+        return  # Everything is allowed
+    team_model_name = permission_registry.team_model._meta.model_name
+    if not actor._meta.model_name == team_model_name:
+        return  # Current prohibition settings only apply to team actors
+
+    if not team_team_allowed and content_type.model == team_model_name:
+        raise ValidationError('Assigning team permissions to other teams is not allowed')
+
+    team_parent_model_name = permission_registry.get_parent_model(permission_registry.team_model)._meta.model_name
+    if not team_org_allowed and content_type.model == team_parent_model_name:
+        raise ValidationError(f'Assigning {team_parent_model_name} permissions to teams is not allowed')
+
+    if not team_org_team_allowed and content_type.model == team_parent_model_name and has_team_perm:
+        raise ValidationError(f'Assigning {team_parent_model_name} permissions to teams is not allowed')
+
+
 def needed_updates_on_assignment(role_definition, actor, object_role, created=False, giving=True):
     """
     If a user or a team is granted a role or has a role revoked,
@@ -48,8 +72,11 @@ def needed_updates_on_assignment(role_definition, actor, object_role, created=Fa
     if created:
         to_update.add(object_role)
 
-    has_team = object_role.role_definition.permissions.filter(codename=permission_registry.team_permission).exists()
+    has_team_perm = role_definition.permissions.filter(codename=permission_registry.team_permission).exists()
     changes_team_owners = False
+
+    # Raise exception if settings prohibits this assignment
+    validate_assignment_enabled(actor, object_role.content_type, has_team_perm=has_team_perm)
 
     # If permissions for team are changed. That tends to affect a lot.
     if actor._meta.model_name != 'user':
@@ -68,11 +95,11 @@ def needed_updates_on_assignment(role_definition, actor, object_role, created=Fa
 
     # giving or revoking team permissions may not change the parentage
     # but this will still change what downstream roles grant what permissions
-    if (has_team and created) or (giving and changes_team_owners):
+    if (has_team_perm and created) or (giving and changes_team_owners):
         to_update.update(object_role.descendent_roles())
 
     # actions which can change the team parentage structure
-    recompute_teams = bool(has_team and (created or deleted or changes_team_owners))
+    recompute_teams = bool(has_team_perm and (created or deleted or changes_team_owners))
 
     return (recompute_teams, to_update)
 
