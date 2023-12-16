@@ -19,7 +19,7 @@ Those methods are what truly dictate the object-role to object-permission transl
 '''
 
 
-def all_team_parents(team_id, team_team_parents, seen=None):
+def all_team_parents(team_id: int, team_team_parents: dict, seen=None) -> dict:
     """
     Recursive method to take parent teams, and parent teams of parent teams, until we have them all
 
@@ -41,8 +41,14 @@ def all_team_parents(team_id, team_team_parents, seen=None):
     return parent_team_ids
 
 
-def get_org_team_mapping():
-    # manually prefetch the team and org memberships
+def get_org_team_mapping() -> dict:
+    """
+    Returns the teams in all organization as a dictionary.
+        {
+            organization_id: [team_id, team_id, ...],
+            organization_id: [team_id, ...]
+        }
+    """
     org_team_mapping = {}
     team_fields = ['id']
     team_parent_fd = permission_registry.get_parent_fd_name(permission_registry.team_model)
@@ -55,7 +61,19 @@ def get_org_team_mapping():
     return org_team_mapping
 
 
-def get_direct_team_member_roles(org_team_mapping):
+def get_direct_team_member_roles(org_team_mapping: dict) -> dict:
+    """
+    If an organization-level role lists "member_team" permission, that confers
+    the team's permissions to any user who holds an org role of that type.
+    If a team-level role lists "member_team" then that also convers
+    the member permissions to the user.
+    These do not yet consider teams-of-teams, so these are "direct" membership roles to a team.
+    Returns a dictionary with teams as keys and the object role ids that give membership as values.
+        {
+            team_id: [role_id, role_id, ...],
+            team_id: [role_id, ...]
+        }
+    """
     direct_member_roles = {}
     for object_role in ObjectRole.objects.filter(role_definition__permissions__codename=permission_registry.team_permission).iterator():
         if object_role.content_type_id == permission_registry.team_ct_id:
@@ -73,6 +91,16 @@ def get_direct_team_member_roles(org_team_mapping):
 
 
 def get_parent_teams_of_teams(org_team_mapping):
+    """
+    Returns a dictionary showing the teams-of-teams relationships in the system
+    this happens when a member_team role confers membership to another team.
+        {
+            team_id: [parent_team_id, parent_team_id, ...],
+            team_id: []
+        }
+    The queryset and logic is similar to get_direct_team_member_roles but
+    optimizations are different.
+    """
     team_team_parents = {}
     for object_role in ObjectRole.objects.filter(
         role_definition__permissions__codename=permission_registry.team_permission, teams__isnull=False
@@ -96,19 +124,13 @@ def compute_team_member_roles():
     This relationship is a list of teams that the role grants membership for
     This method is always ran globally.
     """
-    # first we need to obtain the direct team membership roles. What is this?
-    # If an organization-level role lists "member_team" permission, that confers
-    # the team permissions to any user who holes an org role of that type
-    # If a team-level role lists "member_team" then that also convers
-    # the member permissions to the user
-    # these are called "direct" membership roles to a team, and we need them in-memory
+    # Manually prefetch the team to org memberships
     org_team_mapping = get_org_team_mapping()
 
-    # build out the direct member roles for teams
+    # Build out the direct member roles for teams
     direct_member_roles = get_direct_team_member_roles(org_team_mapping)
 
-    # Next, things get weird when a team role confers membership to another team
-    # the new data we need are the roles that a team is granted, filtered to team permissions
+    # Build a team-to-team child-to-parents mapping for teams that have permission to other teams
     team_team_parents = get_parent_teams_of_teams(org_team_mapping)
 
     # Now we need to crawl the team-team graph to get the full list of roles that grants access to each team
