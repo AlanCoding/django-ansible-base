@@ -6,6 +6,9 @@ from ansible_base.migrations._managed_definitions import setup_managed_role_defi
 from ansible_base.models.rbac import RoleDefinition
 
 
+INVENTORY_OBJ_PERMISSIONS = ['view_inventory', 'change_inventory', 'delete_inventory', 'update_inventory']
+
+
 @pytest.mark.django_db
 def test_managed_definitions_precreate():
     with override_settings(
@@ -20,13 +23,13 @@ def test_managed_definitions_precreate():
     rd = RoleDefinition.objects.get(name='inventory-admin')
     assert rd.managed is True
     # add permissions do not go in the object-level admin
-    assert set(rd.permissions.values_list('codename', flat=True)) == set(['view_inventory', 'change_inventory', 'delete_inventory'])
+    assert set(rd.permissions.values_list('codename', flat=True)) == set(INVENTORY_OBJ_PERMISSIONS)
 
     # test org-level object admin permissions
     rd = RoleDefinition.objects.get(name='organization-inventory-admin')
     assert rd.managed is True
     assert set(rd.permissions.values_list('codename', flat=True)) == set(
-        ['view_inventory', 'change_inventory', 'delete_inventory', 'add_inventory', 'view_organization']
+        ['add_inventory', 'view_organization'] + INVENTORY_OBJ_PERMISSIONS
     )
 
 
@@ -41,4 +44,4 @@ def test_managed_definitions_custom_obj_admin_name():
     rd = RoleDefinition.objects.get(name='foo-inventory-foo')
     assert rd.managed is True
     # add permissions do not go in the object-level admin
-    assert set(rd.permissions.values_list('codename', flat=True)) == set(['view_inventory', 'change_inventory', 'delete_inventory'])
+    assert set(rd.permissions.values_list('codename', flat=True)) == set(INVENTORY_OBJ_PERMISSIONS)

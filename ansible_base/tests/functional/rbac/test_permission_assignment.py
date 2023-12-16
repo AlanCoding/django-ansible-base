@@ -8,11 +8,6 @@ from ansible_base.rbac.permission_registry import permission_registry
 from ansible_base.tests.functional.models import Inventory, Organization
 
 
-@pytest.fixture
-def team(organization):
-    return permission_registry.team_model.objects.create(name='example-team-or-group', organization=organization)
-
-
 @pytest.mark.django_db
 def test_invalid_actor(inventory, org_inv_rd):
     with pytest.raises(RuntimeError) as exc:
@@ -73,13 +68,6 @@ def test_later_created_child_object_permission(rando, organization, order, org_i
 
     assert set(RoleEvaluation.accessible_objects(Organization, rando, 'change_organization')) == set([organization])
     assert set(RoleEvaluation.accessible_objects(Inventory, rando, 'change_inventory')) == set([inventory])
-
-
-@pytest.fixture
-def member_rd():
-    return RoleDefinition.objects.create_from_permissions(
-        permissions=[permission_registry.team_permission, f'view_{permission_registry.team_model._meta.model_name}'], name='team-member'
-    )
 
 
 @pytest.fixture

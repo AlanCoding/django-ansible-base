@@ -22,6 +22,10 @@ class Inventory(models.Model):
     name = models.CharField(max_length=512)
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE)
 
+    class Meta:
+        app_label = 'functional'
+        permissions = [('update_inventory', 'Do inventory updates')]
+
 
 class InstanceGroup(models.Model):
     "Example of an object with no parent object, a root resource, a lone wolf"

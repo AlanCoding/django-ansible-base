@@ -31,13 +31,14 @@ def all_team_parents(team_id, team_team_parents, seen=None):
     """
     parent_team_ids = set()
     if seen is None:
-        seen = set([team_id])
+        seen = set()
     for parent_id in team_team_parents.get(team_id, []):
         if parent_id in seen:
             # will be combined in a lower level of the call stack
             # this condition prevents infinite recursion in the event of loops in the graph
             continue
         parent_team_ids.add(parent_id)
+        seen.add(parent_id)
         parent_team_ids.update(all_team_parents(parent_id, team_team_parents, seen=seen))
     return parent_team_ids
 
@@ -82,10 +83,7 @@ def compute_team_member_roles():
                 direct_member_roles.setdefault(team_id, [])
                 direct_member_roles[team_id].append(object_role.id)
         else:
-            logger.warning(
-                f'The role {object_role.role_definition.name} on {object_role.content_type_id}-{object_role.object_id} '
-                'grants team membership, which is invalid for that type'
-            )
+            logger.warning(f'{object_role} gives {permission_registry.team_permission} to an invalid type')
 
     # Next, things get weird when a team role confers membership to another team
     # the new data we need are the roles that a team is granted, filtered to team permissions
@@ -99,8 +97,7 @@ def compute_team_member_roles():
                 team_team_parents[object_role.object_id].append(actor_team.id)
             elif object_role.content_type_id == team_parent_ct.id:
                 if object_role.object_id not in org_team_mapping:
-                    logger.warning(f'{object_role} gives {permission_registry.team_permission} to an invalid type')
-                    continue
+                    continue  # again, means the organization has no team but has member_team as a listed permission
                 for team_id in org_team_mapping[object_role.object_id]:
                     team_team_parents.setdefault(team_id, [])
                     team_team_parents[team_id].append(actor_team.id)

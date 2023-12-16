@@ -114,23 +114,29 @@ def update_after_assignment(update_teams, to_update):
 def permissions_changed(instance, action, model, pk_set, reverse, **kwargs):
     if action.startswith('pre_'):
         return
-    to_recompute = set(ObjectRole.objects.filter(role_definition=instance))
+    to_recompute = set(ObjectRole.objects.filter(role_definition=instance).prefetch_related('teams__member_roles'))
     if not to_recompute:
         return
     logger.info(f'{instance} permissions {action}, pks={pk_set}')
     if reverse:
         raise RuntimeError('Removal of permssions through reverse relationship not supported')
+
     if action in ('post_add', 'post_remove'):
         if Permission.objects.filter(codename=permission_registry.team_permission, pk__in=pk_set).exists():
             for object_role in to_recompute.copy():
                 to_recompute.update(object_role.descendent_roles())
             compute_team_member_roles()
-        compute_object_role_permissions(object_roles=to_recompute)
+        # All team member roles that give this permission through this role need to be updated
+        for role in to_recompute.copy():
+            for team in role.teams.all():
+                for team_role in team.member_roles.all():
+                    to_recompute.add(team_role)
     elif action == 'post_clear':
         # unfortunately this does not give us a list of permissions to work with
         # this is slow, not ideal, but will at least be correct
         compute_team_member_roles()
-        compute_object_role_permissions()
+        to_recompute = None  # all
+    compute_object_role_permissions(object_roles=to_recompute)
 
 
 m2m_changed.connect(permissions_changed, sender=RoleDefinition.permissions.through)
