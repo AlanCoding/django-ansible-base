@@ -5,7 +5,6 @@ from django.test.utils import override_settings
 from ansible_base.migrations._managed_definitions import setup_managed_role_definitions
 from ansible_base.models.rbac import RoleDefinition
 
-
 INVENTORY_OBJ_PERMISSIONS = ['view_inventory', 'change_inventory', 'delete_inventory', 'update_inventory']
 
 
@@ -28,9 +27,7 @@ def test_managed_definitions_precreate():
     # test org-level object admin permissions
     rd = RoleDefinition.objects.get(name='organization-inventory-admin')
     assert rd.managed is True
-    assert set(rd.permissions.values_list('codename', flat=True)) == set(
-        ['add_inventory', 'view_organization'] + INVENTORY_OBJ_PERMISSIONS
-    )
+    assert set(rd.permissions.values_list('codename', flat=True)) == set(['add_inventory', 'view_organization'] + INVENTORY_OBJ_PERMISSIONS)
 
 
 @pytest.mark.django_db

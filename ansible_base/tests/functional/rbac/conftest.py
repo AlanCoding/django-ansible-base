@@ -2,8 +2,8 @@ import pytest
 from django.contrib.auth import get_user_model
 
 from ansible_base.models.rbac import RoleDefinition
-from ansible_base.tests.functional.models import Inventory, Organization
 from ansible_base.rbac import permission_registry
+from ansible_base.tests.functional.models import Inventory, Organization
 
 
 @pytest.fixture

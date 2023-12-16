@@ -1,6 +1,6 @@
 import pytest
-from django.core.exceptions import ValidationError
 from django.contrib.auth.models import Permission
+from django.core.exceptions import ValidationError
 
 from ansible_base.models.rbac import ObjectRole, RoleDefinition, RoleEvaluation
 from ansible_base.rbac import permission_registry
