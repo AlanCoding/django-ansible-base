@@ -1,8 +1,8 @@
 import pytest
-from django.contrib.contenttypes.models import ContentType
 from django.db.utils import IntegrityError
 
 from ansible_base.models.rbac import ObjectRole, RoleDefinition, RoleEvaluation
+from ansible_base.rbac import permission_registry
 from ansible_base.tests.functional.models import Organization
 
 
@@ -17,17 +17,16 @@ def test_role_definition_name_unique():
 def test_object_role_unique_rule():
     org = Organization.objects.create(name='foo')
     rd = RoleDefinition.objects.create(name='foo')
-    ObjectRole.objects.create(object_id=org.id, content_type=ContentType.objects.get_for_model(org), role_definition=rd)
+    ObjectRole.objects.create(object_id=org.id, content_type_id=permission_registry.org_ct_id, role_definition=rd)
     with pytest.raises(IntegrityError):
-        ObjectRole.objects.create(object_id=org.id, content_type=ContentType.objects.get_for_model(org), role_definition=rd)
+        ObjectRole.objects.create(object_id=org.id, content_type_id=permission_registry.org_ct_id, role_definition=rd)
 
 
 @pytest.mark.django_db
 def test_role_evaluation_unique_rule():
     org = Organization.objects.create(name='foo')
     rd = RoleDefinition.objects.create(name='foo')
-    ct = ContentType.objects.get_for_model(org)
-    obj_role = ObjectRole.objects.create(role_definition=rd, object_id=org.id, content_type=ct)
-    RoleEvaluation.objects.create(codename='view_organization', role=obj_role, object_id=org.id, content_type_id=ct.id)
+    obj_role = ObjectRole.objects.create(role_definition=rd, object_id=org.id, content_type_id=permission_registry.org_ct_id)
+    RoleEvaluation.objects.create(codename='view_organization', role=obj_role, object_id=org.id, content_type_id=permission_registry.org_ct_id)
     with pytest.raises(IntegrityError):
-        RoleEvaluation.objects.create(codename='view_organization', role=obj_role, object_id=org.id, content_type_id=ct.id)
+        RoleEvaluation.objects.create(codename='view_organization', role=obj_role, object_id=org.id, content_type_id=permission_registry.org_ct_id)

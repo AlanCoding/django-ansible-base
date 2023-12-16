@@ -103,7 +103,7 @@ class RoleDefinition(models.Model):
 
     def give_or_remove_permission(self, actor, content_object, giving=True):
         "Shortcut method to do whatever needed to give user or team these permissions"
-        obj_ct = ContentType.objects.get_for_model(type(content_object))
+        obj_ct = ContentType.objects.get_for_model(content_object)
         kwargs = dict(role_definition=self, content_type=obj_ct, object_id=content_object.id)
 
         created = False

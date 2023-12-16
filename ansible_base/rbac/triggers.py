@@ -31,7 +31,7 @@ def team_ancestor_roles(team):
     return set(
         ObjectRole.objects.filter(
             permission_partials__in=RoleEvaluation.objects.filter(
-                codename=permission_registry.team_permission, object_id=team.id, content_type_id=ContentType.objects.get_for_model(team).id
+                codename=permission_registry.team_permission, object_id=team.id, content_type_id=permission_registry.team_ct_id
             )
         )
     )
@@ -226,7 +226,7 @@ def remove_object_roles(instance, *args, **kwargs):
         compute_team_member_roles()
         compute_object_role_permissions(object_roles=indirectly_affected_roles)
 
-    ct = ContentType.objects.get_for_model(type(instance))
+    ct = ContentType.objects.get_for_model(instance)
     ObjectRole.objects.filter(content_type=ct, object_id=instance.id).delete()
 
 

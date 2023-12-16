@@ -93,8 +93,21 @@ class PermissionRegistry:
         return self.apps.get_model(settings.ROLE_TEAM_MODEL)
 
     @cached_property
+    def team_ct_id(self):
+        from django.contrib.contenttypes.models import ContentType
+
+        return ContentType.objects.get_for_model(self.team_model).id
+
+    @cached_property
     def user_model(self):
         return get_user_model()
+
+    @cached_property
+    def org_ct_id(self):
+        from django.contrib.contenttypes.models import ContentType
+
+        team_parent_model = self.get_parent_model(self.team_model)
+        return ContentType.objects.get_for_model(team_parent_model).id
 
     @cached_property
     def team_permission(self):

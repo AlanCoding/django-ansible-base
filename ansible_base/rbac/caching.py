@@ -1,7 +1,5 @@
 import logging
 
-from django.contrib.contenttypes.models import ContentType
-
 from ansible_base.models.rbac import ObjectRole, RoleDefinition, RoleEvaluation
 from ansible_base.rbac.permission_registry import permission_registry
 from ansible_base.rbac.prefetch import TypesPrefetch
@@ -43,6 +41,55 @@ def all_team_parents(team_id, team_team_parents, seen=None):
     return parent_team_ids
 
 
+def get_org_team_mapping():
+    # manually prefetch the team and org memberships
+    org_team_mapping = {}
+    team_fields = ['id']
+    team_parent_fd = permission_registry.get_parent_fd_name(permission_registry.team_model)
+    if team_parent_fd:
+        team_fields.append(f'{team_parent_fd}_id')
+        for team in permission_registry.team_model.objects.only(*team_fields):
+            team_parent_id = getattr(team, f'{team_parent_fd}_id')
+            org_team_mapping.setdefault(team_parent_id, [])
+            org_team_mapping[team_parent_id].append(team.id)
+    return org_team_mapping
+
+
+def get_direct_team_member_roles(org_team_mapping):
+    direct_member_roles = {}
+    for object_role in ObjectRole.objects.filter(role_definition__permissions__codename=permission_registry.team_permission).iterator():
+        if object_role.content_type_id == permission_registry.team_ct_id:
+            direct_member_roles.setdefault(object_role.object_id, [])
+            direct_member_roles[object_role.object_id].append(object_role.id)
+        elif object_role.content_type_id == permission_registry.org_ct_id:
+            if object_role.object_id not in org_team_mapping:
+                continue  # this means the organization has no team but has member_team as a listed permission
+            for team_id in org_team_mapping[object_role.object_id]:
+                direct_member_roles.setdefault(team_id, [])
+                direct_member_roles[team_id].append(object_role.id)
+        else:
+            logger.warning(f'{object_role} gives {permission_registry.team_permission} to an invalid type')
+    return direct_member_roles
+
+
+def get_parent_teams_of_teams(org_team_mapping):
+    team_team_parents = {}
+    for object_role in ObjectRole.objects.filter(
+        role_definition__permissions__codename=permission_registry.team_permission, teams__isnull=False
+    ).prefetch_related('teams'):
+        for actor_team in object_role.teams.all():
+            if object_role.content_type_id == permission_registry.team_ct_id:
+                team_team_parents.setdefault(object_role.object_id, [])
+                team_team_parents[object_role.object_id].append(actor_team.id)
+            elif object_role.content_type_id == permission_registry.org_ct_id:
+                if object_role.object_id not in org_team_mapping:
+                    continue  # again, means the organization has no team but has member_team as a listed permission
+                for team_id in org_team_mapping[object_role.object_id]:
+                    team_team_parents.setdefault(team_id, [])
+                    team_team_parents[team_id].append(actor_team.id)
+    return team_team_parents
+
+
 def compute_team_member_roles():
     """
     Fills in the ObjectRole.provides_teams relationship for all teams.
@@ -55,52 +102,14 @@ def compute_team_member_roles():
     # If a team-level role lists "member_team" then that also convers
     # the member permissions to the user
     # these are called "direct" membership roles to a team, and we need them in-memory
-
-    # manually prefetch the team and org memberships
-    org_team_mapping = {}
-    team_fields = ['id']
-    team_parent_fd = permission_registry.get_parent_fd_name(permission_registry.team_model)
-    if team_parent_fd:
-        team_fields.append(f'{team_parent_fd}_id')
-        for team in permission_registry.team_model.objects.only(*team_fields):
-            team_parent_id = getattr(team, f'{team_parent_fd}_id')
-            org_team_mapping.setdefault(team_parent_id, [])
-            org_team_mapping[team_parent_id].append(team.id)
+    org_team_mapping = get_org_team_mapping()
 
     # build out the direct member roles for teams
-    direct_member_roles = {}
-    team_ct = ContentType.objects.get_for_model(permission_registry.team_model)
-    team_parent_model = permission_registry.get_parent_model(permission_registry.team_model)
-    team_parent_ct = ContentType.objects.get_for_model(team_parent_model)
-    for object_role in ObjectRole.objects.filter(role_definition__permissions__codename=permission_registry.team_permission).iterator():
-        if object_role.content_type_id == team_ct.id:
-            direct_member_roles.setdefault(object_role.object_id, [])
-            direct_member_roles[object_role.object_id].append(object_role.id)
-        elif object_role.content_type_id == team_parent_ct.id:
-            if object_role.object_id not in org_team_mapping:
-                continue  # this means the organization has no team but has member_team as a listed permission
-            for team_id in org_team_mapping[object_role.object_id]:
-                direct_member_roles.setdefault(team_id, [])
-                direct_member_roles[team_id].append(object_role.id)
-        else:
-            logger.warning(f'{object_role} gives {permission_registry.team_permission} to an invalid type')
+    direct_member_roles = get_direct_team_member_roles(org_team_mapping)
 
     # Next, things get weird when a team role confers membership to another team
     # the new data we need are the roles that a team is granted, filtered to team permissions
-    team_team_parents = {}
-    for object_role in ObjectRole.objects.filter(
-        role_definition__permissions__codename=permission_registry.team_permission, teams__isnull=False
-    ).prefetch_related('teams'):
-        for actor_team in object_role.teams.all():
-            if object_role.content_type_id == team_ct.id:
-                team_team_parents.setdefault(object_role.object_id, [])
-                team_team_parents[object_role.object_id].append(actor_team.id)
-            elif object_role.content_type_id == team_parent_ct.id:
-                if object_role.object_id not in org_team_mapping:
-                    continue  # again, means the organization has no team but has member_team as a listed permission
-                for team_id in org_team_mapping[object_role.object_id]:
-                    team_team_parents.setdefault(team_id, [])
-                    team_team_parents[team_id].append(actor_team.id)
+    team_team_parents = get_parent_teams_of_teams(org_team_mapping)
 
     # Now we need to crawl the team-team graph to get the full list of roles that grants access to each team
     # for each parent team that grants membership to a team, we need to add the roles that grant
