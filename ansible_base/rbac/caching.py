@@ -19,11 +19,12 @@ Those methods are what truly dictate the object-role to object-permission transl
 '''
 
 
-def all_team_parents(team_id: int, team_team_parents: dict, seen=None) -> dict:
+def all_team_parents(team_id: int, team_team_parents: dict, seen=None) -> set:
     """
-    Recursive method to take parent teams, and parent teams of parent teams, until we have them all
+    Returns parent teams, and parent teams of parent teams, until we have them all
+        {parent_team_id, parent_team_id, ...}
 
-    team_id: id of the team we want to get the parents of
+    team_id: id of the team we want to get the direct and indirect parents of
     team_team_parents: mapping of team id to ids of its parents, this is not modified by this method
     seen: mutable set that will be added to by each call so that we can not recurse infinitely
     """
