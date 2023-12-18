@@ -14,7 +14,7 @@ class Team(models.Model):
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE)
 
     tracked_users = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name='tracked_teams')
-    team_parents = models.ManyToManyField('self', related_name='team_children')
+    team_parents = models.ManyToManyField('Team', related_name='team_children')
 
     class Meta:
         app_label = 'functional'
