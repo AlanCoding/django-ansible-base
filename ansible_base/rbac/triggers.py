@@ -2,7 +2,6 @@ import logging
 
 from django.apps import apps
 from django.conf import settings
-from django.contrib.auth.models import Permission
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.db.models.signals import m2m_changed, post_delete, post_init, post_save, pre_delete
@@ -122,7 +121,7 @@ def permissions_changed(instance, action, model, pk_set, reverse, **kwargs):
         raise RuntimeError('Removal of permssions through reverse relationship not supported')
 
     if action in ('post_add', 'post_remove'):
-        if Permission.objects.filter(codename=permission_registry.team_permission, pk__in=pk_set).exists():
+        if permission_registry.permission_model.objects.filter(codename=permission_registry.team_permission, pk__in=pk_set).exists():
             for object_role in to_recompute.copy():
                 to_recompute.update(object_role.descendent_roles())
             compute_team_member_roles()

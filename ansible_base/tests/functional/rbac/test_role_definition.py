@@ -1,5 +1,4 @@
 import pytest
-from django.contrib.auth.models import Permission
 from django.core.exceptions import ValidationError
 
 from ansible_base.models.rbac import ObjectRole, RoleDefinition, RoleEvaluation
@@ -53,7 +52,7 @@ def test_change_role_definition_permission(organization, team, inventory, member
     # sanity
     assert [u.has_obj_perm(inventory, 'update') for u in (team_user, org_user)] == [False, False]
 
-    new_perm = Permission.objects.get(codename='update_inventory')
+    new_perm = permission_registry.permission_model.objects.get(codename='update_inventory')
     org_inv_rd.permissions.add(new_perm)
 
     # Users get new permission
@@ -83,7 +82,7 @@ def test_change_role_definition_member_permission(organization, inventory, membe
     assert [u.has_obj_perm(inventory, 'change') for u in (team_user, org_team_user)] == [True, True]
 
     # Removing memberships takes away the permission
-    member_perm = Permission.objects.get(codename='member_team')
+    member_perm = permission_registry.permission_model.objects.get(codename='member_team')
     member_rd.permissions.remove(member_perm)
     assert [u.has_obj_perm(inventory, 'change') for u in (team_user, org_team_user)] == [False, False]
 

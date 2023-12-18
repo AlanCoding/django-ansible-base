@@ -106,6 +106,10 @@ class PermissionRegistry:
         return self.apps.get_model('contenttypes.ContentType').objects.get_for_model(team_parent_model).id
 
     @cached_property
+    def permission_model(self):
+        return self.apps.get_model(settings.ROLE_PERMISSION_MODEL)
+
+    @cached_property
     def team_permission(self):
         return f'member_{self.team_model._meta.model_name}'
 

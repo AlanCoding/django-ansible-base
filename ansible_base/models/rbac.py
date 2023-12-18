@@ -2,7 +2,6 @@ import logging
 
 # Django
 from django.conf import settings
-from django.contrib.auth.models import Permission
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
@@ -21,7 +20,7 @@ class RoleDefinitionManager(models.Manager):
         needed_actions = settings.ROLE_CREATOR_DEFAULTS
 
         needed_perms = set()
-        for perm in Permission.objects.filter(content_type=ContentType.objects.get_for_model(obj)):
+        for perm in permission_registry.permission_model.objects.filter(content_type=ContentType.objects.get_for_model(obj)):
             action = perm.codename.split('_', 1)[0]
             if action in needed_actions:
                 needed_perms.add(perm.codename)
@@ -45,7 +44,7 @@ class RoleDefinitionManager(models.Manager):
 
     def create_from_permissions(self, permissions=(), **kwargs):
         "Create from a list of text-type permissions and do validation"
-        perm_list = [Permission.objects.get(codename=str_perm) for str_perm in permissions]
+        perm_list = [permission_registry.permission_model.objects.get(codename=str_perm) for str_perm in permissions]
         permissions_by_model = {}
         for perm in perm_list:
             cls = perm.content_type.model_class()
@@ -86,7 +85,7 @@ class RoleDefinition(models.Model):
     name = models.TextField(db_index=True, unique=True)
     description = models.TextField(null=True)
     managed = models.BooleanField(default=False)  # pulp definition of Role uses locked
-    permissions = models.ManyToManyField(Permission)
+    permissions = models.ManyToManyField(settings.ROLE_PERMISSION_MODEL)
     objects = RoleDefinitionManager()
 
     def __str__(self):

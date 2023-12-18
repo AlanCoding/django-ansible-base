@@ -83,3 +83,6 @@ if ANSIBLE_BASE_FEATURES.get('RBAC', False):  # noqa: F821
     # User flags that can grant permission before consulting roles
     ROLE_BYPASS_SUPERUSER_FLAGS = ['is_superuser']
     ROLE_BYPASS_ACTION_FLAGS = {}
+
+    # Allow using a custom permission model
+    ROLE_PERMISSION_MODEL = 'auth.Permission'

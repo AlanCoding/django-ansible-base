@@ -12,6 +12,7 @@ class Migration(migrations.Migration):
         ('contenttypes', '0002_remove_content_type_name'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
         migrations.swappable_dependency(settings.ROLE_TEAM_MODEL),
+        migrations.swappable_dependency(settings.ROLE_PERMISSION_MODEL),
         ('auth', '0012_alter_user_first_name_max_length'),
     ]
 
@@ -23,7 +24,7 @@ class Migration(migrations.Migration):
                 ('name', models.TextField(db_index=True, unique=True)),
                 ('description', models.TextField(null=True)),
                 ('managed', models.BooleanField(default=False)),
-                ('permissions', models.ManyToManyField(to='auth.permission')),
+                ('permissions', models.ManyToManyField(to=settings.ROLE_PERMISSION_MODEL)),
             ],
             options={
                 'verbose_name_plural': 'role_definition',

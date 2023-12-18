@@ -29,7 +29,7 @@ def setup_managed_role_definitions(apps, schema_editor):
     to_create = settings.GATEWAY_ROLE_PRECREATE
 
     ContentType = apps.get_model('contenttypes', 'ContentType')
-    Permission = apps.get_model('auth', 'Permission')
+    Permission = apps.get_model(settings.ROLE_PERMISSION_MODEL)
     RoleDefinition = apps.get_model('ansible_base', 'RoleDefinition')
     Organization = apps.get_model(settings.ROLE_ORGANIZATION_MODEL)
     managed_role_definitions = []

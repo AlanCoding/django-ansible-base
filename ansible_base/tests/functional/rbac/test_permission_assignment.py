@@ -1,5 +1,4 @@
 import pytest
-from django.contrib.auth.models import Permission
 from django.core.exceptions import ValidationError
 from django.test.utils import override_settings
 
@@ -148,7 +147,7 @@ class TestTeamAssignment:
 @pytest.mark.django_db
 class TestOrgTeamMemberAssignment:
     def test_organization_team_assignment(self, rando, organization, member_rd, inv_rd):
-        assert Permission.objects.filter(codename='member_team').exists()  # sanity
+        assert permission_registry.permission_model.objects.filter(codename='member_team').exists()  # sanity
         inv1 = Inventory.objects.create(name='inv1', organization=organization)
         inv2 = Inventory.objects.create(name='inv2', organization=organization)
 
