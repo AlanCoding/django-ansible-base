@@ -276,6 +276,11 @@ class TrackedRelationship:
             self._active_sync_flag = False
 
     def sync_relationship(self, actor, content_object, giving=True):
+        # Exit if role does not apply for the intended model type, for example
+        # if user is given "team-member" role to organization, do not add user to the team members
+        if content_object._meta.model_name != self.cls._meta.model_name:
+            return
+
         if actor._meta.model_name == permission_registry.team_model._meta.model_name:
             manager = getattr(content_object, self.team_relationship)
         elif actor._meta.model_name == permission_registry.user_model._meta.model_name:
