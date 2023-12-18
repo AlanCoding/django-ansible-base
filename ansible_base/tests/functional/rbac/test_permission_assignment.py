@@ -69,11 +69,6 @@ def test_later_created_child_object_permission(rando, organization, order, org_i
     assert set(RoleEvaluation.accessible_objects(Inventory, rando, 'change_inventory')) == set([inventory])
 
 
-@pytest.fixture
-def inv_rd():
-    return RoleDefinition.objects.create_from_permissions(permissions=['change_inventory', 'view_inventory'], name='change-inv')
-
-
 @pytest.mark.django_db
 class TestTeamAssignment:
     def test_object_team_assignment(self, rando, inventory, team, member_rd, inv_rd):

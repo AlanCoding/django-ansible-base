@@ -100,7 +100,7 @@ class RoleDefinition(models.Model):
     def remove_permission(self, actor, content_object):
         return self.give_or_remove_permission(actor, content_object, giving=False)
 
-    def give_or_remove_permission(self, actor, content_object, giving=True):
+    def give_or_remove_permission(self, actor, content_object, giving=True, sync_action=False):
         "Shortcut method to do whatever needed to give user or team these permissions"
         obj_ct = ContentType.objects.get_for_model(content_object)
         kwargs = dict(role_definition=self, content_type=obj_ct, object_id=content_object.id)
@@ -134,6 +134,11 @@ class RoleDefinition(models.Model):
             object_role.delete()
 
         update_after_assignment(update_teams, to_update)
+
+        if not sync_action and self.name in permission_registry._trackers:
+            tracker = permission_registry._trackers[self.name]
+            with tracker.sync_active():
+                tracker.sync_relationship(actor, content_object, giving=giving)
 
         return object_role
 

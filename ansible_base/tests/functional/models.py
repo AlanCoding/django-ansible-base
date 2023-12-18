@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 
 from ansible_base.rbac import permission_registry
@@ -11,6 +12,9 @@ class Organization(models.Model):
 class Team(models.Model):
     name = models.CharField(max_length=512)
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE)
+
+    tracked_users = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name='tracked_teams')
+    team_parents = models.ManyToManyField('self', related_name='team_children')
 
     class Meta:
         app_label = 'functional'
@@ -56,3 +60,6 @@ class ExampleEvent(models.Model):
 permission_registry.register(Organization, Inventory, Namespace, Team)
 permission_registry.register(CollectionImport, parent_field_name='namespace')
 permission_registry.register(InstanceGroup, parent_field_name=None)
+
+permission_registry.track_relationship(Team, 'tracked_users', 'team-member')
+permission_registry.track_relationship(Team, 'team_parents', 'team-member')

@@ -19,6 +19,8 @@ class PermissionRegistry:
         self._name_to_model = dict()
         self._parent_fields = dict()
         self.apps_ready = False
+        self._tracked_relationships = set()
+        self._trackers = dict()
 
     def register(self, *args, parent_field_name='organization'):
         if self.apps_ready:
@@ -34,6 +36,9 @@ class PermissionRegistry:
                     self._parent_fields[model_name] = parent_field_name
             else:
                 raise Exception(f'model {cls._meta.model_name} already in registry?!')
+
+    def track_relationship(self, cls, relationship, role_name):
+        self._tracked_relationships.add((cls, relationship, role_name))
 
     def get_model_name(self, model_name_or_model):
         if isinstance(model_name_or_model, str):
@@ -72,7 +77,7 @@ class PermissionRegistry:
 
     def call_when_apps_ready(self, apps):
         from ansible_base.rbac.evaluations import bound_has_obj_perm, connect_rbac_methods
-        from ansible_base.rbac.triggers import connect_rbac_signals, post_migration_rbac_setup
+        from ansible_base.rbac.triggers import TrackedRelationship, connect_rbac_signals, post_migration_rbac_setup
 
         self.apps = apps
         self.apps_ready = True
@@ -87,6 +92,14 @@ class PermissionRegistry:
         for cls in self._registry:
             connect_rbac_signals(cls)
             connect_rbac_methods(cls)
+
+        for cls, relationship, role_name in self._tracked_relationships:
+            if role_name in self._trackers:
+                tracker = self._trackers[role_name]
+            else:
+                tracker = TrackedRelationship(cls, role_name)
+                self._trackers[role_name] = tracker
+            tracker.initialize(relationship)
 
     @cached_property
     def team_model(self):

@@ -33,6 +33,11 @@ def org_inv_rd():
 
 
 @pytest.fixture
+def inv_rd():
+    return RoleDefinition.objects.create_from_permissions(permissions=['change_inventory', 'view_inventory'], name='change-inv')
+
+
+@pytest.fixture
 def member_rd():
     return RoleDefinition.objects.create_from_permissions(
         permissions=[permission_registry.team_permission, f'view_{permission_registry.team_model._meta.model_name}'], name='team-member'

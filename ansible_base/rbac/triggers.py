@@ -1,4 +1,5 @@
 import logging
+from contextlib import contextmanager
 
 from django.apps import apps
 from django.conf import settings
@@ -116,7 +117,6 @@ def permissions_changed(instance, action, model, pk_set, reverse, **kwargs):
     to_recompute = set(ObjectRole.objects.filter(role_definition=instance).prefetch_related('teams__member_roles'))
     if not to_recompute:
         return
-    logger.info(f'{instance} permissions {action}, pks={pk_set}')
     if reverse:
         raise RuntimeError('Removal of permssions through reverse relationship not supported')
 
@@ -245,6 +245,73 @@ def post_migration_rbac_setup(*args, **kwargs):
     setup_managed_role_definitions(apps, None)
     compute_team_member_roles()
     compute_object_role_permissions()
+
+
+class TrackedRelationship:
+    def __init__(self, cls, role_name):
+        self.cls = cls
+        self.role_name = role_name
+        self.user_relationship = None
+        self.team_relationship = None
+        self._active_sync_flag = False
+
+    def initialize(self, relationship):
+        manager = getattr(self.cls, relationship)
+        related_model_name = manager.field.related_model._meta.model_name
+        if related_model_name == permission_registry.team_model._meta.model_name:
+            self.team_relationship = relationship
+            m2m_changed.connect(self.sync_team_to_role, sender=manager.through)
+        elif related_model_name == permission_registry.user_model._meta.model_name:
+            self.user_relationship = relationship
+            m2m_changed.connect(self.sync_user_to_role, sender=manager.through)
+        else:
+            raise RuntimeError(f'Can only register user or team relationships, obtained {related_model_name}')
+
+    @contextmanager
+    def sync_active(self):
+        try:
+            self._active_sync_flag = True
+            yield
+        finally:
+            self._active_sync_flag = False
+
+    def sync_relationship(self, actor, content_object, giving=True):
+        if actor._meta.model_name == permission_registry.team_model._meta.model_name:
+            manager = getattr(content_object, self.team_relationship)
+        elif actor._meta.model_name == permission_registry.user_model._meta.model_name:
+            manager = getattr(content_object, self.user_relationship)
+
+        if giving:
+            manager.add(actor)
+        else:
+            manager.remove(actor)
+
+    def _sync_actor_to_role(self, actor_model, instance, action, pk_set, reverse):
+        if self._active_sync_flag:
+            return
+        if action.startswith('pre_'):
+            return
+        rd = RoleDefinition.objects.get(name=self.role_name)
+
+        if action in ('post_add', 'post_remove'):
+            actor_set = pk_set
+        elif action == 'post_clear':
+            ct = ContentType.objects.get_for_model(instance)
+            role = ObjectRole.objects.get(object_id=instance.id, content_type=ct, role_definition=rd)
+            if actor_model._meta.model_name == 'team':
+                actor_set = set(role.teams.values_list('id', flat=True))
+            else:
+                actor_set = set(role.users.values_list('id', flat=True))
+
+        giving = bool(action == 'post_add')
+        for team in actor_model.objects.filter(pk__in=actor_set):
+            rd.give_or_remove_permission(team, instance, giving=giving, sync_action=True)
+
+    def sync_team_to_role(self, instance, action, model, pk_set, reverse, **kwargs):
+        self._sync_actor_to_role(permission_registry.team_model, instance, action, pk_set, reverse)
+
+    def sync_user_to_role(self, instance, action, model, pk_set, reverse, **kwargs):
+        self._sync_actor_to_role(permission_registry.user_model, instance, action, pk_set, reverse)
 
 
 def connect_rbac_signals(cls):
