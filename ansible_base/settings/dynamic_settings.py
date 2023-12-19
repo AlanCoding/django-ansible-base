@@ -86,3 +86,7 @@ if ANSIBLE_BASE_FEATURES.get('RBAC', False):  # noqa: F821
 
     # Allow using a custom permission model
     ROLE_PERMISSION_MODEL = 'auth.Permission'
+
+    # Allows managing singleton permissions with a user-defined relationship
+    ROLE_SINGLETON_USER_RELATIONSHIP = ''
+    ROLE_SINGLETON_TEAM_RELATIONSHIP = ''

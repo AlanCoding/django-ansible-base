@@ -76,7 +76,7 @@ class PermissionRegistry:
         return child_filters
 
     def call_when_apps_ready(self, apps):
-        from ansible_base.rbac.evaluations import bound_has_obj_perm, connect_rbac_methods
+        from ansible_base.rbac.evaluations import bound_has_obj_perm, bound_singleton_permissions, connect_rbac_methods
         from ansible_base.rbac.triggers import TrackedRelationship, connect_rbac_signals, post_migration_rbac_setup
 
         self.apps = apps
@@ -88,6 +88,7 @@ class PermissionRegistry:
         post_migrate.connect(post_migration_rbac_setup, sender=self)
 
         self.user_model.add_to_class('has_obj_perm', bound_has_obj_perm)
+        self.user_model.add_to_class('singleton_permissions', bound_singleton_permissions)
 
         for cls in self._registry:
             connect_rbac_signals(cls)

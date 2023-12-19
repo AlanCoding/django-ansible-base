@@ -94,6 +94,34 @@ class RoleDefinition(models.Model):
             managed_str = ', managed=True'
         return f'RoleDefinition(pk={self.id}, name={self.name}{managed_str})'
 
+    def give_global_permission(self, actor):
+        return self.give_or_remove_global_permission(actor, giving=True)
+
+    def remove_global_permission(self, actor):
+        return self.give_or_remove_global_permission(actor, giving=False)
+
+    def give_or_remove_global_permission(self, actor, giving=True):
+        if actor._meta.model_name == 'user':
+            rel = settings.ROLE_SINGLETON_USER_RELATIONSHIP
+            if not rel:
+                raise RuntimeError('No global role relationship configured for users')
+        elif isinstance(actor, permission_registry.team_model):
+            rel = settings.ROLE_SINGLETON_TEAM_RELATIONSHIP
+            if not rel:
+                raise RuntimeError('No global role relationship configured for users')
+        else:
+            raise RuntimeError(f'Cannot give permission to {actor}, must be a user or team')
+
+        manager = getattr(actor, rel)
+        if giving:
+            manager.add(self)
+        else:
+            manager.remove(self)
+
+        # Clear any cached permissions, if applicable
+        if hasattr(actor, '_singleton_permissions'):
+            delattr(actor, '_singleton_permissions')
+
     def give_permission(self, actor, content_object):
         return self.give_or_remove_permission(actor, content_object, giving=True)
 

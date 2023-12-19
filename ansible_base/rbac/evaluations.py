@@ -1,6 +1,7 @@
 from django.conf import settings
 
-from ansible_base.models.rbac import RoleEvaluation
+from ansible_base.models.rbac import ObjectRole, RoleEvaluation
+from ansible_base.rbac import permission_registry
 
 '''
 The model RoleEvaluation is the authority for making any permission evaluations,
@@ -71,7 +72,33 @@ def bound_has_obj_perm(self, obj, codename):
     full_codename = validate_codename_for_model(codename, obj)
     if has_super_permission(self, codename):
         return True
+    if full_codename in self.singleton_permissions():
+        return True
     return RoleEvaluation.has_obj_perm(self, obj, full_codename)
+
+
+def bound_singleton_permissions(self):
+    if hasattr(self, '_singleton_permissions'):
+        return self._singleton_permissions
+    perm_set = set()
+    if settings.ROLE_SINGLETON_USER_RELATIONSHIP:
+        field = permission_registry.user_model._meta.get_field(settings.ROLE_SINGLETON_USER_RELATIONSHIP)
+        reverse_name = field.remote_field.name
+        perm_set.update(
+            set(permission_registry.permission_model.objects.filter(**{f'roledefinition__{reverse_name}': self}).values_list('codename', flat=True))
+        )
+    if settings.ROLE_SINGLETON_TEAM_RELATIONSHIP:
+        field = permission_registry.team_model._meta.get_field(settings.ROLE_SINGLETON_TEAM_RELATIONSHIP)
+        reverse_name = field.remote_field.name
+        all_user_teams_qs = permission_registry.team_model.objects.filter(member_roles__in=ObjectRole.objects.filter(users=self))
+        perm_set.update(
+            set(
+                permission_registry.permission_model.objects.filter(**{f'roledefinition__{reverse_name}__in': all_user_teams_qs}).values_list(
+                    'codename', flat=True
+                )
+            )
+        )
+    return perm_set
 
 
 def connect_rbac_methods(cls):

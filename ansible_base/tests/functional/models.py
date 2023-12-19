@@ -1,7 +1,12 @@
 from django.conf import settings
+from django.contrib.auth.models import AbstractUser
 from django.db import models
 
 from ansible_base.rbac import permission_registry
+
+
+class User(AbstractUser):
+    singleton_roles = models.ManyToManyField('ansible_base.RoleDefinition', related_name='singleton_users')
 
 
 class Organization(models.Model):
@@ -15,6 +20,8 @@ class Team(models.Model):
 
     tracked_users = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name='tracked_teams')
     team_parents = models.ManyToManyField('Team', related_name='team_children')
+
+    singleton_roles = models.ManyToManyField('ansible_base.RoleDefinition')
 
     class Meta:
         app_label = 'functional'
