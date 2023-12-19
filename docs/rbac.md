@@ -1,7 +1,6 @@
 # Role-Based Access Control (RBAC)
 
-This documents the Role Based Access Control (RBAC) implementation.
-This intended for a developer audience.
+This intended for a developer audience, for applying this system to a Django app, for instance.
 
 This is derived from the RBAC system in AWX which was implemented roughly
 in the year 2015, and this remained stable until an overhaul, with early work
@@ -18,79 +17,80 @@ Ordinarily, the `ObjectRole` or `RoleEvaluation` should not be interacted with.
 
 #### Creating a New Role Definition
 
-These are expected to be user-defined in many apps.
-Example of creating a custom role definition:
+These are expected to be user-defined in many apps. Example of creating a custom role definition:
 
 ```
-from django.contrib.auth.models import Permission
-from django.contrib.contenttypes.models import ContentType
 from awx.ansible_base.models.rbac import RoleDefinition
 
-# Create a new custom RoleDefinition
-jt_ct = ContentType.objects.get_for_model(JobTemplate)
-rd = RoleDefinition.objects.get_or_create(
-  name='all-job-template-permissions',
-  permissions=list(Permission.objects.filter(content_type=jt_ct))
-)
+rd = RoleDefinition.objects.get_or_create(name='JT-execute', permissions=['execute_jobtemplate', 'view_jobtemplate'])
 ```
 
-#### Giving User Role to Object
+#### Assigning Permissions
 
-Using the role definition from the last code block, give a user that role to
-an object using the `give_permission` method.
+With a role definition object like `rd` above, you can then doll out permissions to objects.
+ - `rd.give_permission(user, obj)` - give permissions listed in `rd` to that user for just that object
+ - `rd.remove_permission(user, obj)` - remove permission granted by only that role
+ - `rd.give_permission(user, organization)` - give execute/view permissions to all job templates in that organization
+ - `rd.give_global_permission(user)` - if configured, give user execute/view permissions to all job templates in the system
+ - `rd.remove_global_permission(user)`
 
-```
-from awx.main.models import JobTemplate
-
-# Give permissions of the RoleDefinition to a user for an object
-jt = JobTemplate.objects.get(name='Demo Job Template')
-u = User.objects.get(username='alan')
-rd.give_permission(u, jt)
-```
-
-This would give the user "alan" all allowed permission types to the Demo JT.
-You can reverse this action with the `remove_permission` method.
-
-Both methods will return an `ObjectRole` as a result.
-The object roles are managed by the RBAC system, and created or deleted as needed.
-The object role maps a role definition to an object, and has a related association
-for users and teams who have that object role.
+These cases assume an `obj` of a model type tracked by the RBAC system,
+which has a parent object of `organization` (also configured by the app).
+All the `give_permission` and `remove_permission` methods will return an `ObjectRole`
+which links to `rd` and `obj`, if applicable.
+Removing permission will result in delete the object role if no other assignments exist.
 
 #### Registering Models
 
-Any Django Model can
+Any Django Model (except your user model) can
 be made into a resource in the RBAC system by registering that resource in the registry.
 
 ```
 from awx.ansible_base.utils.permission_registry import permission_registry
 
-permission_registry.register(MyModel)
+permission_registry.register(MyModel, parent_field_name='parent_model')
 ```
 
-The Django auth app already creates permissions in a migration.
-If you need to manage special permissions beyond the default permissions, these need to
-be added in the model's `Meta` according to the Django documentation.
+If you need to manage special permissions beyond the default permissions like "execute", these need to
+be added in the model's `Meta` according to the Django documentation for `auth.Permission`.
+The `parent_field_name` must be a ForeignKey to another model which is the RBAC "parent"
+model of `MyModel`, or `None`.
+
+#### Evaluating Permissions
+
+For a registered model, you can obtain visible objects for a user with
+a method automatically attached `MyModel.accessible_objects(user, 'view_mymodel')`.
+This is not restricted to view permissions, you could give a queryset of
+all objects the user can delete via `MyModel.accessible_objects(user, 'delete_mymodel')`.
+
+If you can produce a queryset, then you can make a permission evaluation.
+However, a bound method to the user model is provided as a shortcut
+via `user.has_obj_perm(obj, 'delete_mymodel')`.
 
 #### Creator Permissions
 
-You can give a user add permission to an organization, like "add_mymodel".
-The Django `Permission` entry will link to `MyModel` but inside of roles,
-these permissions only apply to the parent model of the object,
-or act as singleton roles.
-
-After the object is created, you need to give the user creator permissions.
+You can give a user "add" permission to a parent model, like "add_mymodel".
+The Django `Permission` entry links to the content type for `MyModel`,
+but these permissions can only apply to the parent model of the object,
+or act as system-wide permissions.
+After a user creates an object, you need to give the user creator permissions.
 Otherwise they won't even to be able to see what they created!
 
 ```
-RoleDefinition.objects.give_creator_permissions(u, jt)
+RoleDefinition.objects.give_creator_permissions(user, obj)
 ```
 
 This will assign all valid permissions for the object they created from the
-list in `settings.ROLE_CREATOR_DEFAULTS`.
+list in `settings.ROLE_CREATOR_DEFAULTS`. Not all entries in this will apply to
+all models.
 
-### Django Settings for RBAC
+```
+ROLE_CREATOR_DEFAULTS = ['change', 'execute', 'delete', 'view']
+```
 
-You can specify which model you want to use for Organization / User / Team models.
+### Django Settings and Features
+
+You can specify which model you want to use for Organization / User / Team / Permission models.
 The user model is obtained from the generic Django user setup, like the `AUTH_USER_MODEL` setting.
 
 CAUTION: these settings will be used in _migrations_ so if you change these
@@ -99,22 +99,10 @@ settings later on, you will need to handle that in a new migration.
 ```
 ROLE_TEAM_MODEL = 'auth.Group'
 ROLE_ORGANIZATION_MODEL = 'main.Organization'
+ROLE_PERMISSION_MODEL = 'auth.Permission'
 ```
 
-You don't strictly need an organization model (the setting is only used
-for role pre-created roles), but a core feature of this
-system is maintaining a resource hierarchy. Organization is just an assumed
-root model for resources. You could use any model for as parent resources
-or have multiple hierarchies.
-
-#### Creator Permissions
-
-If a user has `add` permission to a resource, they should get permissions
-to the object they created. Specify those with this setting.
-
-```
-ROLE_CREATOR_DEFAULTS = ['change', 'delete', 'view']
-```
+The organization model is only used for pre-created role definitions.
 
 #### Managed Pre-Created Role Definitions
 
@@ -148,52 +136,110 @@ ROLE_BYPASS_ACTION_FLAGS = {'view': 'is_system_auditor'}
 You can blank these with values `[]` and `{}`. In these cases, the querysets
 will produce nothing for the superuser if they have not been assigned any roles.
 
-### RBAC - System Basics
+#### Global Roles
 
-Users can be members of an object role, which gives them the listed permissions to the
-resource associated with that object role, or any child resources of
-that object.
+Global roles have very important implementation differences compared to object roles,
+and are not enabled by default. You must declare a ManyToMany relationship that exists
+in your user and/or team model to be able to give a role globally.
 
-For example, if I have an organization named "MyCompany" and I want to allow
-two people, "Alice", and "Bob", access to manage all of the settings associated
-with that organization, I'd make them both members of the organization's
-object role corresponding to the "organization-admin" role definition.
+```
+ROLE_SINGLETON_USER_RELATIONSHIP = 'global_roles'
+ROLE_SINGLETON_TEAM_RELATIONSHIP = 'global_roles'
+```
 
-The 2015 implementation had these key features:
+With this, you could call `user.global_roles.add(rd)` or `team.global_roles.add(rd)`
+for that user or team to get the global permission offered by the role definition.
+The `rd.give_global_permission(user)` does the same thing but also clears cached values.
+
+You can view a user's global permissions from `user.singleton_roles()`.
+Global roles will affect the outcome of `user.has_obj_perm` and `MyModel.accessible_objects` calls.
+This is similar to configuring the user flags bypass.
+
+#### Tracked Relationships
+
+Let's say that you are introducing RBAC, and you have already set up your API
+with some relationship, like members of a team, and parents of a team
+(to get nested teams).
+This sub-feature will use signals to do bidirectional syncing of memberships of
+that relationship with memberships of their corresponding role.
+
+```
+permission_registry.track_relationship(Team, 'tracked_users', 'team-member')
+permission_registry.track_relationship(Team, 'team_parents', 'team-member')
+```
+
+This only works with our 2 "actor" types of users and teams.
+Adding these lines will synchronize users and teams of team-object-roles with the "team-member"
+role definition (by name) to the `Team.tracked_users`
+and `Team.tracked_parents` ManyToMany relationships, respectively.
+So if you have a team object, `team.tracked_users.add(user)` will also give that
+user _member permission_ to that team, where those permissions are defined by the
+role definition with the name "team-member".
+
+### System Design Principles
+
+The 2015 implementation had the following key distinguishing features:
  - object roles were auto-created when a resource was created
  - roles formed an acyclic (or cyclic) graph between each other via their parents and children
  - object roles were defined by the `ImplicitRoleField` declared on each model
  - teams gain permission by adding their `member_role` to parents of another role
 
-The key features and differences of the 2023 system are:
+The key differences of the 2023 system are:
  - object roles are not auto-created, but only created as needed to perform assignments
  - resources are organized in a strict tree, mostly with organizations being the parents
  - role definitions list canonical Django Permission objects
  - teams are listed in a `role.teams.all()` relationship directly, similar to users
 
-### Implementation Overview
+The main _commonality_ between the two systems is that Django signals are used to cache
+information that includes 3 bits of information (content_object, permission, object-role),
+and then this information is used to produce querysets of objects that a certain user
+has a certain permission for. This is done by matching object-roles to the object-roles
+the user has been given.
 
-If the model has an `organization` field, then this assumed to be the parent object.
-Custom parent objects are still not implemented.
+Cached information allows for scaling a deep, rich, permission assigning system
+without performance death-spiral of querysets.
 
-### Parent Object Permissions
+#### What Constitutes a Graph?
 
-An object role has a role definition with permissions, like `execute_jobtemplate`.
-A user having that role will have the ability to launch the job template.
-A user can gain that permission through a number of other roles that offer a form of inheritance.
+The 2015 system, by auto-creating roles, was able to map roles directly to other roles
+to define parents and children. This also allowed highly specific inheritance paths
+along the lines of specific permissions... imagine an "inventory_admin" role
+giving read permissions to all the job templates that used that inventory.
 
-A job template, like other resources, is considered to be in an organization.
-If you give someone an object role associated with the job template's organization,
-and that role's permissions list `execute_jobtemplate`, they will obtain the ability
-to launch that job template along with all other job templates in the organization.
+Through the years when this system was in use, the inheritance rarely mapped
+from one type of permission to a different permission like the example.
+
+Because of this, `ObjectRole`s in the 2023 system don't have the same parent/child
+link to other roles. But there are still two types of graphs at work:
+ - Resources have parent resources, and could be drawn out as a tree structure
+ - Teams can have member permissions to other teams
+
+#### System-Wide Roles
+
+The 2015 system treated the system admin and system auditor as system roles.
+However, because the role ancestors are cached for each role, this meant that
+every role had a link to the system admin role. To some extent, this threw cold
+water on adding more system roles. The storage and additional caching overhead
+for system roles did not encourage use of more system roles.
+
+Ultimately, system roles do not need caching like object roles do.
+The querysets do not get out-of-control for the task of returning
+the permissions a user has. Nesting inside of more complex queries still can.
+Because of that, a method for handling system roles with an _entirely separate_
+system is offered here that hooks into the same bound methods as the object-role system.
 
 ### Models
 
-The RBAC system defines a few new models. These models represent the underlying RBAC implementation and generally will be abstracted away from your daily development tasks by signals connected by the permission registry.
+These models represent the underlying RBAC implementation and generally will be abstracted away from your daily development tasks by signals connected by the permission registry.
+
+You should also prefer to use the attached methods when possible.
+Those have some additional syntax aids, validation, and can take the user flags
+and the global roles system into account.
 
 #### `ObjectRole`
 
-`ObjectRole` defines a single role with an object association within the RBAC implementation.
+`ObjectRole` is an instantiation of a role definition for a particular object.
+The `give_permission` method creates an object role if one does not exist for that (object, role definition)
 
 ##### `descendent_roles()`
 
@@ -242,9 +288,3 @@ Return a queryset from `cls` model that `user` has the `codename` permission to.
 ##### `get_permissions(user, obj)`
 
 Returns all permissions that `user` has to `obj`.
-
-### Attached Methods
-
-Several methods are attached to any model registered via `permission_registry`.
-For example, you could do `MyModel.accessible_objects(user, 'change_mymodel')`
-to get a queryset of `MyModel` that the `user` has change permission to.
