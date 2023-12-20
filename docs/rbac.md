@@ -1,6 +1,6 @@
 # Role-Based Access Control (RBAC)
 
-This intended for a developer audience, for applying this system to a Django app, for instance.
+This intended for a developer audience, for applying this system to a Django app.
 
 This is derived from the RBAC system in AWX which was implemented roughly
 in the year 2015, and this remained stable until an overhaul, with early work
@@ -12,12 +12,18 @@ Start with `docs/Installation.md` for the core ansible_base setup.
 
 ### RBAC Usage at ORM layer
 
-Developers should interact with the `RoleDefinition` as an ordinary model.
-Ordinarily, the `ObjectRole` or `RoleEvaluation` should not be interacted with.
+Developers should interact with `RoleDefinition` as an ordinary model.
+Giving and removing permissions should be handled by methods on a `RoleDefinition` instance.
+Ordinarily, the other models from this app should not be interacted with.
+
+NOTE: At various times a "role definition" may be referred to as just a "role".
+Grammatically, we prefer to refer to an object role
+(association of a role definition with an object) as a "object-role" to avoid ambiguity.
+The 2015 system referred to object-roles as "roles".
 
 #### Creating a New Role Definition
 
-These are expected to be user-defined in many apps. Example of creating a custom role definition:
+Roles are expected to be user-defined in many apps. Example of creating a custom role definition:
 
 ```
 from awx.ansible_base.models.rbac import RoleDefinition
@@ -27,18 +33,15 @@ rd = RoleDefinition.objects.get_or_create(name='JT-execute', permissions=['execu
 
 #### Assigning Permissions
 
-With a role definition object like `rd` above, you can then doll out permissions to objects.
+With a role definition object like `rd` above, you can then give out permissions to objects.
  - `rd.give_permission(user, obj)` - give permissions listed in `rd` to that user for just that object
  - `rd.remove_permission(user, obj)` - remove permission granted by only that role
- - `rd.give_permission(user, organization)` - give execute/view permissions to all job templates in that organization
  - `rd.give_global_permission(user)` - if configured, give user execute/view permissions to all job templates in the system
  - `rd.remove_global_permission(user)`
 
 These cases assume an `obj` of a model type tracked by the RBAC system,
-which has a parent object of `organization` (also configured by the app).
-All the `give_permission` and `remove_permission` methods will return an `ObjectRole`
-which links to `rd` and `obj`, if applicable.
-Removing permission will result in delete the object role if no other assignments exist.
+All the `give_permission` and `remove_permission` methods will return an `ObjectRole` specific to `obj`, if applicable.
+Removing permission will delete the object role if no other assignments exist.
 
 #### Registering Models
 
@@ -48,13 +51,21 @@ be made into a resource in the RBAC system by registering that resource in the r
 ```
 from awx.ansible_base.utils.permission_registry import permission_registry
 
-permission_registry.register(MyModel, parent_field_name='parent_model')
+permission_registry.register(MyModel, parent_field_name='organization')
 ```
 
 If you need to manage special permissions beyond the default permissions like "execute", these need to
 be added in the model's `Meta` according to the Django documentation for `auth.Permission`.
 The `parent_field_name` must be a ForeignKey to another model which is the RBAC "parent"
 model of `MyModel`, or `None`.
+
+#### Parent Resources
+
+Assuming `obj` has a related `organization` which was declared by `parent_field_name` when registering,
+you can give and remove permissions to all objects of that type "in" the organization
+(meaning they have that ForeignKey to the organization).
+- `rd.give_permission(user, organization)` - give execute/view permissions to all job templates in that organization
+- `rd.remove_permission(user, organization)` - revoke permissions obtained from that particular role (other roles will still be in effect)
 
 #### Evaluating Permissions
 
