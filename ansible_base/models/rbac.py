@@ -349,17 +349,19 @@ class RoleEvaluation(models.Model):
         return (self.codename, self.content_type_id, self.object_id)
 
     @staticmethod
-    def accessible_ids(cls, user, codename, content_types=None):
+    def accessible_ids(cls, actor, codename, content_types=None):
         """
         Corresponds to AWX accessible_pk_qs
 
         Use instead of `MyModel.objects` when you want to only consider
         resources that a user has specific permissions for. For example:
         MyModel.accessible_objects(user, 'view_mymodel').filter(name__istartswith='bar')
+
+        Intended to be used for users, but should also be valid for teams
         """
         # We only have a content_types exception for multiple content types for polymorphic models
         # for normal models you should not need it, but AWX unified_ models need it to get by
-        filter_kwargs = dict(role__in=user.has_roles.all(), codename=codename)
+        filter_kwargs = dict(role__in=actor.has_roles.all(), codename=codename)
         if content_types:
             filter_kwargs['content_type_id__in'] = content_types
         else:

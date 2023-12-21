@@ -43,6 +43,11 @@ class BaseEvaluationDescriptor:
 
 
 def has_super_permission(user, codename):
+    if user._meta.model_name != permission_registry.user_model._meta.model_name:
+        if user._meta.model_name == permission_registry.team_model._meta.model_name:
+            return False  # Super permission flags only exist for users, teams can use global roles
+        else:
+            raise RuntimeError(f'Evaluation methods are for users or teams, got {user._meta.model_name}: {user}')
     for super_flag in settings.ROLE_BYPASS_SUPERUSER_FLAGS:
         if getattr(user, super_flag):
             return True
