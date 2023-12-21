@@ -5,7 +5,7 @@ from django.apps import apps
 from django.conf import settings
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
-from django.db.models.signals import m2m_changed, post_delete, post_init, post_save, pre_delete
+from django.db.models.signals import m2m_changed, post_delete, post_init, post_save, pre_delete, pre_save
 from django.db.utils import ProgrammingError
 
 from ansible_base.migrations._managed_definitions import setup_managed_role_definitions
@@ -141,7 +141,7 @@ def permissions_changed(instance, action, model, pk_set, reverse, **kwargs):
 m2m_changed.connect(permissions_changed, sender=RoleDefinition.permissions.through)
 
 
-def set_original_parent(sender, instance, **kwargs):
+def rbac_post_init_set_original_parent(sender, instance, **kwargs):
     '''
     connect to post_init signal
     Used to set the original, or
@@ -151,7 +151,10 @@ def set_original_parent(sender, instance, **kwargs):
     parent_field_name = permission_registry.get_parent_fd_name(instance)
     if parent_field_name is None:
         return
-    instance.__rbac_original_parent_id = getattr(instance, f'{parent_field_name}_id')
+    parent_id_name = f'{parent_field_name}_id'
+    if parent_id_name not in instance.__dict__:
+        return  # we do not want to conflit with .only usage
+    instance.__rbac_original_parent_id = getattr(instance, parent_id_name)
 
 
 def post_save_update_obj_permissions(instance):
@@ -164,8 +167,10 @@ def post_save_update_obj_permissions(instance):
     new_parent_id = getattr(instance, f'{parent_field_name}_id')
     if new_parent_id:
         to_update.update(set(ObjectRole.objects.filter(content_type=parent_ct, object_id=new_parent_id)))
-    if hasattr(instance, '__rbac_original_parent_id') and instance.__rbac_original_parent_id:
-        to_update.update(set(ObjectRole.objects.filter(content_type=parent_ct, object_id=instance.__rbac_original_parent_id)))
+    if hasattr(instance, '__rbac_original_parent_id'):
+        if instance.__rbac_original_parent_id:
+            to_update.update(set(ObjectRole.objects.filter(content_type=parent_ct, object_id=instance.__rbac_original_parent_id)))
+        delattr(instance, '__rbac_original_parent_id')
 
     # Account for parent team roles of those organization roles
     ancestors = set(ObjectRole.objects.filter(provides_teams__has_roles__in=to_update))
@@ -180,7 +185,23 @@ def post_save_update_obj_permissions(instance):
         compute_object_role_permissions(object_roles=to_update)
 
 
-def recompute_object_role_permissions(instance, created, *args, **kwargs):
+def rbac_pre_save_identify_changes(instance, *args, **kwargs):
+    # Exit right away if object does not have any parent objects
+    parent_field_name = permission_registry.get_parent_fd_name(instance)
+    if parent_field_name is None:
+        return
+
+    # The parent object can not have changed if update_fields was given and did not list that field
+    update_fields = kwargs.get('update_fields', None)
+    if update_fields and not (parent_field_name in update_fields or f'{parent_field_name}_id' in update_fields):
+        return
+
+    # If we HAVE to do a query to find out if the parent field has changed then we will here
+    if not hasattr(instance, '__rbac_original_parent_id'):
+        instance.__rbac_original_parent_id = getattr(type(instance).objects.only('id').get(pk=instance.pk), f'{parent_field_name}_id')
+
+
+def rbac_post_save_update_evaluations(instance, created, *args, **kwargs):
     """
     Connect to post_save signal for objects in the permission registry
     If the parent object changes, this rebuilds the cache
@@ -212,7 +233,7 @@ def team_pre_delete(instance, *args, **kwargs):
     instance.__rbac_stashed_member_roles = list(instance.member_roles.all())
 
 
-def remove_object_roles(instance, *args, **kwargs):
+def rbac_post_delete_remove_object_roles(instance, *args, **kwargs):
     """
     Call this when deleting an object to cascade delete its object roles
     Deleting a team can have consequences for the rest of the graph
@@ -322,6 +343,8 @@ class TrackedRelationship:
 def connect_rbac_signals(cls):
     if cls._meta.model_name == permission_registry.team_model._meta.model_name:
         pre_delete.connect(team_pre_delete, sender=cls, dispatch_uid='stash-team-roles-before-delete')
-    post_save.connect(recompute_object_role_permissions, sender=cls, dispatch_uid='permission-registry-post-save')
-    post_delete.connect(remove_object_roles, sender=cls, dispatch_uid='permission-registry-post-delete')
-    post_init.connect(set_original_parent, sender=cls, dispatch_uid='permission-registry-save-prior-parent')
+
+    post_init.connect(rbac_post_init_set_original_parent, sender=cls, dispatch_uid='permission-registry-save-prior-parent')
+    pre_save.connect(rbac_pre_save_identify_changes, sender=cls, dispatch_uid='permission-registry-pre-save')
+    post_save.connect(rbac_post_save_update_evaluations, sender=cls, dispatch_uid='permission-registry-post-save')
+    post_delete.connect(rbac_post_delete_remove_object_roles, sender=cls, dispatch_uid='permission-registry-post-delete')
