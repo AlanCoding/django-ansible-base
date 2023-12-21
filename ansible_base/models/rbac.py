@@ -159,6 +159,8 @@ class RoleDefinition(models.Model):
             raise RuntimeError(f'Cannot give permission to {actor}, must be a user or team')
 
         if (not giving) and (not (object_role.users.exists() or object_role.teams.exists())):
+            if object_role in to_update:
+                to_update.remove(object_role)
             object_role.delete()
 
         update_after_assignment(update_teams, to_update)
