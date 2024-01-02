@@ -328,7 +328,7 @@ class RoleEvaluation(models.Model):
         constraints = [models.UniqueConstraint(name='one_entry_per_object_permission_and_role', fields=['object_id', 'content_type_id', 'codename', 'role'])]
 
     def __str__(self):
-        return f'RoleEvaluation(pk={self.id}, codename={self.codename}, object_id={self.object_id}, content_type_id={self.content_type_id})'
+        return f'RoleEvaluation(pk={self.id}, codename={self.codename}, object_id={self.object_id}, content_type_id={self.content_type_id}, role_id={self.role_id})'
 
     def save(self, *args, **kwargs):
         if self.id:
