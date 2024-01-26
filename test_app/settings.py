@@ -120,7 +120,6 @@ from ansible_base.lib import dynamic_config  # noqa: E402
 settings_file = os.path.join(os.path.dirname(dynamic_config.__file__), 'dynamic_settings.py')
 include(settings_file)
 
-AUTH_USER_MODEL = 'test_app.User'
 ANSIBLE_BASE_ROLE_PRECREATE = {}  # tested in individual tests
 ANSIBLE_BASE_SINGLETON_USER_RELATIONSHIP = 'singleton_roles'
 ANSIBLE_BASE_SINGLETON_TEAM_RELATIONSHIP = 'singleton_roles'

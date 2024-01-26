@@ -82,31 +82,84 @@ class Migration(migrations.Migration):
             name='Team',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('name', models.CharField(max_length=512)),
-                ('organization', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='test_app.organization')),
-                ('team_parents', models.ManyToManyField(related_name='team_children', to='test_app.team')),
-                ('tracked_users', models.ManyToManyField(related_name='tracked_teams', to=settings.AUTH_USER_MODEL)),
-            ],
-            options={
-                'permissions': [('member_team', 'Has all roles assigned to this team')],
-            },
-        ),
-        migrations.CreateModel(
-            name='Team',
-            fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('created_on', models.DateTimeField(default=None, editable=False, help_text='The date/time this resource was created')),
                 ('modified_on', models.DateTimeField(default=None, editable=False, help_text='The date/time this resource was created')),
                 ('name', models.CharField(help_text='The name of this resource', max_length=512)),
                 ('description', models.TextField(blank=True, default='', help_text='The team description.')),
                 ('created_by', models.ForeignKey(default=None, editable=False, help_text='The user who created this resource', null=True, on_delete=django.db.models.deletion.DO_NOTHING, related_name='%(app_label)s_%(class)s_created+', to=settings.AUTH_USER_MODEL)),
                 ('modified_by', models.ForeignKey(default=None, editable=False, help_text='The user who last modified this resource', null=True, on_delete=django.db.models.deletion.DO_NOTHING, related_name='%(app_label)s_%(class)s_modified+', to=settings.AUTH_USER_MODEL)),
-                ('organization', models.ForeignKey(help_text='The organization of this team.', on_delete=django.db.models.deletion.CASCADE, related_name='teams', to='test_app.organization')),
+                ('organization', models.ForeignKey(help_text='The organization of this team.', on_delete=django.db.models.deletion.CASCADE, related_name='teams', to=settings.ANSIBLE_BASE_ORGANIZATION_MODEL)),
+                ('team_parents', models.ManyToManyField(related_name='team_children', to=settings.ANSIBLE_BASE_TEAM_MODEL)),
+                ('tracked_users', models.ManyToManyField(related_name='tracked_teams', to=settings.AUTH_USER_MODEL)),
             ],
             options={
                 'ordering': ('organization__name', 'name'),
                 'abstract': False,
                 'unique_together': {('organization', 'name')},
+                'permissions': [('member_team', 'Has all roles assigned to this team')],
             },
+        ),
+        migrations.CreateModel(
+            name='ExampleEvent',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('name', models.CharField(max_length=64, unique=True)),
+            ],
+        ),
+        migrations.CreateModel(
+            name='InstanceGroup',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('name', models.CharField(max_length=512)),
+            ],
+            options={
+                'default_permissions': ('change', 'delete', 'view'),
+            },
+        ),
+        migrations.RemoveField(
+            model_name='encryptionmodel',
+            name='description',
+        ),
+        migrations.AddField(
+            model_name='encryptionmodel',
+            name='testing1',
+            field=models.CharField(default='a', max_length=1, null=True),
+        ),
+        migrations.AddField(
+            model_name='encryptionmodel',
+            name='testing2',
+            field=models.CharField(default='b', max_length=1, null=True),
+        ),
+        migrations.AlterField(
+            model_name='encryptionmodel',
+            name='name',
+            field=models.CharField(help_text='The name of this resource', max_length=512),
+        ),
+        migrations.CreateModel(
+            name='Namespace',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('name', models.CharField(max_length=64, unique=True)),
+                ('organization', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to=settings.ANSIBLE_BASE_ORGANIZATION_MODEL)),
+            ],
+        ),
+        migrations.CreateModel(
+            name='Inventory',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('name', models.CharField(max_length=512)),
+                ('organization', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to=settings.ANSIBLE_BASE_ORGANIZATION_MODEL)),
+            ],
+            options={
+                'permissions': [('update_inventory', 'Do inventory updates')],
+            },
+        ),
+        migrations.CreateModel(
+            name='CollectionImport',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('name', models.CharField(max_length=64, unique=True)),
+                ('namespace', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='test_app.namespace')),
+            ],
         ),
     ]

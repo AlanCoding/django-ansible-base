@@ -37,6 +37,9 @@ class Team(AbstractTeam):
 
     class Meta:
         app_label = 'test_app'
+        abstract = False
+        unique_together = [('organization', 'name')]
+        ordering = ('organization__name', 'name')
         permissions = [('member_team', 'Has all roles assigned to this team')]
 
 
