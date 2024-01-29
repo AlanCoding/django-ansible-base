@@ -3,8 +3,8 @@ from rest_framework.routers import SimpleRouter
 from rest_framework.viewsets import ModelViewSet
 
 from ansible_base.rbac.api.permissions import AnsibleBaseObjectPermissions
-from test_app.models import EncryptionModel, Organization, User
-from test_app.serializers import EncryptionModelSerializer, OrganizationSerializer, UserSerializer
+from test_app.models import EncryptionModel, Inventory, Organization, User
+from test_app.serializers import EncryptionModelSerializer, InventorySerializer, OrganizationSerializer, UserSerializer
 
 
 class UserViewSet(ModelViewSet):
@@ -18,7 +18,7 @@ class OrganizationViewSet(ModelViewSet):
     permission_classes = [AnsibleBaseObjectPermissions]
 
     def get_queryset(self):
-        return Organization.accessible_objects(self.request.user, 'view')
+        return Organization.new_accessible_objects(self.request.user, 'view')
 
 
 class EncryptedModelViewSet(ModelViewSet):
@@ -26,11 +26,20 @@ class EncryptedModelViewSet(ModelViewSet):
     permission_classes = [AnsibleBaseObjectPermissions]
 
     def get_queryset(self):
-        return EncryptionModel.accessible_objects(self.request.user, 'view')
+        return EncryptionModel.new_accessible_objects(self.request.user, 'view')
+
+
+class InventoryViewSet(ModelViewSet):
+    serializer_class = InventorySerializer
+    permission_classes = [AnsibleBaseObjectPermissions]
+
+    def get_queryset(self):
+        return Inventory.new_accessible_objects(self.request.user, 'view')
 
 
 router = SimpleRouter()
 
 router.register(r'users', UserViewSet)
 router.register(r'organizations', OrganizationViewSet, basename='organization')
-router.register(r'encryption_model', EncryptedModelViewSet, basename='encryptedmodel')
+router.register(r'encryption_models', EncryptedModelViewSet, basename='encryptedmodel')
+router.register(r'inventories', InventoryViewSet, basename='inventory')
