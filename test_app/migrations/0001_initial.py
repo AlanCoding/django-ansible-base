@@ -89,8 +89,8 @@ class Migration(migrations.Migration):
                 ('created_by', models.ForeignKey(default=None, editable=False, help_text='The user who created this resource', null=True, on_delete=django.db.models.deletion.DO_NOTHING, related_name='%(app_label)s_%(class)s_created+', to=settings.AUTH_USER_MODEL)),
                 ('modified_by', models.ForeignKey(default=None, editable=False, help_text='The user who last modified this resource', null=True, on_delete=django.db.models.deletion.DO_NOTHING, related_name='%(app_label)s_%(class)s_modified+', to=settings.AUTH_USER_MODEL)),
                 ('organization', models.ForeignKey(help_text='The organization of this team.', on_delete=django.db.models.deletion.CASCADE, related_name='teams', to=settings.ANSIBLE_BASE_ORGANIZATION_MODEL)),
-                ('team_parents', models.ManyToManyField(related_name='team_children', to=settings.ANSIBLE_BASE_TEAM_MODEL)),
-                ('tracked_users', models.ManyToManyField(related_name='tracked_teams', to=settings.AUTH_USER_MODEL)),
+                ('team_parents', models.ManyToManyField(blank=True, related_name='team_children', to=settings.ANSIBLE_BASE_TEAM_MODEL)),
+                ('tracked_users', models.ManyToManyField(blank=True, related_name='tracked_teams', to=settings.AUTH_USER_MODEL)),
             ],
             options={
                 'ordering': ('organization__name', 'name'),
