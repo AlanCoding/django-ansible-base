@@ -1,3 +1,5 @@
+from django.db import transaction
+
 from rest_framework import permissions
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.viewsets import ModelViewSet
@@ -37,7 +39,11 @@ class BaseAssignmentViewSet(ModelViewSet):
     def perform_destroy(self, instance):
         if not self.request.user.has_obj_perm(instance, 'delete'):
             raise PermissionDenied
-        instance.delete()
+        with transaction.atomic():
+            rd = instance.object_role.role_definition
+            model = rd.content_type.model_class()
+            obj = instance.object_role.content_object
+            rd.remove_permission(self.request.user, obj)
 
 
 class TeamAssignmentViewSet(BaseAssignmentViewSet):

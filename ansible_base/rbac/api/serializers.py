@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist
+from django.db import transaction
 from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 
@@ -145,7 +146,9 @@ class BaseAssignmentSerializer(CommonModelSerializer):
             # raise Exception((user, user.is_superuser, user.is_staff))
             raise PermissionDenied
 
-        object_role = rd.give_permission(user, obj)
+        with transaction.atomic():
+            object_role = rd.give_permission(user, obj)
+
         assignment = self.Meta.model.objects.get(object_role=object_role, **{self.actor_field: validated_data[self.actor_field]})
         return assignment
 

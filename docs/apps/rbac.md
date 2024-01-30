@@ -5,12 +5,12 @@ Not having access for a specific request sent to the server usually results in a
 
 ## Using as an API Client
 
-This section tells how to use the API endpoints as a client,
-what requests to make, and how to build the data sent in those requests.
+This section tells how to use the API endpoints as a client;
+what requests to make and how to build request data.
 
-You need access to a server running a project that uses this system.
-A fast way to get that is running test_app in this repo, see `test_app/README.md` for bootstrap.
-http://127.0.0.1:8000/admin/ will allow you to login as an admin user.
+You need a server running a Django project that uses this system.
+Use test_app in this repo for a demo, see `test_app/README.md` for bootstrap.
+http://127.0.0.1:8000/admin/ allows login as admin user (password is "password").
 
 ### Create Custom Role (Definition)
 
@@ -99,6 +99,16 @@ http://127.0.0.1:8000/api/v1/role_user_assignments/?object_role__object_id=3&obj
 
 A future enhancement will be to eliminate the need to type "object_role__" in
 these URLs, but if or when that is done, the above URL construction should still work.
+
+### Revoking an Assignment
+
+From any of the assignment lists, the user can select an assignment to revoke.
+Follow the "url" in the serializer from either user or team assignment lists.
+
+DELETE http://127.0.0.1:8000/api/v1/role_user_assignments/1/
+
+Will undo everything related to that assignment.
+The user or team's users will lose permission that was granted by the object-role-assignment.
 
 ### Assigning Organization Permission
 
