@@ -8,6 +8,10 @@ from test_app.models import Inventory, Organization
 
 @pytest.mark.django_db
 def test_org_inv_permissions(rando, inventory, org_inv_rd):
+    assert not rando.has_obj_perm(inventory, 'view_inventory')
+    assert not rando.has_obj_perm(inventory, 'change_inventory')
+    assert list(Inventory.access_qs(rando)) == []
+
     org_inv_rd.give_permission(rando, inventory.organization)
 
     assert rando.has_obj_perm(inventory, 'view_inventory')
@@ -16,10 +20,11 @@ def test_org_inv_permissions(rando, inventory, org_inv_rd):
 
     assert rando.has_obj_perm(inventory.organization, 'change_organization')
 
-    assert set(Organization.new_accessible_objects(rando, 'change_organization')) == set([inventory.organization])
-    assert set(Inventory.new_accessible_objects(rando, 'view')) == set([inventory])
+    assert set(Organization.access_qs(rando, 'change_organization')) == set([inventory.organization])
+    assert set(Inventory.access_qs(rando, 'view')) == set([inventory])
 
     assert set(RoleEvaluation.get_permissions(rando, inventory)) == set(['change_inventory', 'view_inventory'])
+    assert list(Inventory.access_qs(rando)) == [inventory]
 
 
 @pytest.mark.django_db

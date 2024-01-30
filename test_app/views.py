@@ -18,7 +18,7 @@ class OrganizationViewSet(ModelViewSet):
     permission_classes = [AnsibleBaseObjectPermissions]
 
     def get_queryset(self):
-        return Organization.new_accessible_objects(self.request.user, 'view')
+        return Organization.access_qs(self.request.user, 'view')
 
 
 class EncryptedModelViewSet(ModelViewSet):
@@ -26,7 +26,7 @@ class EncryptedModelViewSet(ModelViewSet):
     permission_classes = [AnsibleBaseObjectPermissions]
 
     def get_queryset(self):
-        return EncryptionModel.new_accessible_objects(self.request.user, 'view')
+        return EncryptionModel.access_qs(self.request.user, 'view')
 
 
 class InventoryViewSet(ModelViewSet):
@@ -34,7 +34,7 @@ class InventoryViewSet(ModelViewSet):
     permission_classes = [AnsibleBaseObjectPermissions]
 
     def get_queryset(self):
-        return Inventory.new_accessible_objects(self.request.user, 'view')
+        return Inventory.access_qs(self.request.user, 'view')
 
 
 router = SimpleRouter()

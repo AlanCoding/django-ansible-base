@@ -76,15 +76,17 @@ you can give and remove permissions to all objects of that type "in" the organiz
 
 ### Evaluating Permissions
 
-The ultimate object of this access control is to evaluate what objects a user
-has a certain type of permission to.
+The ultimate goal of this system is to evaluate what objects a user
+has a certain type of permission to (access control).
 Given a registered model, you can do these things.
 
-- obtain visible objects for a user with `MyModel.accessible_objects(user, 'view_mymodel')`
-- obtain objects user has permission to delete `MyModel.accessible_objects(user, 'delete_mymodel')`
+- obtain visible objects for a user with `MyModel.access_qs(user, 'view_mymodel')`
+- obtain objects user has permission to delete `MyModel.access_qs(user, 'delete_mymodel')`
 - determine if user can delete one specific object `user.has_obj_perm(obj, 'delete_mymodel')`
-- use only the action name for a queryset shortcut `MyModel.accessible_objects(user, 'view')`
+- use only the action name for a queryset shortcut `MyModel.access_qs(user, 'view')`
+- get visible objects, view permission implied `MyModel.access_qs(user)`
 - use only the action name or object permission check `user.has_obj_perm(obj, 'delete')`
+- efficient filtering of related model `RelatedModel.objects.filter(mymodel=MyModel.access_ids_qs(user))`
 
 Some HTTP actions will be more complicated. For instance, if you create a new object that combines
 several related objects and each of those related objects require "use" permission.
@@ -149,7 +151,7 @@ or if you want all roles to be user-defined.
 With some user flags, like the standard `is_superuser` flag, the RBAC system does not
 need to be consulted to make an evaluation.
 You may or may not want this to be done as part of the attached methods
-like `accessible_objects` or `has_obj_perm`. That can be controlled with these.
+like `access_qs` or `has_obj_perm`. That can be controlled with these.
 
 ```
 ANSIBLE_BASE_BYPASS_SUPERUSER_FLAGS = ['is_superuser']
@@ -175,7 +177,7 @@ for that user or team to get the global permission offered by the role definitio
 The `rd.give_global_permission(user)` does the same thing but also clears cached values.
 
 You can view a user's global permissions from `user.singleton_roles()`.
-Global roles will affect the outcome of `user.has_obj_perm` and `MyModel.accessible_objects` calls.
+Global roles will affect the outcome of `user.has_obj_perm` and `MyModel.access_qs` calls.
 This is similar to configuring the user flags bypass.
 
 ### Tracked Relationships

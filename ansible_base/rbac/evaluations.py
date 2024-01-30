@@ -58,7 +58,7 @@ def has_super_permission(user, codename='change'):
 
 
 class AccessibleObjectsDescriptor(BaseEvaluationDescriptor):
-    def __call__(self, user, codename, **kwargs):
+    def __call__(self, user, codename='view', **kwargs):
         full_codename = validate_codename_for_model(codename, self.cls)
         if has_super_permission(user, codename):
             return self.cls.objects.all()
@@ -107,5 +107,5 @@ def bound_singleton_permissions(self):
 
 
 def connect_rbac_methods(cls):
-    cls.add_to_class('new_accessible_objects', AccessibleObjectsDescriptor(cls))
-    cls.add_to_class('accessible_ids', AccessibleIdsDescriptor(cls))
+    cls.add_to_class('access_qs', AccessibleObjectsDescriptor(cls))
+    cls.add_to_class('access_ids_qs', AccessibleIdsDescriptor(cls))
