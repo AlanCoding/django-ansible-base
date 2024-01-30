@@ -139,7 +139,7 @@ class BaseAssignmentSerializer(CommonModelSerializer):
         obj = model.objects.get(id=validated_data['object_id'])
 
         # validate user has permission
-        user = validated_data['user']
+        user = validated_data[self.actor_field]
         requesting_user = self.context['view'].request.user
         if not requesting_user.has_obj_perm(obj, 'change'):
             # raise Exception((user, user.is_superuser, user.is_staff))

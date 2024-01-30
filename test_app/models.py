@@ -19,7 +19,10 @@ class EncryptionModel(NamedCommonModel):
 
 
 class Organization(AbstractOrganization):
-    pass
+    class Meta:
+        app_label = 'test_app'
+        # For root resources (no parent) we exclude the add permission which is a global permission
+        default_permissions = ('change', 'delete', 'view')
 
 
 class User(AbstractUser, CommonModel):

@@ -58,6 +58,8 @@ class RoleDefinitionManager(models.Manager):
             cls = perm.content_type.model_class()
             if perm.codename.startswith('add_'):
                 to_model = permission_registry.get_parent_model(cls)
+                if to_model is None:
+                    raise ValidationError(f'{perm.codename} permission is for root model, which requires global roles.')
             else:
                 to_model = cls
             permissions_by_model[to_model].append(perm)

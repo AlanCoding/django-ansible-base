@@ -1,23 +1,151 @@
 # Role-Based Access Control (RBAC)
 
-This is a permission system at the Django model level
+As a feature of django-ansible-base, this provides access control for already-authenticated users.
+Not having access for a specific request sent to the server usually results in a 403 permission denied response.
+
+## Using as an API Client
+
+This section tells how to use the API endpoints as a client,
+what requests to make, and how to build the data sent in those requests.
+
+You need access to a server running a project that uses this system.
+A fast way to get that is running test_app in this repo, see `test_app/README.md` for bootstrap.
+http://127.0.0.1:8000/admin/ will allow you to login as an admin user.
+
+### Create Custom Role (Definition)
+
+After logging in to test_app/, you can visit this endpoint to get the role definition API.
+
+http://127.0.0.1:8000/api/v1/role_definitions/
+
+Perform an OPTIONS request, and you will find this gives choices for
+fields `permissions` and `content_type`.
+Out of the choices a single `content_type` needs to be chosen for a role definition.
+Multiple permissions can be selected, and are accepted in the form of a list.
+Type-specific permissions validation is still TBD, these are specific to a model.
+
+A POST to this endpoint will create a new role definition, example data:
+
+```json
+{
+    "permissions": ["view_inventory"],
+    "content_type": "local.inventory",
+    "name": "View a single inventory",
+    "description": "custom role"
+}
+```
+
+Name can be anything string that's not blank. Description can be any string.
+
+### Assigning a User a Role to an Object
+
+Select a role definition from `/api/v1/role_definitions/`, use the id as `role_definition`
+and a user from `/api/v1/users/` and use the id as `user`.
+Given the type of the role definition, check the available objects of that type,
+in this case `/api/v2/inventories/` and obtain the desired id, this will become `object_id`.
+
+With all 3 ids ready, POST to http://127.0.0.1:8000/api/v1/role_user_assignments/
+
+```json
+{
+    "role_definition": 3,
+    "object_id": 3,
+    "user": 3
+}
+```
+
+This will give user id=3 view permission to a single inventory id=3, assuming the role definition
+referenced is what was created in the last section.
+
+### Assigning a User as a Member of a Team
+
+While this is possible with the RBAC API, it is not covered here,
+because it may come from an external source.
+
+The "member_team" permission may later be prohibited from use in custom role definitions.
+
+### Assigning a Team a Role to an Object
+
+If you used the test_app bootstrap script, then you will find the user "angry_spud"
+is a member of the "awx_devs" team.
+
+Assuming the team id is 2, POST to
+
+http://127.0.0.1:8000/api/v1/role_team_assignments/
+
+with data
+
+```json
+{
+    "role_definition": 3,
+    "object_id": 3,
+    "team": 2
+}
+```
+
+This has a similar effect to user assignments, but in this case will give
+permissions to all users of a team
+
+### Viewing Assignments
+
+For the single inventory mentioned above, it is possible to view the existing permission
+assignments directly to that object.
+
+GET
+
+http://127.0.0.1:8000/api/v1/role_team_assignments/?object_role__object_id=3&object_role__content_type__model=inventory
+
+http://127.0.0.1:8000/api/v1/role_user_assignments/?object_role__object_id=3&object_role__content_type__model=inventory
+
+A future enhancement will be to eliminate the need to type "object_role__" in
+these URLs, but if or when that is done, the above URL construction should still work.
+
+### Assigning Organization Permission
+
+In the case of inventory, its parent object is its organization.
+Instead of giving permission to a single inventory, you can use roles to give
+permission to all inventories inside of an organization.
+
+The difference in the above steps are that
+- when creating a custom role definition the `content_type` would be "local.organization"
+- when creating the assignment, the `object_id` would be the id of an organization
+
+### Displaying Access
+
+To give a complete picture of access, consider that there are 3 "layers" of access.
+ - Direct object role assignment - for users and teams
+ - Parent object role assignment - for users and teams
+ - Superuser or super-auditor user flags
+
+For a single app using this system at the org-level, these 5 distinct pieces
+of information would give a complete summary of who has access.
+By itself, this does not expand the users who are members of teams.
+Assuming that teams-in-teams are enabled, this would not just be the direct
+members of the teams, but a listing of all users who have indirect membership to the team.
+
+
+## Using in a Django Project
+
+These instructions are intended for someone applying this system to an existing Django app.
+Start with `docs/Installation.md` for the core ansible_base setup.
+The app name is dab_rbac, INSTALLED_APPS path is "ansible_base.rbac".
+
+You can choose to use this entirely at the Django model level
  - you use roles to delegate permissions to users and teams
  - this system will efficiently filter querysets to a certain permission level for a certain user
-
-## Using
-
-Usage instructions are intended for someone applying this system to an existing Django app.
-Start with `docs/Installation.md` for the core ansible_base setup.
-The app name is dab_rbac.
 
 ### Migrations
 
 This is a system applied on top of your app, and uses some of _your_ models
 (like user, permissions, etc) in relational fields. dab_rbac lists these models as `swappable_dependences`
-which puts `0001_init` migration as a dependency, but this is likely insufficient.
+which puts your `0001_init` migration as a dependency, but this is likely insufficient.
 
 You should specify `run_before = [('dab_rbac', '__first__')]` in the
 last migration of _your_ app at the time you integrate this.
+The philosophy of dab_rbac is "outside looking in", and the main link is a loose
+link via generic foreign key.
+Your permission model is needed to respect your existing permissions setup,
+and it needs relational links to your "actor" models (user/team) .
 
 ### Creating a New Role Definition
 
