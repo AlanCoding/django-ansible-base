@@ -1,5 +1,4 @@
 from django.http import Http404
-
 from rest_framework.permissions import SAFE_METHODS, BasePermission, DjangoObjectPermissions
 
 from ansible_base.rbac.evaluations import has_super_permission

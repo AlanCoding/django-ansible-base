@@ -1,11 +1,10 @@
 from crum import impersonate
-from django.core.management.base import BaseCommand
-from django.contrib.contenttypes.models import ContentType
 from django.contrib.auth.models import Permission
+from django.contrib.contenttypes.models import ContentType
+from django.core.management.base import BaseCommand
 
 from ansible_base.rbac.models import RoleDefinition
-
-from test_app.models import EncryptionModel, Organization, Team, User, Inventory, InstanceGroup
+from test_app.models import EncryptionModel, InstanceGroup, Inventory, Organization, Team, User
 
 
 class Command(BaseCommand):
@@ -47,12 +46,10 @@ class Command(BaseCommand):
         ig_admin = RoleDefinition.objects.create_from_permissions(
             name='AWX InstanceGroup admin',
             content_type=ContentType.objects.get_for_model(InstanceGroup),
-            permissions=['change_instancegroup', 'delete_instancegroup', 'view_instancegroup']
+            permissions=['change_instancegroup', 'delete_instancegroup', 'view_instancegroup'],
         )
         team_member = RoleDefinition.objects.create_from_permissions(
-            name='Special Team member role',
-            content_type=ContentType.objects.get_for_model(Team),
-            permissions=['view_inventory', 'member_inventory']
+            name='Special Team member role', content_type=ContentType.objects.get_for_model(Team), permissions=['view_inventory', 'member_inventory']
         )
 
         org_admin_user = User.objects.create(username='org_admin')
