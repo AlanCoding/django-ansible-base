@@ -147,9 +147,8 @@ class BaseAssignmentSerializer(CommonModelSerializer):
             raise PermissionDenied
 
         with transaction.atomic():
-            object_role = rd.give_permission(user, obj)
+            assignment = rd.give_permission(user, obj)
 
-        assignment = self.Meta.model.objects.get(object_role=object_role, **{self.actor_field: validated_data[self.actor_field]})
         return assignment
 
 

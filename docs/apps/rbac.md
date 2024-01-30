@@ -182,7 +182,9 @@ With a role definition object like `rd` above, you can then give out permissions
  - `rd.remove_global_permission(user)`
 
 These cases assume an `obj` of a model type tracked by the RBAC system,
-All the `give_permission` and `remove_permission` methods will return an `ObjectRole` specific to `obj`, if applicable.
+All the `give_permission` method will return a `UserAssignment` or `TeamAssignment` object.
+The `remove_permission` method will return nothing.
+Assignments have an associated `object_role` in case you need that.
 Removing permission will delete the object role if no other assignments exist.
 
 ### Registering Models

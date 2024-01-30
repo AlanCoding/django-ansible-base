@@ -14,8 +14,8 @@ def test_user_singleton_role(rando, inventory, inv_rd):
 
 @pytest.mark.django_db
 def test_singleton_role_via_team(rando, organization, team, inventory, inv_rd, member_rd):
-    member_role = member_rd.give_permission(rando, organization)
-    assert list(member_role.provides_teams.all()) == [team]
+    assignment = member_rd.give_permission(rando, organization)
+    assert list(assignment.object_role.provides_teams.all()) == [team]
 
     inv_rd.give_global_permission(team)
     assert rando.has_obj_perm(inventory, 'change_inventory')

@@ -162,14 +162,15 @@ class RoleDefinition(CommonModel):
 
         update_teams, to_update = needed_updates_on_assignment(self, actor, object_role, created=created, giving=True)
 
+        assignment = None
         if actor._meta.model_name == 'user':
             if giving:
-                object_role.users.add(actor)
+                assignment = UserAssignment.objects.create(user=actor, object_role=object_role)
             else:
                 object_role.users.remove(actor)
         elif isinstance(actor, permission_registry.team_model):
             if giving:
-                object_role.teams.add(actor)
+                assignment = TeamAssignment.objects.create(team=actor, object_role=object_role)
             else:
                 object_role.teams.remove(actor)
         else:
@@ -187,7 +188,7 @@ class RoleDefinition(CommonModel):
             with tracker.sync_active():
                 tracker.sync_relationship(actor, content_object, giving=giving)
 
-        return object_role
+        return assignment
 
     def summary_fields(self):
         return {'name': self.name, 'description': self.description, 'managed': self.managed}
@@ -202,6 +203,15 @@ class AssignmentBase(CommonModel):
         help_text="The date/time this resource was created",
     )
     modified_by = None
+
+    # # Data cached from object_role, both models are immutable
+    # role_definition = models.ForeignKey(
+    #     RoleDefinition,
+    #     on_delete=models.CASCADE,
+    #     help_text=_("The role definition which defines what permissions this object role grants"),
+    # )
+    # content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    # object_id = models.PositiveIntegerField()
 
     class Meta:
         app_label = 'dab_rbac'
@@ -310,7 +320,9 @@ class ObjectRole(models.Model):
     @classmethod
     def visible_roles(cls, user):
         "Return a querset of object roles that this user should be allowed to view"
-        return cls.objects.filter(permission_partials__role__in=user.has_roles.all()).distinct()
+        visible_objs = RoleEvaluation.objects.filter(role__in=user.has_roles.all()).values_list('object_id', 'content_type_id').query
+        return cls.objects.extra(where=[f'(object_id,content_type_id) in ({visible_objs})']).distinct()
+        # return cls.objects.filter(permission_partials__role__in=user.has_roles.all()).distinct()
 
     def descendent_roles(self):
         "Returns a set of roles that you implicitly have if you have this role"

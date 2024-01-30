@@ -1,7 +1,7 @@
 import pytest
 from django.urls import reverse
 
-from ansible_base.rbac.models import RoleDefinition, UserAssignment
+from ansible_base.rbac.models import RoleDefinition
 
 
 @pytest.mark.django_db
@@ -34,8 +34,7 @@ def test_delete_role_definition(admin_api_client, inv_rd):
 
 @pytest.mark.django_db
 def test_get_user_assignment(admin_api_client, inv_rd, rando, inventory):
-    object_role = inv_rd.give_permission(rando, inventory)
-    assignment = UserAssignment.objects.get(object_role=object_role, user=rando)
+    assignment = inv_rd.give_permission(rando, inventory)
     url = reverse('userassignment-detail', kwargs={'pk': assignment.pk})
     response = admin_api_client.get(url)
     assert response.data['content_type'] == 'local.inventory'

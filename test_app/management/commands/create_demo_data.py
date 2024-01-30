@@ -39,6 +39,7 @@ class Command(BaseCommand):
         with impersonate(bull_bot):
             Team.objects.create(name='community.general maintainers', organization=galaxy)
 
+        # NOTE: managed role definitions are turned off, you could turn them on and get rid of these
         awx_perms = list(Permission.objects.filter(content_type__model__in=['organization', 'inventory']).values_list('codename', flat=True))
         org_admin = RoleDefinition.objects.create_from_permissions(
             name='AWX Organization admin permissions', content_type=ContentType.objects.get_for_model(Organization), permissions=awx_perms
@@ -46,9 +47,8 @@ class Command(BaseCommand):
         ig_admin = RoleDefinition.objects.create_from_permissions(
             name='AWX InstanceGroup admin',
             content_type=ContentType.objects.get_for_model(InstanceGroup),
-            permissions=[
-                'change_instancegroup', 'delete_instancegroup', 'view_instancegroup'
-        ])
+            permissions=['change_instancegroup', 'delete_instancegroup', 'view_instancegroup']
+        )
         team_member = RoleDefinition.objects.create_from_permissions(
             name='Special Team member role',
             content_type=ContentType.objects.get_for_model(Team),

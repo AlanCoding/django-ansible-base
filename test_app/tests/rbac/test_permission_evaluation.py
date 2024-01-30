@@ -1,7 +1,7 @@
 import pytest
 from django.test.utils import override_settings
 
-from ansible_base.rbac.models import ObjectRole, RoleDefinition, RoleEvaluation
+from ansible_base.rbac.models import ObjectRole, RoleDefinition, RoleEvaluation, UserAssignment
 from ansible_base.rbac.permission_registry import permission_registry
 from test_app.models import Inventory, Organization
 
@@ -42,24 +42,34 @@ def test_resource_add_permission(rando, inventory):
 def test_visible_roles():
     org1 = Organization.objects.create(name='org1')
     org2 = Organization.objects.create(name='org2')
+    inv = Inventory.objects.create(name='foo', organization=org1)
 
     u1 = permission_registry.user_model.objects.create(username='u1')
     u2 = permission_registry.user_model.objects.create(username='u2')
+    u3 = permission_registry.user_model.objects.create(username='u3')
 
     rd, _ = RoleDefinition.objects.get_or_create(permissions=['change_organization', 'view_organization'], name='change-org')
-
     change_1 = rd.give_permission(u1, org1)
     change_2 = rd.give_permission(u2, org2)
 
-    view_rd, _ = RoleDefinition.objects.get_or_create(permissions=['change_organization', 'view_organization'], name='view-org')
-
+    view_rd, _ = RoleDefinition.objects.get_or_create(permissions=['view_organization', 'view_inventory'], name='view-inv-org')
     view_1 = view_rd.give_permission(u2, org1)
+    assert u2.has_obj_perm(inv, 'view')
 
-    # The organization change role grants view permission, so the view role should be visible to the org admin
-    assert set(ObjectRole.visible_roles(u1)) == set([change_1, view_1])
+    inv_view, _ = RoleDefinition.objects.get_or_create(permissions=['view_inventory'], name='view-inv')
+    inv_1 = inv_view.give_permission(u3, inv)
 
-    # Likewise is not true in reverse, just having view permision to org does not mean you can see all the roles
-    assert set(ObjectRole.visible_roles(u2)) == set([change_2, view_1])
+    # u1 can see org1
+    assert set(ObjectRole.visible_roles(u1)) == set([change_1.object_role, view_1.object_role])
+    assert set(UserAssignment.visible_assignments(u1)) == set([change_1, view_1])
+
+    # u2 can see org1, org2, and the inventory
+    assert set(ObjectRole.visible_roles(u2)) == set([change_1.object_role, change_2.object_role, view_1.object_role, inv_1.object_role])
+    assert set(UserAssignment.visible_assignments(u2)) == set([change_1, change_2, view_1, inv_1])
+
+    # u3 can only see the inventory, no orgs
+    assert set(ObjectRole.visible_roles(u3)) == set([inv_1.object_role])
+    assert set(UserAssignment.visible_assignments(u3)) == set([inv_1])
 
 
 @pytest.mark.django_db
