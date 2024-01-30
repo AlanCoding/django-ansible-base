@@ -37,11 +37,15 @@ class Migration(migrations.Migration):
             name='ResourceType',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('app_label', models.CharField(max_length=100)),
+                ('model', models.CharField(max_length=100, verbose_name='python model class name')),
+                ('content_type', models.OneToOneField(null=True, on_delete=django.db.models.deletion.CASCADE, related_name='resource_type', to='contenttypes.contenttype')),
                 ('externally_managed', models.BooleanField()),
                 ('migrated', models.BooleanField(default=False)),
                 ('name', models.CharField(db_index=True, editable=False, max_length=256, unique=True)),
-                ('content_type', models.OneToOneField(
-                    on_delete=django.db.models.deletion.CASCADE, related_name='resource_type', to='contenttypes.contenttype')),
+            ],
+            managers=[
+                ('objects', django.contrib.contenttypes.models.ContentTypeManager()),
             ],
         ),
         migrations.CreateModel(
@@ -58,5 +62,10 @@ class Migration(migrations.Migration):
                 'indexes': [models.Index(fields=['content_type', 'object_id'], name='dab_resourc_content_6d9d9c_idx')],
                 'unique_together': {('content_type', 'object_id')},
             },
+        ),
+        migrations.AlterModelManagers(
+            name='resourcetype',
+            managers=[
+            ],
         ),
     ]

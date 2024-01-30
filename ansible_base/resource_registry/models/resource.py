@@ -1,7 +1,7 @@
 import uuid
 
 from django.contrib.contenttypes.fields import GenericForeignKey
-from django.contrib.contenttypes.models import ContentType
+from django.contrib.contenttypes.models import ContentType, ContentTypeManager
 from django.db import models, transaction
 from django.utils.translation import gettext_lazy as _
 from rest_framework.serializers import ValidationError
@@ -13,6 +13,11 @@ def short_service_id():
     return service_id().split('-')[0]
 
 
+class ResourceTypeManager(ContentTypeManager):
+    use_in_migrations = False
+    # TODO: get_for_model should not create entry if it does not exist
+
+
 class ResourceType(models.Model):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -20,7 +25,18 @@ class ResourceType(models.Model):
 
         self.resource_registry = get_registry()
 
-    content_type = models.OneToOneField(ContentType, on_delete=models.CASCADE, related_name="resource_type", unique=True)
+    # fields to make this ContentType-like for GenericForeignKey usage
+    app_label = models.CharField(max_length=100)
+    model = models.CharField(_("python model class name"), max_length=100)
+    objects = ResourceTypeManager()
+
+    content_type = models.OneToOneField(
+        ContentType,
+        on_delete=models.CASCADE,
+        related_name="resource_type",
+        unique=True,
+        null=True
+    )
     externally_managed = models.BooleanField()
     migrated = models.BooleanField(null=False, default=False)
     name = models.CharField(max_length=256, unique=True, db_index=True, editable=False, blank=False, null=False)
