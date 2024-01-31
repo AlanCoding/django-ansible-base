@@ -3,7 +3,7 @@ from django.apps import apps
 from django.test.utils import override_settings
 
 from ansible_base.rbac.migrations._managed_definitions import setup_managed_role_definitions
-from ansible_base.rbac.models import RoleDefinition, UserAssignment, TeamAssignment, ObjectRole
+from ansible_base.rbac.models import RoleDefinition
 
 INVENTORY_OBJ_PERMISSIONS = ['view_inventory', 'change_inventory', 'delete_inventory', 'update_inventory']
 
