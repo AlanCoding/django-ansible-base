@@ -38,10 +38,10 @@ class BaseAssignmentViewSet(ModelViewSet):
     def perform_destroy(self, instance):
         if not self.request.user.has_obj_perm(instance, 'delete'):
             raise PermissionDenied
+
+        rd = instance.object_role.role_definition
+        obj = instance.object_role.content_object
         with transaction.atomic():
-            rd = instance.object_role.role_definition
-            model = rd.content_type.model_class()
-            obj = instance.object_role.content_object
             rd.remove_permission(self.request.user, obj)
 
 

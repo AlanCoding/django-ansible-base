@@ -61,6 +61,13 @@ class Migration(migrations.Migration):
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('created_on', models.DateTimeField(default=django.utils.timezone.now, editable=False, help_text='The date/time this resource was created')),
+                ('content_type', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='contenttypes.contenttype')),
+                ('object_id', models.PositiveIntegerField()),
+                ('role_definition', models.ForeignKey(
+                    help_text='The role definition which defines what permissions this object role grants',
+                    on_delete=django.db.models.deletion.CASCADE,
+                    to='dab_rbac.roledefinition'
+                )),
             ],
             options={
                 'abstract': False,
@@ -89,6 +96,13 @@ class Migration(migrations.Migration):
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('created_on', models.DateTimeField(default=django.utils.timezone.now, editable=False, help_text='The date/time this resource was created')),
+                ('content_type', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='contenttypes.contenttype')),
+                ('object_id', models.PositiveIntegerField()),
+                ('role_definition', models.ForeignKey(
+                    help_text='The role definition which defines what permissions this object role grants',
+                    on_delete=django.db.models.deletion.CASCADE,
+                    to='dab_rbac.roledefinition'
+                )),
             ],
             options={
                 'abstract': False,

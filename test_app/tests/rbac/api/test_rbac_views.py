@@ -6,7 +6,7 @@ from ansible_base.rbac.models import RoleDefinition
 
 @pytest.mark.django_db
 def test_get_role_definition(admin_api_client, inv_rd):
-    url = reverse('roledefinition-detail', kwargs={'pk': inv_rd.pk})
+    url = reverse('role_definition-detail', kwargs={'pk': inv_rd.pk})
     response = admin_api_client.get(url)
     assert response.status_code == 200
     assert set(response.data['permissions']) == set(['local.change_inventory', 'local.view_inventory'])
@@ -17,7 +17,7 @@ def test_create_role_definition(admin_api_client):
     """
     Test creation of a custom role definition.
     """
-    url = reverse("roledefinition-list")
+    url = reverse("role_definition-list")
     data = dict(name='foo-role-def', description='bar', permissions=['local.view_organization', 'local.change_organization'])
     response = admin_api_client.post(url, data=data, format="json")
     assert response.status_code == 201, response.data
@@ -26,7 +26,7 @@ def test_create_role_definition(admin_api_client):
 
 @pytest.mark.django_db
 def test_delete_role_definition(admin_api_client, inv_rd):
-    url = reverse('roledefinition-detail', kwargs={'pk': inv_rd.pk})
+    url = reverse('role_definition-detail', kwargs={'pk': inv_rd.pk})
     response = admin_api_client.delete(url)
     assert response.status_code == 204, response.data
     assert not RoleDefinition.objects.filter(pk=inv_rd.pk).exists()

@@ -93,12 +93,9 @@ assignments directly to that object.
 
 GET
 
-http://127.0.0.1:8000/api/v1/role_team_assignments/?object_role__object_id=3&object_role__content_type__model=inventory
+http://127.0.0.1:8000/api/v1/role_team_assignments/?object_id=3&content_type__model=inventory
 
-http://127.0.0.1:8000/api/v1/role_user_assignments/?object_role__object_id=3&object_role__content_type__model=inventory
-
-A future enhancement will be to eliminate the need to type "object_role__" in
-these URLs, but if or when that is done, the above URL construction should still work.
+http://127.0.0.1:8000/api/v1/role_user_assignments/?object_id=3&content_type__model=inventory
 
 ### Revoking an Assignment
 

@@ -194,7 +194,28 @@ class RoleDefinition(CommonModel):
         return {'name': self.name, 'description': self.description, 'managed': self.managed}
 
 
-class AssignmentBase(CommonModel):
+class ObjectRoleFields(models.Model):
+    "Fields for core functionality of object-roles"
+    class Meta:
+        abstract = True
+
+    role_definition = models.ForeignKey(
+        RoleDefinition,
+        on_delete=models.CASCADE,
+        help_text=_("The role definition which defines what permissions this object role grants"),
+    )
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    object_id = models.PositiveIntegerField()
+    content_object = GenericForeignKey('content_type', 'object_id')
+
+
+class AssignmentBase(CommonModel, ObjectRoleFields):
+    """
+    This uses some parts of CommonModel to save metadata like documenting
+    the user who assigned the permission and timestamp when it happened.
+    This caches ObjectRole fields for purposes of serializers,
+    both models are immutable, making caching easy.
+    """
     object_role = models.ForeignKey('dab_rbac.ObjectRole', on_delete=models.CASCADE)
     modified_on = None
     created_on = models.DateTimeField(
@@ -203,15 +224,6 @@ class AssignmentBase(CommonModel):
         help_text="The date/time this resource was created",
     )
     modified_by = None
-
-    # # Data cached from object_role, both models are immutable
-    # role_definition = models.ForeignKey(
-    #     RoleDefinition,
-    #     on_delete=models.CASCADE,
-    #     help_text=_("The role definition which defines what permissions this object role grants"),
-    # )
-    # content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
-    # object_id = models.PositiveIntegerField()
 
     class Meta:
         app_label = 'dab_rbac'
@@ -227,6 +239,11 @@ class AssignmentBase(CommonModel):
             user = get_current_user()
             if user:
                 self.created_by = user
+        # Cache fields from the associated object_role
+        if self.object_role_id and not self.object_id:
+            self.object_id = self.object_role.object_id
+            self.content_type_id = self.object_role.content_type_id
+            self.role_definition_id = self.object_role.role_definition_id
 
     def save(self, *args, **kwargs):
         if self.id:
@@ -236,12 +253,10 @@ class AssignmentBase(CommonModel):
 
     @classmethod
     def visible_assignments(cls, user):
-        # annote the GFK properties from the related object_role
-        qs = cls.objects.annotate(object_id=models.F('object_role__object_id'), content_type_id=models.F('object_role__content_type_id'))
         # get tuples of objects the user can view
         visible_objs = RoleEvaluation.objects.filter(role__in=user.has_roles.all()).values_list('object_id', 'content_type_id').query
         # return items where the GFK properties match the visible tuples
-        return qs.extra(where=[f'(object_id,content_type_id) in ({visible_objs})'])
+        return cls.objects.extra(where=[f'(object_id,content_type_id) in ({visible_objs})'])
 
 
 class UserAssignment(AssignmentBase):
@@ -258,7 +273,7 @@ class TeamAssignment(AssignmentBase):
         return f'TeamAssignment(pk={self.id})'
 
 
-class ObjectRole(models.Model):
+class ObjectRole(ObjectRoleFields):
     """
     This is the successor to the Role model in the old AWX RBAC system
     It is renamed to ObjectRole to distinguish from the abstract or generic
@@ -276,11 +291,6 @@ class ObjectRole(models.Model):
         ordering = ("content_type", "object_id")
         constraints = [models.UniqueConstraint(name='one_object_role_per_object_and_role', fields=['object_id', 'content_type', 'role_definition'])]
 
-    role_definition = models.ForeignKey(
-        RoleDefinition,
-        on_delete=models.CASCADE,
-        help_text=_("The role definition which defines what permissions this object role grants"),
-    )
     users = models.ManyToManyField(
         to=settings.AUTH_USER_MODEL,
         through='dab_rbac.UserAssignment',
@@ -303,11 +313,6 @@ class ObjectRole(models.Model):
         help_text=_("Users who have this role obtain member access to these teams, and inherit all their permissions"),
     )
 
-    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
-    object_id = models.PositiveIntegerField()
-    # help_text=_("Either the object this grants permissions to, or the parent object this will give permissions to sub-objects for")
-    content_object = GenericForeignKey('content_type', 'object_id')
-
     def __str__(self):
         return f'ObjectRole(pk={self.id}, {self.content_type.model}={self.object_id})'
 
@@ -321,7 +326,6 @@ class ObjectRole(models.Model):
         "Return a querset of object roles that this user should be allowed to view"
         visible_objs = RoleEvaluation.objects.filter(role__in=user.has_roles.all()).values_list('object_id', 'content_type_id').query
         return cls.objects.extra(where=[f'(object_id,content_type_id) in ({visible_objs})']).distinct()
-        # return cls.objects.filter(permission_partials__role__in=user.has_roles.all()).distinct()
 
     def descendent_roles(self):
         "Returns a set of roles that you implicitly have if you have this role"

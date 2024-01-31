@@ -89,7 +89,7 @@ class ManyRelatedListField(serializers.ListField):
 
 
 class RoleDefinitionSerializer(CommonModelSerializer):
-    reverse_url_name = 'roledefinition-detail'
+    reverse_url_name = 'role_definition-detail'
     # Relational versions - we may switch to these if custom permission and type models are exposed but out of scope here
     # permissions = serializers.SlugRelatedField(many=True, slug_field='codename', queryset=permission_registry.permission_model.objects.all())
     # content_type = ContentTypeField(slug_field='model', queryset=permission_registry.content_type_model.objects.all(), allow_null=True, default=None)
@@ -113,26 +113,9 @@ class ObjectRoleSerializer(serializers.ModelSerializer):
         fields = ('id', 'content_type', 'object_id', 'role_definition')
 
 
-class RoleDefinitionField(serializers.PrimaryKeyRelatedField):
-    def get_attribute(self, instance):
-        return super().get_attribute(instance.object_role)
-
-
-class ContentTypeViaObjectRole(ContentTypeField):
-    def get_attribute(self, instance):
-        return super().get_attribute(instance.object_role)
-
-
-class ObjectIdViaObjectRole(serializers.IntegerField):
-    def get_attribute(self, instance):
-        return super().get_attribute(instance.object_role)
-
-
 class BaseAssignmentSerializer(CommonModelSerializer):
     object_role = ObjectRoleSerializer(read_only=True)
-    role_definition = RoleDefinitionField(queryset=RoleDefinition.objects.all())
-    object_id = ObjectIdViaObjectRole()
-    content_type = ContentTypeViaObjectRole(read_only=True)
+    content_type = ContentTypeField()
 
     def create(self, validated_data):
         rd = validated_data['role_definition']
@@ -143,7 +126,6 @@ class BaseAssignmentSerializer(CommonModelSerializer):
         user = validated_data[self.actor_field]
         requesting_user = self.context['view'].request.user
         if not requesting_user.has_obj_perm(obj, 'change'):
-            # raise Exception((user, user.is_superuser, user.is_staff))
             raise PermissionDenied
 
         with transaction.atomic():
