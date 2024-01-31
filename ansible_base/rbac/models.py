@@ -196,6 +196,7 @@ class RoleDefinition(CommonModel):
 
 class ObjectRoleFields(models.Model):
     "Fields for core functionality of object-roles"
+
     class Meta:
         abstract = True
 
@@ -216,6 +217,7 @@ class AssignmentBase(CommonModel, ObjectRoleFields):
     This caches ObjectRole fields for purposes of serializers,
     both models are immutable, making caching easy.
     """
+
     object_role = models.ForeignKey('dab_rbac.ObjectRole', on_delete=models.CASCADE)
     modified_on = None
     created_on = models.DateTimeField(
