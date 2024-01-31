@@ -51,10 +51,10 @@ def test_related_of_model_with_no_related(ldap_authenticator):
 
 
 @pytest.mark.django_db
-def test_no_reverse_url_name():
+def test_encrypted_model_reverse_url_name():
     model = EncryptionModel.objects.create()
     serializer = EncryptionModelSerializer()
-    assert serializer.get_url(model) == ''
+    assert serializer.get_url(model) == '/api/v1/encryption_models/1/'
 
 
 def test_summary_of_none():

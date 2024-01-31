@@ -5,7 +5,7 @@ from test_app.models import EncryptionModel, Inventory, Organization, User
 
 
 class EncryptionModelSerializer(NamedCommonModelSerializer):
-    reverse_url_name = 'encryptiontest-detail'
+    reverse_url_name = 'encryptedmodel-detail'
 
     class Meta:
         model = EncryptionModel
