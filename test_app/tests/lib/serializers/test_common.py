@@ -5,13 +5,13 @@ from ansible_base.authentication.models import AuthenticatorMap
 from ansible_base.lib.serializers.common import CommonModelSerializer
 from ansible_base.lib.utils.encryption import ENCRYPTED_STRING
 from test_app.models import EncryptionModel
-from test_app.serializers import EncryptionTestSerializer
+from test_app.serializers import EncryptionModelSerializer
 
 
 @pytest.mark.django_db
 def test_representation_of_encrypted_fields():
     model = EncryptionModel.objects.create()
-    serializer = EncryptionTestSerializer()
+    serializer = EncryptionModelSerializer()
     response = serializer.to_representation(model)
     assert response['testing1'] == ENCRYPTED_STRING
     assert response['testing2'] == ENCRYPTED_STRING
@@ -21,7 +21,7 @@ def test_representation_of_encrypted_fields():
 def test_update_of_encrypted_fields():
     model = EncryptionModel.objects.create()
     updated_data = {'testing1': 'c', 'testing2': ENCRYPTED_STRING}
-    serializer = EncryptionTestSerializer()
+    serializer = EncryptionModelSerializer()
     serializer.update(model, updated_data)
     updated_model = EncryptionModel.objects.first()
     assert updated_model.testing1 == 'c'
@@ -53,7 +53,7 @@ def test_related_of_model_with_no_related(ldap_authenticator):
 @pytest.mark.django_db
 def test_no_reverse_url_name():
     model = EncryptionModel.objects.create()
-    serializer = EncryptionTestSerializer()
+    serializer = EncryptionModelSerializer()
     assert serializer.get_url(model) == ''
 
 

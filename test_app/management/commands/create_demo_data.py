@@ -49,7 +49,7 @@ class Command(BaseCommand):
             permissions=['change_instancegroup', 'delete_instancegroup', 'view_instancegroup'],
         )
         team_member = RoleDefinition.objects.create_from_permissions(
-            name='Special Team member role', content_type=ContentType.objects.get_for_model(Team), permissions=['view_inventory', 'member_inventory']
+            name='Special Team member role', content_type=ContentType.objects.get_for_model(Team), permissions=['view_team', 'member_team']
         )
 
         org_admin_user = User.objects.create(username='org_admin')

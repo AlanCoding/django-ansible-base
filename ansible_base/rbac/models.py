@@ -225,7 +225,6 @@ class AssignmentBase(CommonModel):
         super().__init__(*args, **kwargs)
         if not self.id:
             user = get_current_user()
-            print(self.__dict__)
             if user:
                 self.created_by = user
 
