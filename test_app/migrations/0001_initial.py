@@ -160,4 +160,21 @@ class Migration(migrations.Migration):
                 ('namespace', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='test_app.namespace')),
             ],
         ),
+        migrations.CreateModel(
+            name='UUIDModel',
+            fields=[
+                ('id', models.UUIDField(default=uuid.uuid4, primary_key=True, serialize=False)),
+                ('organization', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='test_app.organization')),
+            ],
+        ),
+        migrations.CreateModel(
+            name='Cow',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('organization', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='test_app.organization')),
+            ],
+            options={
+                'permissions': [('say_cow', 'Make cow say some advice')],
+            },
+        ),
     ]
