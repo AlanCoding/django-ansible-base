@@ -33,7 +33,7 @@ class BaseAssignmentViewSet(ModelViewSet):
         model = self.serializer_class.Meta.model
         if has_super_permission(self.request.user, 'view'):
             return model.objects.all()
-        return model.visible_assignments(self.request.user)
+        return model.visible_items(self.request.user)
 
     def perform_destroy(self, instance):
         if not self.request.user.has_obj_perm(instance, 'delete'):

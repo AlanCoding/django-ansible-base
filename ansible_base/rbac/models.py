@@ -10,6 +10,7 @@ from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models.functions import Concat
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
@@ -209,6 +210,14 @@ class ObjectRoleFields(models.Model):
     object_id = models.PositiveIntegerField()
     content_object = GenericForeignKey('content_type', 'object_id')
 
+    @classmethod
+    def visible_items(cls, user):
+        # TODO: when and if it is available on needed models, replace representer with ansible_id
+        representer = Concat(models.F('object_id'), models.Value(':'), models.F('content_type_id'), output_field=models.CharField())
+        return cls.objects.annotate(tmp_id=representer).filter(
+            tmp_id__in=RoleEvaluation.objects.filter(role__in=user.has_roles.all()).values_list(representer)
+        )
+
 
 class AssignmentBase(CommonModel, ObjectRoleFields):
     """
@@ -252,13 +261,6 @@ class AssignmentBase(CommonModel, ObjectRoleFields):
             raise RuntimeError(f'{self._meta.verbose_name.title()} model is immutable, use RoleDefinition.give_permission method')
         # skip over CommonModel save because it would error due to missing modified_by and created_on
         return super(CommonModel, self).save(*args, **kwargs)
-
-    @classmethod
-    def visible_assignments(cls, user):
-        # get tuples of objects the user can view
-        visible_objs = RoleEvaluation.objects.filter(role__in=user.has_roles.all()).values_list('object_id', 'content_type_id').query
-        # return items where the GFK properties match the visible tuples
-        return cls.objects.extra(where=[f'(object_id,content_type_id) in ({visible_objs})'])
 
 
 class UserAssignment(AssignmentBase):
@@ -322,12 +324,6 @@ class ObjectRole(ObjectRoleFields):
         if self.id:
             raise RuntimeError('ObjectRole model is immutable, use RoleDefinition.give_permission method')
         return super().save(*args, **kwargs)
-
-    @classmethod
-    def visible_roles(cls, user):
-        "Return a querset of object roles that this user should be allowed to view"
-        visible_objs = RoleEvaluation.objects.filter(role__in=user.has_roles.all()).values_list('object_id', 'content_type_id').query
-        return cls.objects.extra(where=[f'(object_id,content_type_id) in ({visible_objs})']).distinct()
 
     def descendent_roles(self):
         "Returns a set of roles that you implicitly have if you have this role"

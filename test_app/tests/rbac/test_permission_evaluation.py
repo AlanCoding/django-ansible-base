@@ -39,7 +39,7 @@ def test_resource_add_permission(rando, inventory):
 
 
 @pytest.mark.django_db
-def test_visible_roles():
+def test_visible_items():
     org1 = Organization.objects.create(name='org1')
     org2 = Organization.objects.create(name='org2')
     inv = Inventory.objects.create(name='foo', organization=org1)
@@ -60,16 +60,16 @@ def test_visible_roles():
     inv_1 = inv_view.give_permission(u3, inv)
 
     # u1 can see org1
-    assert set(ObjectRole.visible_roles(u1)) == set([change_1.object_role, view_1.object_role])
-    assert set(UserAssignment.visible_assignments(u1)) == set([change_1, view_1])
+    assert set(ObjectRole.visible_items(u1)) == set([change_1.object_role, view_1.object_role])
+    assert set(UserAssignment.visible_items(u1)) == set([change_1, view_1])
 
     # u2 can see org1, org2, and the inventory
-    assert set(ObjectRole.visible_roles(u2)) == set([change_1.object_role, change_2.object_role, view_1.object_role, inv_1.object_role])
-    assert set(UserAssignment.visible_assignments(u2)) == set([change_1, change_2, view_1, inv_1])
+    assert set(ObjectRole.visible_items(u2)) == set([change_1.object_role, change_2.object_role, view_1.object_role, inv_1.object_role])
+    assert set(UserAssignment.visible_items(u2)) == set([change_1, change_2, view_1, inv_1])
 
     # u3 can only see the inventory, no orgs
-    assert set(ObjectRole.visible_roles(u3)) == set([inv_1.object_role])
-    assert set(UserAssignment.visible_assignments(u3)) == set([inv_1])
+    assert set(ObjectRole.visible_items(u3)) == set([inv_1.object_role])
+    assert set(UserAssignment.visible_items(u3)) == set([inv_1])
 
 
 @pytest.mark.django_db
