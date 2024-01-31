@@ -3,7 +3,7 @@ from django.test.utils import override_settings
 
 from ansible_base.rbac.models import ObjectRole, RoleDefinition, RoleEvaluation, UserAssignment
 from ansible_base.rbac.permission_registry import permission_registry
-from test_app.models import Inventory, Organization
+from test_app.models import Inventory, Organization, UUIDModel
 
 
 @pytest.mark.django_db
@@ -25,6 +25,22 @@ def test_org_inv_permissions(rando, inventory, org_inv_rd):
 
     assert set(RoleEvaluation.get_permissions(rando, inventory)) == set(['change_inventory', 'view_inventory'])
     assert list(Inventory.access_qs(rando)) == [inventory]
+
+
+@pytest.mark.django_db
+@pytest.mark.xfail
+def test_filter_uuid_model(rando, organization):
+    rd, _ = RoleDefinition.objects.get_or_create(
+        permissions=['view_uuidmodel'],
+        name='see UUID model',
+        content_type=permission_registry.content_type_model.objects.get_for_model(UUIDModel)
+    )
+    uuid_objs = [UUIDModel.objects.create(organization=organization) for i in range(5)]
+    rd.give_permission(rando, uuid_objs[1])
+    rd.give_permission(rando, uuid_objs[3])
+
+    assert rando.has_obj_perm(uuid_objs[1], 'view')
+    assert set(UUIDModel.access_qs(rando)) == {uuid_objs[1], uuid_objs[3]}
 
 
 @pytest.mark.django_db

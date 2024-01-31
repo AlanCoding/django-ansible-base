@@ -62,7 +62,7 @@ class Migration(migrations.Migration):
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('created_on', models.DateTimeField(default=django.utils.timezone.now, editable=False, help_text='The date/time this resource was created')),
                 ('content_type', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='contenttypes.contenttype')),
-                ('object_id', models.PositiveIntegerField()),
+                ('object_id', models.TextField(null=False)),
                 ('role_definition', models.ForeignKey(
                     help_text='The role definition which defines what permissions this object role grants',
                     on_delete=django.db.models.deletion.CASCADE,
@@ -97,7 +97,7 @@ class Migration(migrations.Migration):
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('created_on', models.DateTimeField(default=django.utils.timezone.now, editable=False, help_text='The date/time this resource was created')),
                 ('content_type', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='contenttypes.contenttype')),
-                ('object_id', models.PositiveIntegerField()),
+                ('object_id', models.TextField(null=False)),
                 ('role_definition', models.ForeignKey(
                     help_text='The role definition which defines what permissions this object role grants',
                     on_delete=django.db.models.deletion.CASCADE,
@@ -130,7 +130,7 @@ class Migration(migrations.Migration):
             name='ObjectRole',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('object_id', models.PositiveIntegerField()),
+                ('object_id', models.TextField(null=False)),
                 ('content_type', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='contenttypes.contenttype')),
                 ('provides_teams', models.ManyToManyField(
                     help_text='Users who have this role obtain member access to these teams, and inherit all their permissions',
@@ -182,7 +182,7 @@ class Migration(migrations.Migration):
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('codename', models.TextField(help_text='The name of the permission, giving the action and the model, from the Django Permission model')),
                 ('content_type_id', models.PositiveIntegerField()),
-                ('object_id', models.PositiveIntegerField()),
+                ('object_id', models.PositiveIntegerField(null=False)),
             ],
             options={
                 'verbose_name_plural': 'role_object_permissions',

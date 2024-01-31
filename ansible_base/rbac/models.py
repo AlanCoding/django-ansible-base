@@ -207,7 +207,7 @@ class ObjectRoleFields(models.Model):
         help_text=_("The role definition which defines what permissions this object role grants"),
     )
     content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
-    object_id = models.PositiveIntegerField()
+    object_id = models.TextField(null=False)
     content_object = GenericForeignKey('content_type', 'object_id')
 
     @classmethod
@@ -217,6 +217,11 @@ class ObjectRoleFields(models.Model):
         return cls.objects.annotate(tmp_id=representer).filter(
             tmp_id__in=RoleEvaluation.objects.filter(role__in=user.has_roles.all()).values_list(representer)
         )
+
+    @property
+    def cache_id(self):
+        "The ObjectRole GenericForeignKey is text, but cache needs to match models"
+        return int(self.object_id)
 
 
 class AssignmentBase(CommonModel, ObjectRoleFields):
@@ -343,14 +348,14 @@ class ObjectRole(ObjectRoleFields):
             permission_content_type = types_prefetch.get_content_type(permission.content_type_id)
 
             if permission.content_type_id == self.content_type_id:
-                expected_evaluations.add((permission.codename, self.content_type_id, self.object_id))
+                expected_evaluations.add((permission.codename, self.content_type_id, self.cache_id))
             elif permission.codename.startswith('add'):
                 role_child_models = set(cls for filter_path, cls in permission_registry.get_child_models(role_content_type.model))
                 if permission_content_type.model_class() not in role_child_models:
                     # NOTE: this should also be validated when creating a role definition
                     logger.warning(f'{self} lists {permission.codename} for an object that is not a child object')
                     continue
-                expected_evaluations.add((permission.codename, self.content_type_id, self.object_id))
+                expected_evaluations.add((permission.codename, self.content_type_id, self.cache_id))
             else:
                 id_list = []
                 # fetching child objects of an organization is very performance sensitive
@@ -361,7 +366,7 @@ class ObjectRole(ObjectRoleFields):
                     # model must be in same app as organization
                     for filter_path, model in permission_registry.get_child_models(role_content_type.model):
                         if model._meta.model_name == permission_content_type.model:
-                            id_list = model.objects.filter(**{filter_path: self.object_id}).values_list('id', flat=True)
+                            id_list = model.objects.filter(**{filter_path: self.cache_id}).values_list('id', flat=True)
                             cached_id_lists[permission.content_type_id] = list(id_list)
                             break
                     else:
@@ -439,7 +444,7 @@ class RoleEvaluation(models.Model):
         ObjectRole, null=False, on_delete=models.CASCADE, related_name='permission_partials', help_text=_("The object role that grants this form of permission")
     )
     codename = models.TextField(null=False, help_text=_("The name of the permission, giving the action and the model, from the Django Permission model"))
-    # NOTE: we awkwardly do not form these into a content_object, following from AWX practice
+    # NOTE: we do not form object_id and content_type into a content_object, following from AWX practice
     # this can be relaxed as we have comparative performance testing to confirm doing so does not affect permissions
     content_type_id = models.PositiveIntegerField(null=False)
     object_id = models.PositiveIntegerField(null=False)

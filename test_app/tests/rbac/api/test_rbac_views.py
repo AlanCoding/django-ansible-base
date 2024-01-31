@@ -38,7 +38,7 @@ def test_get_user_assignment(admin_api_client, inv_rd, rando, inventory):
     url = reverse('userassignment-detail', kwargs={'pk': assignment.pk})
     response = admin_api_client.get(url)
     assert response.data['content_type'] == 'local.inventory'
-    assert response.data['object_id'] == inventory.id
+    assert int(response.data['object_id']) == inventory.id
     assert response.data['role_definition'] == inv_rd.id
     assert not response.data['created_by']  # created by code, not by view
 

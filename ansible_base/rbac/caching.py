@@ -79,11 +79,11 @@ def get_direct_team_member_roles(org_team_mapping: dict) -> dict[int, list[int]]
     direct_member_roles = defaultdict(list)
     for object_role in ObjectRole.objects.filter(role_definition__permissions__codename=permission_registry.team_permission).iterator():
         if object_role.content_type_id == permission_registry.team_ct_id:
-            direct_member_roles[object_role.object_id].append(object_role.id)
+            direct_member_roles[object_role.cache_id].append(object_role.id)
         elif object_role.content_type_id == permission_registry.org_ct_id:
-            if object_role.object_id not in org_team_mapping:
+            if object_role.cache_id not in org_team_mapping:
                 continue  # this means the organization has no team but has member_team as a listed permission
-            for team_id in org_team_mapping[object_role.object_id]:
+            for team_id in org_team_mapping[object_role.cache_id]:
                 direct_member_roles[team_id].append(object_role.id)
         else:
             logger.warning(f'{object_role} gives {permission_registry.team_permission} to an invalid type')
@@ -107,11 +107,11 @@ def get_parent_teams_of_teams(org_team_mapping: dict) -> dict[int, list[int]]:
     ).prefetch_related('teams'):
         for actor_team in object_role.teams.all():
             if object_role.content_type_id == permission_registry.team_ct_id:
-                team_team_parents[object_role.object_id].append(actor_team.id)
+                team_team_parents[object_role.cache_id].append(actor_team.id)
             elif object_role.content_type_id == permission_registry.org_ct_id:
-                if object_role.object_id not in org_team_mapping:
+                if object_role.cache_id not in org_team_mapping:
                     continue  # again, means the organization has no team but has member_team as a listed permission
-                for team_id in org_team_mapping[object_role.object_id]:
+                for team_id in org_team_mapping[object_role.cache_id]:
                     team_team_parents[team_id].append(actor_team.id)
     return team_team_parents
 

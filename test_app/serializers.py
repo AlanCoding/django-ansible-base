@@ -1,7 +1,7 @@
 from rest_framework.serializers import ModelSerializer
 
 from ansible_base.lib.serializers.common import NamedCommonModelSerializer
-from test_app.models import EncryptionModel, Inventory, Organization, User
+from test_app.models import EncryptionModel, Inventory, Organization, User, Cow, UUIDModel
 
 
 class EncryptionModelSerializer(NamedCommonModelSerializer):
@@ -29,4 +29,16 @@ class UserSerializer(ModelSerializer):
 class InventorySerializer(ModelSerializer):
     class Meta:
         model = Inventory
+        fields = '__all__'
+
+
+class CowSerializer(ModelSerializer):
+    class Meta:
+        model = Cow
+        fields = '__all__'
+
+
+class UUIDModelSerializer(ModelSerializer):
+    class Meta:
+        model = UUIDModel
         fields = '__all__'
