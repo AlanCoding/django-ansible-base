@@ -233,4 +233,31 @@ class Migration(migrations.Migration):
             name='description',
             field=models.TextField(blank=True, null=True),
         ),
+        migrations.CreateModel(
+            name='RoleEvaluationUUID',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('codename', models.TextField(help_text='The name of the permission, giving the action and the model, from the Django Permission model')),
+                ('content_type_id', models.PositiveIntegerField()),
+                ('object_id', models.UUIDField()),
+                ('role', models.ForeignKey(
+                    help_text='The object role that grants this form of permission',
+                    on_delete=django.db.models.deletion.CASCADE,
+                    related_name='permission_partials_uuid',
+                    to='dab_rbac.objectrole'
+                )),
+            ],
+            options={
+                'verbose_name_plural': 'role_object_permissions',
+                'indexes': [
+                    models.Index(fields=['role', 'content_type_id', 'object_id'], name='dab_rbac_ro_role_id_237936_idx'),
+                    models.Index(fields=['role', 'content_type_id', 'codename'], name='dab_rbac_ro_role_id_4fe905_idx')
+                ],
+            },
+        ),
+        migrations.AddConstraint(
+            model_name='roleevaluationuuid',
+            constraint=models.UniqueConstraint(
+                fields=('object_id', 'content_type_id', 'codename', 'role'), name='one_entry_per_object_permission_and_role_uuid'),
+        ),
     ]

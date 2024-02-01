@@ -1,8 +1,9 @@
 import logging
 from collections import defaultdict
 from typing import Optional
+from uuid import UUID
 
-from ansible_base.rbac.models import ObjectRole, RoleDefinition, RoleEvaluation
+from ansible_base.rbac.models import ObjectRole, RoleDefinition, RoleEvaluation, RoleEvaluationUUID
 from ansible_base.rbac.permission_registry import permission_registry
 from ansible_base.rbac.prefetch import TypesPrefetch
 
@@ -79,11 +80,12 @@ def get_direct_team_member_roles(org_team_mapping: dict) -> dict[int, list[int]]
     direct_member_roles = defaultdict(list)
     for object_role in ObjectRole.objects.filter(role_definition__permissions__codename=permission_registry.team_permission).iterator():
         if object_role.content_type_id == permission_registry.team_ct_id:
-            direct_member_roles[object_role.cache_id].append(object_role.id)
+            direct_member_roles[int(object_role.object_id)].append(object_role.id)
         elif object_role.content_type_id == permission_registry.org_ct_id:
-            if object_role.cache_id not in org_team_mapping:
+            object_id = int(object_role.object_id)
+            if object_id not in org_team_mapping:
                 continue  # this means the organization has no team but has member_team as a listed permission
-            for team_id in org_team_mapping[object_role.cache_id]:
+            for team_id in org_team_mapping[object_id]:
                 direct_member_roles[team_id].append(object_role.id)
         else:
             logger.warning(f'{object_role} gives {permission_registry.team_permission} to an invalid type')
@@ -107,11 +109,12 @@ def get_parent_teams_of_teams(org_team_mapping: dict) -> dict[int, list[int]]:
     ).prefetch_related('teams'):
         for actor_team in object_role.teams.all():
             if object_role.content_type_id == permission_registry.team_ct_id:
-                team_team_parents[object_role.cache_id].append(actor_team.id)
+                team_team_parents[int(object_role.object_id)].append(actor_team.id)
             elif object_role.content_type_id == permission_registry.org_ct_id:
-                if object_role.cache_id not in org_team_mapping:
+                object_id = int(object_role.object_id)
+                if object_id not in org_team_mapping:
                     continue  # again, means the organization has no team but has member_team as a listed permission
-                for team_id in org_team_mapping[object_role.cache_id]:
+                for team_id in org_team_mapping[object_id]:
                     team_team_parents[team_id].append(actor_team.id)
     return team_team_parents
 
@@ -180,8 +183,32 @@ def compute_object_role_permissions(object_roles=None, types_prefetch=None):
 
     if to_add:
         logger.info(f'Adding {len(to_add)} object-permission records')
-        RoleEvaluation.objects.bulk_create(to_add)
+        to_add_int = []
+        to_add_uuid = []
+        for evaluation in to_add:
+            if isinstance(evaluation.object_id, int):
+                to_add_int.append(evaluation)
+            elif isinstance(evaluation.object_id, UUID):
+                to_add_uuid.append(evaluation)
+            else:
+                raise RuntimeError(f'Could not find a place in cache for {evaluation}')
+        if to_add_int:
+            RoleEvaluation.objects.bulk_create(to_add_int)
+        if to_add_uuid:
+            RoleEvaluationUUID.objects.bulk_create(to_add_uuid)
 
     if to_delete:
         logger.info(f'Deleting {len(to_delete)} object-permission records')
-        RoleEvaluation.objects.filter(id__in=to_delete).delete()
+        to_delete_int = []
+        to_delete_uuid = []
+        for evaluation_id, evaluation_type in to_delete:
+            if evaluation_type is int:
+                to_delete_int.append(evaluation_id)
+            elif evaluation_type is UUID:
+                to_delete_uuid.append(evaluation_id)
+            else:
+                raise RuntimeError(f'Unexpected type to delete {evaluation_id}-{evaluation_type}')
+        if to_delete_int:
+            RoleEvaluation.objects.filter(id__in=to_delete_int).delete()
+        if to_delete_uuid:
+            RoleEvaluationUUID.objects.filter(id__in=to_delete_uuid).delete()

@@ -1,7 +1,7 @@
 from rest_framework.serializers import ModelSerializer
 
 from ansible_base.lib.serializers.common import NamedCommonModelSerializer
-from test_app.models import EncryptionModel, Inventory, Organization, User, Cow, UUIDModel
+from test_app.models import Cow, EncryptionModel, Inventory, Organization, User, UUIDModel
 
 
 class EncryptionModelSerializer(NamedCommonModelSerializer):

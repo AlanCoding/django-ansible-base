@@ -1,11 +1,12 @@
 from rest_framework import permissions
+from rest_framework.decorators import action
 from rest_framework.routers import SimpleRouter
 from rest_framework.viewsets import ModelViewSet
-from rest_framework.decorators import action
+from rest_framework.response import Response
 
 from ansible_base.rbac.api.permissions import AnsibleBaseObjectPermissions
-from test_app.models import EncryptionModel, Inventory, Organization, User, Cow, UUIDModel
-from test_app.serializers import EncryptionModelSerializer, InventorySerializer, OrganizationSerializer, UserSerializer, CowSerializer, UUIDModelSerializer
+from test_app.models import User
+from test_app.serializers import CowSerializer, EncryptionModelSerializer, InventorySerializer, OrganizationSerializer, UserSerializer, UUIDModelSerializer
 
 
 class UserViewSet(ModelViewSet):
@@ -52,4 +53,4 @@ router.register(r'organizations', OrganizationViewSet, basename='organization')
 router.register(r'encryption_models', EncryptedModelViewSet, basename='encryptedmodel')
 router.register(r'inventories', InventoryViewSet, basename='inventory')
 router.register(r'cows', CowViewSet, basename='cow')
-router.register(f'uuidmodels', UUIDModelViewSet, basename='uuidmodel')
+router.register(r'uuidmodels', UUIDModelViewSet, basename='uuidmodel')

@@ -1,10 +1,10 @@
 from django.conf import settings
 
 from ansible_base.rbac import permission_registry
-from ansible_base.rbac.models import ObjectRole, RoleEvaluation
+from ansible_base.rbac.models import ObjectRole, get_evaluation_model
 
 '''
-The model RoleEvaluation is the authority for making any permission evaluations,
+RoleEvaluation or RoleEvaluationUUID models are the authority for permission evaluations,
 meaning, determining whether a user has a permission to an object.
 
 Methods needed for producing querysets (of objects a user has a permission to
@@ -62,7 +62,7 @@ class AccessibleObjectsDescriptor(BaseEvaluationDescriptor):
         full_codename = validate_codename_for_model(codename, self.cls)
         if has_super_permission(user, codename):
             return self.cls.objects.all()
-        return RoleEvaluation.accessible_objects(self.cls, user, full_codename, **kwargs)
+        return get_evaluation_model(self.cls).accessible_objects(self.cls, user, full_codename, **kwargs)
 
 
 class AccessibleIdsDescriptor(BaseEvaluationDescriptor):
@@ -70,7 +70,7 @@ class AccessibleIdsDescriptor(BaseEvaluationDescriptor):
         full_codename = validate_codename_for_model(codename, self.cls)
         if has_super_permission(user, codename):
             return self.cls.objects.values_list('id', flat=True)  # hopefully we never need this...
-        return RoleEvaluation.accessible_ids(self.cls, user, full_codename, **kwargs)
+        return get_evaluation_model(self.cls).accessible_ids(self.cls, user, full_codename, **kwargs)
 
 
 def bound_has_obj_perm(self, obj, codename):
@@ -79,7 +79,7 @@ def bound_has_obj_perm(self, obj, codename):
         return True
     if full_codename in self.singleton_permissions():
         return True
-    return RoleEvaluation.has_obj_perm(self, obj, full_codename)
+    return get_evaluation_model(obj).has_obj_perm(self, obj, full_codename)
 
 
 def bound_singleton_permissions(self):

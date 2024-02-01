@@ -9,7 +9,7 @@ from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import connection, models
 from django.db.models.functions import Concat
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
@@ -214,14 +214,12 @@ class ObjectRoleFields(models.Model):
     def visible_items(cls, user):
         # TODO: when and if it is available on needed models, replace representer with ansible_id
         representer = Concat(models.F('object_id'), models.Value(':'), models.F('content_type_id'), output_field=models.CharField())
-        return cls.objects.annotate(tmp_id=representer).filter(
-            tmp_id__in=RoleEvaluation.objects.filter(role__in=user.has_roles.all()).values_list(representer)
-        )
+        return cls.objects.annotate(tmp_id=representer).filter(tmp_id__in=RoleEvaluation.objects.filter(role__in=user.has_roles.all()).values_list(representer))
 
     @property
     def cache_id(self):
         "The ObjectRole GenericForeignKey is text, but cache needs to match models"
-        return int(self.object_id)
+        return RoleEvaluation._meta.get_field('object_id').to_python(self.object_id)
 
 
 class AssignmentBase(CommonModel, ObjectRoleFields):
@@ -348,14 +346,19 @@ class ObjectRole(ObjectRoleFields):
             permission_content_type = types_prefetch.get_content_type(permission.content_type_id)
 
             if permission.content_type_id == self.content_type_id:
-                expected_evaluations.add((permission.codename, self.content_type_id, self.cache_id))
+                model = permission_content_type.model_class()
+                # ObjectRole.object_id is stored as text, we convert it to the model pk native type
+                object_id = model._meta.pk.to_python(self.object_id)
+                expected_evaluations.add((permission.codename, self.content_type_id, object_id))
             elif permission.codename.startswith('add'):
+                model = permission_content_type.model_class()
                 role_child_models = set(cls for filter_path, cls in permission_registry.get_child_models(role_content_type.model))
-                if permission_content_type.model_class() not in role_child_models:
+                if model not in role_child_models:
                     # NOTE: this should also be validated when creating a role definition
                     logger.warning(f'{self} lists {permission.codename} for an object that is not a child object')
                     continue
-                expected_evaluations.add((permission.codename, self.content_type_id, self.cache_id))
+                object_id = model._meta.pk.to_python(self.object_id)
+                expected_evaluations.add((permission.codename, self.content_type_id, object_id))
             else:
                 id_list = []
                 # fetching child objects of an organization is very performance sensitive
@@ -366,7 +369,8 @@ class ObjectRole(ObjectRoleFields):
                     # model must be in same app as organization
                     for filter_path, model in permission_registry.get_child_models(role_content_type.model):
                         if model._meta.model_name == permission_content_type.model:
-                            id_list = model.objects.filter(**{filter_path: self.cache_id}).values_list('id', flat=True)
+                            object_id = model._meta.pk.get_db_prep_value(self.object_id, connection)
+                            id_list = model.objects.filter(**{filter_path: object_id}).values_list('id', flat=True)
                             cached_id_lists[permission.content_type_id] = list(id_list)
                             break
                     else:
@@ -381,6 +385,8 @@ class ObjectRole(ObjectRoleFields):
         existing_partials = dict()
         for permission_partial in self.permission_partials.all():
             existing_partials[permission_partial.obj_perm_id()] = permission_partial
+        for permission_partial in self.permission_partials_uuid.all():
+            existing_partials[permission_partial.obj_perm_id()] = permission_partial
 
         expected_evaluations = self.expected_direct_permissions(types_prefetch)
 
@@ -392,17 +398,27 @@ class ObjectRole(ObjectRoleFields):
 
         to_delete = set()
         for identifier in existing_set - expected_evaluations:
-            to_delete.add(existing_partials[identifier].id)
+            to_delete.add((existing_partials[identifier].id, type(identifier[-1])))
 
         to_add = []
-        for codename, ct_id, obj_id in expected_evaluations - existing_set:
-            to_add.append(RoleEvaluation(codename=codename, content_type_id=ct_id, object_id=obj_id, role=self))
+        for codename, ct_id, obj_pk in expected_evaluations - existing_set:
+            to_add.append(RoleEvaluation(codename=codename, content_type_id=ct_id, object_id=obj_pk, role=self))
 
         return (to_delete, to_add)
 
 
+class RoleEvaluationMeta:
+    app_label = 'dab_rbac'
+    verbose_name_plural = _('role_object_permissions')
+    indexes = [
+        models.Index(fields=["role", "content_type_id", "object_id"]),  # used by get_roles_on_resource
+        models.Index(fields=["role", "content_type_id", "codename"]),  # used by accessible_objects
+    ]
+    constraints = [models.UniqueConstraint(name='one_entry_per_object_permission_and_role', fields=['object_id', 'content_type_id', 'codename', 'role'])]
+
+
 # COMPUTED DATA
-class RoleEvaluation(models.Model):
+class RoleEvaluationFields(models.Model):
     """
     Cached data that shows what permissions an ObjectRole gives its owners
     example:
@@ -421,40 +437,30 @@ class RoleEvaluation(models.Model):
     """
 
     class Meta:
-        app_label = 'dab_rbac'
-        verbose_name_plural = _('role_object_permissions')
-        indexes = [
-            models.Index(fields=["role", "content_type_id", "object_id"]),  # used by get_roles_on_resource
-            models.Index(fields=["role", "content_type_id", "codename"]),  # used by accessible_objects
-        ]
-        constraints = [models.UniqueConstraint(name='one_entry_per_object_permission_and_role', fields=['object_id', 'content_type_id', 'codename', 'role'])]
+        abstract = True
 
     def __str__(self):
         return (
-            f'RoleEvaluation(pk={self.id}, codename={self.codename}, object_id={self.object_id}, '
+            f'{self._meta.verbose_name.title()}(pk={self.id}, codename={self.codename}, object_id={self.object_id}, '
             f'content_type_id={self.content_type_id}, role_id={self.role_id})'
         )
 
     def save(self, *args, **kwargs):
         if self.id:
-            raise RuntimeError('RoleEvaluation model is immutable and only used internally')
+            raise RuntimeError(f'{self._meta.model_name} model is immutable and only used internally')
         return super().save(*args, **kwargs)
 
-    role = models.ForeignKey(
-        ObjectRole, null=False, on_delete=models.CASCADE, related_name='permission_partials', help_text=_("The object role that grants this form of permission")
-    )
     codename = models.TextField(null=False, help_text=_("The name of the permission, giving the action and the model, from the Django Permission model"))
     # NOTE: we do not form object_id and content_type into a content_object, following from AWX practice
     # this can be relaxed as we have comparative performance testing to confirm doing so does not affect permissions
     content_type_id = models.PositiveIntegerField(null=False)
-    object_id = models.PositiveIntegerField(null=False)
 
     def obj_perm_id(self):
         "Used for in-memory hashing of the type of object permission this represents"
         return (self.codename, self.content_type_id, self.object_id)
 
-    @staticmethod
-    def accessible_ids(cls, actor, codename, content_types=None):
+    @classmethod
+    def accessible_ids(eval_cls, cls, actor, codename, content_types=None):
         """
         Corresponds to AWX accessible_pk_qs
 
@@ -471,24 +477,62 @@ class RoleEvaluation(models.Model):
             filter_kwargs['content_type_id__in'] = content_types
         else:
             filter_kwargs['content_type_id'] = ContentType.objects.get_for_model(cls).id
-        return RoleEvaluation.objects.filter(**filter_kwargs).values_list('object_id').distinct()
+        return eval_cls.objects.filter(**filter_kwargs).values_list('object_id').distinct()
 
-    @staticmethod
-    def accessible_objects(cls, user, codename):
-        return cls.objects.filter(pk__in=RoleEvaluation.accessible_ids(cls, user, codename))
+    @classmethod
+    def accessible_objects(eval_cls, cls, user, codename):
+        return cls.objects.filter(pk__in=eval_cls.accessible_ids(cls, user, codename))
 
-    @staticmethod
-    def get_permissions(user, obj):
-        return RoleEvaluation.objects.filter(
-            role__in=user.has_roles.all(), content_type_id=ContentType.objects.get_for_model(obj).id, object_id=obj.id
-        ).values_list('codename', flat=True)
+    @classmethod
+    def get_permissions(cls, user, obj):
+        return cls.objects.filter(role__in=user.has_roles.all(), content_type_id=ContentType.objects.get_for_model(obj).id, object_id=obj.id).values_list(
+            'codename', flat=True
+        )
 
-    @staticmethod
-    def has_obj_perm(user, obj, codename):
+    @classmethod
+    def has_obj_perm(cls, user, obj, codename):
         """
         Note this behaves similar in function to the REST Framework has_object_permission
         method on permission classes, but it is named differently to avoid unintentionally conflicting
         """
-        return RoleEvaluation.objects.filter(
+        return cls.objects.filter(
             role__in=user.has_roles.all(), content_type_id=ContentType.objects.get_for_model(obj).id, object_id=obj.id, codename=codename
         ).exists()
+
+
+class RoleEvaluation(RoleEvaluationFields):
+    class Meta(RoleEvaluationMeta):
+        pass
+
+    role = models.ForeignKey(
+        ObjectRole, null=False, on_delete=models.CASCADE, related_name='permission_partials', help_text=_("The object role that grants this form of permission")
+    )
+    object_id = models.PositiveIntegerField(null=False)
+
+
+class RoleEvaluationUUID(RoleEvaluationFields):
+    "Cache for UUID type models"
+
+    class Meta(RoleEvaluationMeta):
+        constraints = [
+            models.UniqueConstraint(name='one_entry_per_object_permission_and_role_uuid', fields=['object_id', 'content_type_id', 'codename', 'role'])
+        ]
+
+    role = models.ForeignKey(
+        ObjectRole,
+        null=False,
+        on_delete=models.CASCADE,
+        related_name='permission_partials_uuid',
+        help_text=_("The object role that grants this form of permission"),
+    )
+    object_id = models.UUIDField(null=False)
+
+
+def get_evaluation_model(cls):
+    pk_field = cls._meta.pk
+    if isinstance(pk_field, models.IntegerField):
+        return RoleEvaluation
+    elif isinstance(pk_field, models.UUIDField):
+        return RoleEvaluationUUID
+    else:
+        raise RuntimeError(f'Model {cls._meta.model_name} primary key type of {pk_field} is not supported')

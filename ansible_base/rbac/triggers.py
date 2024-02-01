@@ -27,14 +27,10 @@ def team_ancestor_roles(team):
     """
     Return a queryset of all roles that directly or indirectly grant any form of permission to a team.
     This is generally used when invalidating a team membership for one reason or another.
+    This assumes that teams and all team parent models have integer primary keys.
     """
-    return set(
-        ObjectRole.objects.filter(
-            permission_partials__in=RoleEvaluation.objects.filter(
-                codename=permission_registry.team_permission, object_id=team.id, content_type_id=permission_registry.team_ct_id
-            )
-        )
-    )
+    permission_kwargs = dict(codename=permission_registry.team_permission, object_id=team.id, content_type_id=permission_registry.team_ct_id)
+    return set(ObjectRole.objects.filter(permission_partials__in=RoleEvaluation.objects.filter(**permission_kwargs)))
 
 
 def validate_assignment_enabled(actor, content_type, has_team_perm=False):
