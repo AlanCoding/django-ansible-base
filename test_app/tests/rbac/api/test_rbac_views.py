@@ -42,6 +42,10 @@ def test_get_user_assignment(admin_api_client, inv_rd, rando, inventory):
     assert response.data['role_definition'] == inv_rd.id
     assert not response.data['created_by']  # created by code, not by view
 
+    summary_fields = response.data['summary_fields']
+    assert 'content_object' in summary_fields
+    assert summary_fields['content_object'] == {'id': inventory.id, 'name': inventory.name}
+
 
 @pytest.mark.django_db
 def test_make_user_assignment(admin_api_client, inv_rd, rando, inventory):

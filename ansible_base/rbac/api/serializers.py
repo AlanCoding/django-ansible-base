@@ -133,6 +133,13 @@ class BaseAssignmentSerializer(CommonModelSerializer):
 
         return assignment
 
+    def _get_summary_fields(self, obj):
+        summary_fields = super()._get_summary_fields(obj)
+        content_obj = obj.content_object
+        if content_obj and hasattr(content_obj, 'summary_fields'):
+            summary_fields['content_object'] = content_obj.summary_fields()
+        return summary_fields
+
 
 class UserAssignmentSerializer(BaseAssignmentSerializer):
     reverse_url_name = 'userassignment-detail'

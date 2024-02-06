@@ -61,6 +61,9 @@ class Inventory(models.Model):
         app_label = 'test_app'
         permissions = [('update_inventory', 'Do inventory updates')]
 
+    def summary_fields(self):
+        return {"id": self.id, "name": self.name}
+
 
 class InstanceGroup(models.Model):
     "Example of an object with no parent object, a root resource, a lone wolf"
