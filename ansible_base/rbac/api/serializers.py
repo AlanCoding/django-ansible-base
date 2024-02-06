@@ -7,6 +7,7 @@ from rest_framework.exceptions import PermissionDenied
 from ansible_base.lib.serializers.common import CommonModelSerializer
 from ansible_base.rbac.models import ObjectRole, RoleDefinition, TeamAssignment, UserAssignment
 from ansible_base.rbac.permission_registry import permission_registry  # careful for circular imports
+from ansible_base.resource_registry.registry import get_registry
 
 
 class ChoiceLikeMixin(serializers.ChoiceField):
@@ -42,13 +43,23 @@ class ChoiceLikeMixin(serializers.ChoiceField):
             self.fail('incorrect_type', data_type=type(data).__name__)
 
 
+def get_service_name():
+    if 'ansible_base.resource_registry' in settings.INSTALLED_APPS:
+        registry = get_registry()
+        return registry.api_config.service_type
+    else:
+        # NOTE: this is a stopgap measure until resource registry integrations are complete
+        # later on, this will probably hardcode "local" here
+        return settings.ANSIBLE_BASE_SERVICE_PREFIX
+
+
 class ContentTypeField(ChoiceLikeMixin):
     psuedo_model = permission_registry.content_type_model
     psuedo_field = 'model'
 
     def get_dynamic_choices(self):
         return [
-            (f'{settings.ANSIBLE_BASE_SERVICE_PREFIX}.{cls._meta.model_name}', cls._meta.verbose_name.title())
+            (f'{get_service_name()}.{cls._meta.model_name}', cls._meta.verbose_name.title())
             for cls in permission_registry.all_registered_models
         ]
 
@@ -57,7 +68,7 @@ class ContentTypeField(ChoiceLikeMixin):
         return permission_registry.content_type_model.objects.get(model=model)
 
     def to_representation(self, value):
-        return f'{settings.ANSIBLE_BASE_SERVICE_PREFIX}.{value.model}'
+        return f'{get_service_name()}.{value.model}'
 
 
 class PermissionField(ChoiceLikeMixin):
@@ -69,9 +80,9 @@ class PermissionField(ChoiceLikeMixin):
         for cls in permission_registry.all_registered_models:
             cls_name = cls._meta.model_name
             for action in cls._meta.default_permissions:
-                perms.append(f'{settings.ANSIBLE_BASE_SERVICE_PREFIX}.{action}_{cls_name}')
+                perms.append(f'{get_service_name()}.{action}_{cls_name}')
             for perm_name, description in cls._meta.permissions:
-                perms.append(f'{settings.ANSIBLE_BASE_SERVICE_PREFIX}.{perm_name}')
+                perms.append(f'{get_service_name()}.{perm_name}')
         return perms
 
     def get_dynamic_object(self, data):
@@ -79,7 +90,7 @@ class PermissionField(ChoiceLikeMixin):
         return permission_registry.permission_model.objects.get(codename=codename)
 
     def to_representation(self, value):
-        return f'{settings.ANSIBLE_BASE_SERVICE_PREFIX}.{value.codename}'
+        return f'{get_service_name()}.{value.codename}'
 
 
 class ManyRelatedListField(serializers.ListField):
