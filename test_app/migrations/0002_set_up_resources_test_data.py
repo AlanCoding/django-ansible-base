@@ -26,6 +26,7 @@ def create_test_data(apps, schema_editor):
 class Migration(migrations.Migration):
     dependencies = [
         ('test_app', '0001_initial'),
+        ('dab_rbac', '__first__'),  # needs to be a separate migration because of this dependency
     ]
 
     operations = [
@@ -39,5 +40,15 @@ class Migration(migrations.Migration):
         migrations.RunPython(
             code=create_test_data,
             reverse_code=migrations.RunPython.noop
+        ),
+        migrations.AddField(
+            model_name='team',
+            name='singleton_roles',
+            field=models.ManyToManyField(blank=True, to='dab_rbac.roledefinition'),
+        ),
+        migrations.AddField(
+            model_name='user',
+            name='singleton_roles',
+            field=models.ManyToManyField(blank=True, related_name='singleton_users', to='dab_rbac.roledefinition'),
         ),
     ]
