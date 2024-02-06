@@ -40,7 +40,7 @@ class RoleDefinitionManager(models.Manager):
 
             rd.give_permission(user, obj)
 
-    def get_or_create(self, permissions=(), **kwargs):
+    def get_or_create(self, permissions=(), defaults=None, **kwargs):
         "Add extra feature on top of existing get_or_create to use permissions list"
         if permissions:
             permissions = set(permissions)
@@ -48,8 +48,11 @@ class RoleDefinitionManager(models.Manager):
                 existing_set = set(perm.codename for perm in existing_rd.permissions.all())
                 if existing_set == permissions:
                     return (existing_rd, False)
-            return (self.create_from_permissions(permissions=permissions, **kwargs), True)
-        return super().get_or_create(**kwargs)
+            create_kwargs = kwargs.copy()
+            if defaults:
+                create_kwargs.update(defaults)
+            return (self.create_from_permissions(permissions=permissions, **create_kwargs), True)
+        return super().get_or_create(defaults=defaults, **kwargs)
 
     def create_from_permissions(self, permissions=(), **kwargs):
         "Create from a list of text-type permissions and do validation"
@@ -530,6 +533,10 @@ class RoleEvaluationUUID(RoleEvaluationFields):
 
 def get_evaluation_model(cls):
     pk_field = cls._meta.pk
+    # For proxy models, including django-polymorphic, use the id field from parent table
+    if isinstance(pk_field, models.OneToOneField):
+        pk_field = pk_field.remote_field.model._meta.pk
+
     if isinstance(pk_field, models.IntegerField):
         return RoleEvaluation
     elif isinstance(pk_field, models.UUIDField):
