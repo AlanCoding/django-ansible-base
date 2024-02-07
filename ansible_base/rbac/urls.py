@@ -8,3 +8,7 @@ app_name = AnsibleRBACConfig.label
 api_version_urls = [
     path('', include(router.urls)),
 ]
+
+root_urls = []
+
+api_urls = []

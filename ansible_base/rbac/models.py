@@ -169,12 +169,12 @@ class RoleDefinition(CommonModel):
         assignment = None
         if actor._meta.model_name == 'user':
             if giving:
-                assignment = UserAssignment.objects.create(user=actor, object_role=object_role)
+                assignment = RoleUserAssignment.objects.create(user=actor, object_role=object_role)
             else:
                 object_role.users.remove(actor)
         elif isinstance(actor, permission_registry.team_model):
             if giving:
-                assignment = TeamAssignment.objects.create(team=actor, object_role=object_role)
+                assignment = RoleTeamAssignment.objects.create(team=actor, object_role=object_role)
             else:
                 object_role.teams.remove(actor)
         else:
@@ -269,18 +269,18 @@ class AssignmentBase(CommonModel, ObjectRoleFields):
         return super(CommonModel, self).save(*args, **kwargs)
 
 
-class UserAssignment(AssignmentBase):
+class RoleUserAssignment(AssignmentBase):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
 
     def __repr__(self):
-        return f'UserAssignment(pk={self.id})'
+        return f'RoleUserAssignment(pk={self.id})'
 
 
-class TeamAssignment(AssignmentBase):
+class RoleTeamAssignment(AssignmentBase):
     team = models.ForeignKey(settings.ANSIBLE_BASE_TEAM_MODEL, on_delete=models.CASCADE)
 
     def __repr__(self):
-        return f'TeamAssignment(pk={self.id})'
+        return f'RoleTeamAssignment(pk={self.id})'
 
 
 class ObjectRole(ObjectRoleFields):
@@ -303,14 +303,14 @@ class ObjectRole(ObjectRoleFields):
 
     users = models.ManyToManyField(
         to=settings.AUTH_USER_MODEL,
-        through='dab_rbac.UserAssignment',
+        through='dab_rbac.RoleUserAssignment',
         through_fields=("object_role", "user"),
         related_name='has_roles',
         help_text=_("Users who have access to the permissions defined by this object role"),
     )
     teams = models.ManyToManyField(
         to=settings.ANSIBLE_BASE_TEAM_MODEL,
-        through='dab_rbac.TeamAssignment',
+        through='dab_rbac.RoleTeamAssignment',
         through_fields=("object_role", "team"),
         related_name='has_roles',
         help_text=_("Teams or groups who have access to the permissions defined by this object role"),

@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from ansible_base.rbac.models import ObjectRole, RoleDefinition, RoleEvaluation, TeamAssignment, UserAssignment
+from ansible_base.rbac.models import ObjectRole, RoleDefinition, RoleEvaluation, RoleTeamAssignment, RoleUserAssignment
 
 
 class ReadOnlyAdmin(admin.ModelAdmin):
@@ -15,7 +15,7 @@ class ReadOnlyAdmin(admin.ModelAdmin):
 
 admin.site.register(RoleDefinition)
 # TODO: assignments will still not be functional in the admin pages without custom logic
-admin.site.register(UserAssignment)
-admin.site.register(TeamAssignment)
+admin.site.register(RoleUserAssignment)
+admin.site.register(RoleTeamAssignment)
 admin.site.register(ObjectRole, ReadOnlyAdmin)
 admin.site.register(RoleEvaluation, ReadOnlyAdmin)

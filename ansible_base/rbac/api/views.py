@@ -4,7 +4,12 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.viewsets import ModelViewSet
 
 from ansible_base.rbac.api.permissions import AuthenticatedReadAdminChange
-from ansible_base.rbac.api.serializers import RoleDefinitionDetailSeraizler, RoleDefinitionSerializer, TeamAssignmentSerializer, UserAssignmentSerializer
+from ansible_base.rbac.api.serializers import (
+    RoleDefinitionDetailSeraizler,
+    RoleDefinitionSerializer,
+    RoleTeamAssignmentSerializer,
+    RoleUserAssignmentSerializer,
+)
 from ansible_base.rbac.evaluations import has_super_permission
 from ansible_base.rbac.models import RoleDefinition
 
@@ -45,9 +50,9 @@ class BaseAssignmentViewSet(ModelViewSet):
             rd.remove_permission(self.request.user, obj)
 
 
-class TeamAssignmentViewSet(BaseAssignmentViewSet):
-    serializer_class = TeamAssignmentSerializer
+class RoleTeamAssignmentViewSet(BaseAssignmentViewSet):
+    serializer_class = RoleTeamAssignmentSerializer
 
 
-class UserAssignmentViewSet(BaseAssignmentViewSet):
-    serializer_class = UserAssignmentSerializer
+class RoleUserAssignmentViewSet(BaseAssignmentViewSet):
+    serializer_class = RoleUserAssignmentSerializer

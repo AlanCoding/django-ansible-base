@@ -57,7 +57,7 @@ class Migration(migrations.Migration):
             },
         ),
         migrations.CreateModel(
-            name='TeamAssignment',
+            name='RoleTeamAssignment',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('created_on', models.DateTimeField(default=django.utils.timezone.now, editable=False, help_text='The date/time this resource was created')),
@@ -74,7 +74,7 @@ class Migration(migrations.Migration):
             },
         ),
         migrations.AddField(
-            model_name='teamassignment',
+            model_name='roleteamassignment',
             name='created_by',
             field=models.ForeignKey(
                 default=None,
@@ -87,12 +87,12 @@ class Migration(migrations.Migration):
             ),
         ),
         migrations.AddField(
-            model_name='teamassignment',
+            model_name='roleteamassignment',
             name='team',
             field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to=settings.ANSIBLE_BASE_TEAM_MODEL),
         ),
         migrations.CreateModel(
-            name='UserAssignment',
+            name='RoleUserAssignment',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('created_on', models.DateTimeField(default=django.utils.timezone.now, editable=False, help_text='The date/time this resource was created')),
@@ -109,7 +109,7 @@ class Migration(migrations.Migration):
             },
         ),
         migrations.AddField(
-            model_name='userassignment',
+            model_name='roleuserassignment',
             name='created_by',
             field=models.ForeignKey(
                 default=None,
@@ -122,7 +122,7 @@ class Migration(migrations.Migration):
             ),
         ),
         migrations.AddField(
-            model_name='userassignment',
+            model_name='roleuserassignment',
             name='user',
             field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL),
         ),
@@ -145,12 +145,12 @@ class Migration(migrations.Migration):
             },
         ),
         migrations.AddField(
-            model_name='userassignment',
+            model_name='roleuserassignment',
             name='object_role',
             field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='dab_rbac.objectrole'),
         ),
         migrations.AddField(
-            model_name='teamassignment',
+            model_name='roleteamassignment',
             name='object_role',
             field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='dab_rbac.objectrole'),
         ),
@@ -160,7 +160,7 @@ class Migration(migrations.Migration):
             field=models.ManyToManyField(
                 help_text='Teams or groups who have access to the permissions defined by this object role',
                 related_name='has_roles',
-                through='dab_rbac.TeamAssignment',
+                through='dab_rbac.RoleTeamAssignment',
                 through_fields=("object_role", "team"),
                 to=settings.ANSIBLE_BASE_TEAM_MODEL
             ),
@@ -171,7 +171,7 @@ class Migration(migrations.Migration):
             field=models.ManyToManyField(
                 help_text='Users who have access to the permissions defined by this object role',
                 related_name='has_roles',
-                through='dab_rbac.UserAssignment',
+                through='dab_rbac.RoleUserAssignment',
                 through_fields=("object_role", "user"),
                 to=settings.AUTH_USER_MODEL
             ),

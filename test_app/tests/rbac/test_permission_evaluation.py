@@ -1,7 +1,7 @@
 import pytest
 from django.test.utils import override_settings
 
-from ansible_base.rbac.models import ObjectRole, RoleDefinition, RoleEvaluation, UserAssignment
+from ansible_base.rbac.models import ObjectRole, RoleDefinition, RoleEvaluation, RoleUserAssignment
 from ansible_base.rbac.permission_registry import permission_registry
 from test_app.models import Inventory, Organization
 
@@ -61,15 +61,15 @@ def test_visible_items():
 
     # u1 can see org1
     assert set(ObjectRole.visible_items(u1)) == set([change_1.object_role, view_1.object_role])
-    assert set(UserAssignment.visible_items(u1)) == set([change_1, view_1])
+    assert set(RoleUserAssignment.visible_items(u1)) == set([change_1, view_1])
 
     # u2 can see org1, org2, and the inventory
     assert set(ObjectRole.visible_items(u2)) == set([change_1.object_role, change_2.object_role, view_1.object_role, inv_1.object_role])
-    assert set(UserAssignment.visible_items(u2)) == set([change_1, change_2, view_1, inv_1])
+    assert set(RoleUserAssignment.visible_items(u2)) == set([change_1, change_2, view_1, inv_1])
 
     # u3 can only see the inventory, no orgs
     assert set(ObjectRole.visible_items(u3)) == set([inv_1.object_role])
-    assert set(UserAssignment.visible_items(u3)) == set([inv_1])
+    assert set(RoleUserAssignment.visible_items(u3)) == set([inv_1])
 
 
 @pytest.mark.django_db

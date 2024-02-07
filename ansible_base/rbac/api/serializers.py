@@ -5,9 +5,8 @@ from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 
 from ansible_base.lib.serializers.common import CommonModelSerializer
-from ansible_base.rbac.models import ObjectRole, RoleDefinition, TeamAssignment, UserAssignment
+from ansible_base.rbac.models import ObjectRole, RoleDefinition, RoleTeamAssignment, RoleUserAssignment
 from ansible_base.rbac.permission_registry import permission_registry  # careful for circular imports
-from ansible_base.resource_registry.registry import get_registry
 
 
 class ChoiceLikeMixin(serializers.ChoiceField):
@@ -43,23 +42,13 @@ class ChoiceLikeMixin(serializers.ChoiceField):
             self.fail('incorrect_type', data_type=type(data).__name__)
 
 
-def get_service_name():
-    if 'ansible_base.resource_registry' in settings.INSTALLED_APPS:
-        registry = get_registry()
-        return registry.api_config.service_type
-    else:
-        # NOTE: this is a stopgap measure until resource registry integrations are complete
-        # later on, this will probably hardcode "local" here
-        return settings.ANSIBLE_BASE_SERVICE_PREFIX
-
-
 class ContentTypeField(ChoiceLikeMixin):
     psuedo_model = permission_registry.content_type_model
     psuedo_field = 'model'
 
     def get_dynamic_choices(self):
         return [
-            (f'{get_service_name()}.{cls._meta.model_name}', cls._meta.verbose_name.title())
+            (f'{settings.ANSIBLE_BASE_SERVICE_PREFIX}.{cls._meta.model_name}', cls._meta.verbose_name.title())
             for cls in permission_registry.all_registered_models
         ]
 
@@ -68,7 +57,7 @@ class ContentTypeField(ChoiceLikeMixin):
         return permission_registry.content_type_model.objects.get(model=model)
 
     def to_representation(self, value):
-        return f'{get_service_name()}.{value.model}'
+        return f'{settings.ANSIBLE_BASE_SERVICE_PREFIX}.{value.model}'
 
 
 class PermissionField(ChoiceLikeMixin):
@@ -80,9 +69,9 @@ class PermissionField(ChoiceLikeMixin):
         for cls in permission_registry.all_registered_models:
             cls_name = cls._meta.model_name
             for action in cls._meta.default_permissions:
-                perms.append(f'{get_service_name()}.{action}_{cls_name}')
+                perms.append(f'{settings.ANSIBLE_BASE_SERVICE_PREFIX}.{action}_{cls_name}')
             for perm_name, description in cls._meta.permissions:
-                perms.append(f'{get_service_name()}.{perm_name}')
+                perms.append(f'{settings.ANSIBLE_BASE_SERVICE_PREFIX}.{perm_name}')
         return perms
 
     def get_dynamic_object(self, data):
@@ -90,7 +79,7 @@ class PermissionField(ChoiceLikeMixin):
         return permission_registry.permission_model.objects.get(codename=codename)
 
     def to_representation(self, value):
-        return f'{get_service_name()}.{value.codename}'
+        return f'{settings.ANSIBLE_BASE_SERVICE_PREFIX}.{value.codename}'
 
 
 class ManyRelatedListField(serializers.ListField):
@@ -100,7 +89,7 @@ class ManyRelatedListField(serializers.ListField):
 
 
 class RoleDefinitionSerializer(CommonModelSerializer):
-    reverse_url_name = 'role_definition-detail'
+    reverse_url_name = 'roledefinition-detail'
     # Relational versions - we may switch to these if custom permission and type models are exposed but out of scope here
     # permissions = serializers.SlugRelatedField(many=True, slug_field='codename', queryset=permission_registry.permission_model.objects.all())
     # content_type = ContentTypeField(slug_field='model', queryset=permission_registry.content_type_model.objects.all(), allow_null=True, default=None)
@@ -152,19 +141,19 @@ class BaseAssignmentSerializer(CommonModelSerializer):
         return summary_fields
 
 
-class UserAssignmentSerializer(BaseAssignmentSerializer):
-    reverse_url_name = 'userassignment-detail'
+class RoleUserAssignmentSerializer(BaseAssignmentSerializer):
+    reverse_url_name = 'roleuserassignment-detail'
     actor_field = 'user'
 
     class Meta:
-        model = UserAssignment
+        model = RoleUserAssignment
         fields = '__all__'
 
 
-class TeamAssignmentSerializer(BaseAssignmentSerializer):
-    reverse_url_name = 'teamassignment-detail'
+class RoleTeamAssignmentSerializer(BaseAssignmentSerializer):
+    reverse_url_name = 'roleteamassignment-detail'
     actor_field = 'team'
 
     class Meta:
-        model = TeamAssignment
+        model = RoleTeamAssignment
         fields = '__all__'

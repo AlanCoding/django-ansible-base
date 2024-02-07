@@ -3,7 +3,7 @@ from crum import impersonate
 from django.core.exceptions import ValidationError
 from django.test.utils import override_settings
 
-from ansible_base.rbac.models import RoleDefinition, RoleEvaluation, UserAssignment
+from ansible_base.rbac.models import RoleDefinition, RoleEvaluation, RoleUserAssignment
 from ansible_base.rbac.permission_registry import permission_registry
 from test_app.models import Inventory, Organization
 
@@ -29,7 +29,7 @@ def test_child_object_permission(rando, organization, inventory, org_inv_rd, adm
     assert set(RoleEvaluation.accessible_objects(Inventory, rando, 'change_inventory')) == set([inventory])
 
     # Test that user assignment records the date of the assignment
-    assignment = UserAssignment.objects.get(object_role=assignment.object_role, user=rando)
+    assignment = RoleUserAssignment.objects.get(object_role=assignment.object_role, user=rando)
     assert assignment.created_on
     assert assignment.created_by == admin_user
 
@@ -77,7 +77,7 @@ def test_later_created_child_object_permission(rando, organization, order, org_i
 
 
 @pytest.mark.django_db
-class TestTeamAssignment:
+class TestRoleTeamAssignment:
     def test_object_team_assignment(self, rando, inventory, team, member_rd, inv_rd):
         member_assignment = member_rd.give_permission(rando, team)
         assert set(member_assignment.object_role.provides_teams.all()) == set([team])
