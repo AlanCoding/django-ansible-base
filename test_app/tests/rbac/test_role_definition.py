@@ -1,8 +1,10 @@
 import pytest
-from django.core.exceptions import ValidationError
+from django.contrib.contenttypes.models import ContentType
+from rest_framework.exceptions import ValidationError
 
 from ansible_base.rbac import permission_registry
 from ansible_base.rbac.models import ObjectRole, RoleDefinition, RoleEvaluation
+from test_app.models import ExampleEvent, Organization
 
 
 @pytest.mark.django_db
@@ -19,14 +21,18 @@ def test_reuse_by_permission_list():
 @pytest.mark.django_db
 def test_missing_use_permission():
     with pytest.raises(ValidationError) as exc:
-        RoleDefinition.objects.create_from_permissions(permissions=['change_organization'], name='only-change-org')
+        RoleDefinition.objects.create_from_permissions(
+            permissions=['change_organization'], name='only-change-org', content_type=ContentType.objects.get_for_model(Organization)
+        )
     assert 'needs to include view' in str(exc)
 
 
 @pytest.mark.django_db
 def test_permission_for_unregistered_model():
     with pytest.raises(ValidationError):
-        RoleDefinition.objects.create_from_permissions(permissions=['view_exampleevent'], name='not-cool')
+        RoleDefinition.objects.create_from_permissions(
+            permissions=['view_exampleevent'], name='not-cool', content_type=ContentType.objects.get_for_model(ExampleEvent)
+        )
 
 
 @pytest.mark.django_db

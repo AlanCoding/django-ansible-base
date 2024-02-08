@@ -1,6 +1,6 @@
 from django.db import transaction
 from rest_framework import permissions
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.viewsets import ModelViewSet
 
 from ansible_base.rbac.api.permissions import AuthenticatedReadAdminChange
@@ -27,6 +27,18 @@ class RoleDefinitionViewSet(ModelViewSet):
         if self.action == 'update':
             return RoleDefinitionDetailSeraizler
         return super().get_serializer_class()
+
+    def _error_if_managed(self, instance):
+        if instance.managed is True:
+            raise ValidationError('Role is managed by the system')
+
+    def perform_update(self, serializer):
+        self._error_if_managed(serializer.instance)
+        return super().perform_update(serializer)
+
+    def perform_destroy(self, instance):
+        self._error_if_managed(instance)
+        return super().perform_destroy(instance)
 
 
 class BaseAssignmentViewSet(ModelViewSet):

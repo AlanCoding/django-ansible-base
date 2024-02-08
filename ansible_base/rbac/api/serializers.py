@@ -7,6 +7,7 @@ from rest_framework.exceptions import PermissionDenied
 from ansible_base.lib.serializers.common import CommonModelSerializer
 from ansible_base.rbac.models import ObjectRole, RoleDefinition, RoleTeamAssignment, RoleUserAssignment
 from ansible_base.rbac.permission_registry import permission_registry  # careful for circular imports
+from ansible_base.rbac.validators import validate_permissions_for_model
 
 
 class ChoiceLikeMixin(serializers.ChoiceField):
@@ -99,6 +100,10 @@ class RoleDefinitionSerializer(CommonModelSerializer):
     class Meta:
         model = RoleDefinition
         fields = '__all__'
+
+    def validate(self, validated_data):
+        validate_permissions_for_model(validated_data.get('permissions', []), validated_data.get('content_type'))
+        return super().validate(validated_data)
 
 
 class RoleDefinitionDetailSeraizler(RoleDefinitionSerializer):

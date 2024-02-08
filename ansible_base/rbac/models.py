@@ -1,5 +1,4 @@
 import logging
-from collections import defaultdict
 
 # CRUM for getting the requesting user
 from crum import get_current_user
@@ -8,7 +7,6 @@ from crum import get_current_user
 from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
-from django.core.exceptions import ValidationError
 from django.db import connection, models
 from django.db.models.functions import Concat
 from django.utils import timezone
@@ -20,6 +18,7 @@ from ansible_base.lib.abstract_models.common import CommonModel
 # ansible_base RBAC logic imports
 from ansible_base.rbac.permission_registry import permission_registry
 from ansible_base.rbac.prefetch import TypesPrefetch
+from ansible_base.rbac.validators import validate_permissions_for_model
 
 logger = logging.getLogger('ansible_base.rbac.models')
 
@@ -57,31 +56,12 @@ class RoleDefinitionManager(models.Manager):
     def create_from_permissions(self, permissions=(), **kwargs):
         "Create from a list of text-type permissions and do validation"
         perm_list = [permission_registry.permission_model.objects.get(codename=str_perm) for str_perm in permissions]
-        permissions_by_model = defaultdict(list)
-        for perm in perm_list:
-            cls = perm.content_type.model_class()
-            if perm.codename.startswith('add_'):
-                to_model = permission_registry.get_parent_model(cls)
-                if to_model is None:
-                    raise ValidationError(f'{perm.codename} permission is for root model, which requires global roles.')
-            else:
-                to_model = cls
-            permissions_by_model[to_model].append(perm)
 
-        # check that all provided permissions are for registered models
-        unregistered_models = set(permissions_by_model.keys()) - set(permission_registry.all_registered_models)
-        if unregistered_models:
-            display_models = ', '.join(str(cls._meta.verbose_name) for cls in unregistered_models)
-            raise ValidationError(f'Permissions for unregistered models were given: {display_models}')
+        ct = kwargs.get('content_type', None)
+        if kwargs.get('content_type_id', None):
+            ct = ContentType.objects.get(id=kwargs['content_type_id'])
 
-        # check that view permission is given for every model that has any permission listed
-        for cls, model_perm_list in permissions_by_model.items():
-            for perm in model_perm_list:
-                if 'view' in perm.codename:
-                    break
-            else:
-                display_perms = ', '.join([perm.codename for perm in model_perm_list])
-                raise ValidationError(f'Permissions for model {cls._meta.verbose_name} needs to include view, got: {display_perms}')
+        validate_permissions_for_model(perm_list, ct)
 
         rd = self.create(**kwargs)
         rd.permissions.add(*perm_list)
