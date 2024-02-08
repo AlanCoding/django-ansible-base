@@ -4,7 +4,6 @@ from crum import impersonate
 from ansible_base.authentication.models import AuthenticatorMap
 from ansible_base.lib.serializers.common import CommonModelSerializer
 from ansible_base.lib.utils.encryption import ENCRYPTED_STRING
-
 from test_app.models import EncryptionModel, ResourceMigrationTestModel, Team
 from test_app.serializers import EncryptionModelSerializer, ResourceMigrationTestModelSerializer, TeamSerializer
 

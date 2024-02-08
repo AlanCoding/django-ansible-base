@@ -16,7 +16,7 @@ class Organization(AbstractOrganization):
         # For root resources (no parent) we exclude the add permission which is a global permission
         default_permissions = ('change', 'delete', 'view')
 
-    reverse_foreign_key_fields = ['teams']
+    # reverse_foreign_key_fields = ['teams']
 
 
 class User(AbstractUser, CommonModel):

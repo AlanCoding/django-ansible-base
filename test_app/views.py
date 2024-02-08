@@ -1,14 +1,11 @@
 from rest_framework import permissions
-from rest_framework.viewsets import ModelViewSet
-
-from test_app import serializers
-from test_app.models import RelatedFieldsTestModel, User
-
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 
 from ansible_base.rbac.api.permissions import AnsibleBaseObjectPermissions
+from test_app import serializers
+from test_app.models import RelatedFieldsTestModel, User
 
 
 class TestAppViewSet(ModelViewSet):
@@ -31,7 +28,7 @@ class UserViewSet(ModelViewSet):
     serializer_class = serializers.UserSerializer
 
     def get_queryset(self):
-        return self.serializer_class.Meta.model.objects.all()
+        return User.objects.all()
 
 
 class EncryptionModelViewSet(TestAppViewSet):

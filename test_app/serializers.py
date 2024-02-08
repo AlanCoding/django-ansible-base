@@ -3,8 +3,6 @@ from rest_framework.serializers import ModelSerializer
 from ansible_base.lib.serializers.common import CommonModelSerializer, NamedCommonModelSerializer
 from test_app import models
 
-from ansible_base.lib.serializers.common import NamedCommonModelSerializer
-
 
 class OrganizationSerializer(NamedCommonModelSerializer):
     class Meta:
