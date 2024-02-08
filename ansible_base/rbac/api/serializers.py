@@ -5,6 +5,7 @@ from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 
 from ansible_base.lib.serializers.common import CommonModelSerializer
+from ansible_base.lib.abstract_models.common import get_url_for_object
 from ansible_base.rbac.models import ObjectRole, RoleDefinition, RoleTeamAssignment, RoleUserAssignment
 from ansible_base.rbac.permission_registry import permission_registry  # careful for circular imports
 from ansible_base.rbac.validators import validate_permissions_for_model
@@ -137,6 +138,13 @@ class BaseAssignmentSerializer(CommonModelSerializer):
             assignment = rd.give_permission(user, obj)
 
         return assignment
+
+    def _get_related(self, obj):
+        related = super()._get_related(obj)
+        content_obj = obj.content_object
+        if related_url := get_url_for_object(content_obj):
+            related['content_object'] = related_url
+        return related
 
     def _get_summary_fields(self, obj):
         summary_fields = super()._get_summary_fields(obj)
