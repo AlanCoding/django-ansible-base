@@ -1,4 +1,5 @@
 import pytest
+from django.db.utils import IntegrityError
 from django.urls import reverse
 
 from ansible_base.rbac.models import RoleDefinition
@@ -42,3 +43,13 @@ def test_using_permission_for_wrong_model(admin_api_client):
 
 # NOTE: testing a null content_type seems to have a problem with render of admin_api_client
 # this does not seem to be a problem when testing with a live server
+
+
+@pytest.mark.django_db
+def test_no_double_assignment(admin_api_client, rando, inventory, inv_rd):
+    url = reverse('roleuserassignment-list')
+    response = admin_api_client.post(url, data={'object_id': inventory.id, 'user': rando.id, 'role_definition': inv_rd.id})
+    assert response.status_code == 201
+    with pytest.raises(IntegrityError):
+        # processing is assumed to be done on the app side, at least it is for AWX
+        response = admin_api_client.post(url, data={'object_id': inventory.id, 'user': rando.id, 'role_definition': inv_rd.id})

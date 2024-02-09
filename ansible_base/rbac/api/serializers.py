@@ -119,13 +119,13 @@ class BaseAssignmentSerializer(CommonModelSerializer):
         obj = model.objects.get(id=validated_data['object_id'])
 
         # validate user has permission
-        user = validated_data[self.actor_field]
+        actor = validated_data[self.actor_field]
         requesting_user = self.context['view'].request.user
         if not requesting_user.has_obj_perm(obj, 'change'):
             raise PermissionDenied
 
         with transaction.atomic():
-            assignment = rd.give_permission(user, obj)
+            assignment = rd.give_permission(actor, obj)
 
         return assignment
 

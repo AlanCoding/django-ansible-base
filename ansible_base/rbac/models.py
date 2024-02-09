@@ -254,6 +254,10 @@ class RoleUserAssignment(AssignmentBase):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     router_basename = 'roleuserassignment'
 
+    class Meta:
+        app_label = 'dab_rbac'
+        unique_together = ('user', 'object_role')
+
     def __repr__(self):
         return f'RoleUserAssignment(pk={self.id})'
 
@@ -261,6 +265,10 @@ class RoleUserAssignment(AssignmentBase):
 class RoleTeamAssignment(AssignmentBase):
     team = models.ForeignKey(settings.ANSIBLE_BASE_TEAM_MODEL, on_delete=models.CASCADE)
     router_basename = 'roleteamassignment'
+
+    class Meta:
+        app_label = 'dab_rbac'
+        unique_together = ('team', 'object_role')
 
     def __repr__(self):
         return f'RoleTeamAssignment(pk={self.id})'

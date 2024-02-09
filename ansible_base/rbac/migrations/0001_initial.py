@@ -260,4 +260,12 @@ class Migration(migrations.Migration):
             constraint=models.UniqueConstraint(
                 fields=('object_id', 'content_type_id', 'codename', 'role'), name='one_entry_per_object_permission_and_role_uuid'),
         ),
+        migrations.AlterUniqueTogether(
+            name='roleteamassignment',
+            unique_together={('team', 'object_role')},
+        ),
+        migrations.AlterUniqueTogether(
+            name='roleuserassignment',
+            unique_together={('user', 'object_role')},
+        ),
     ]
