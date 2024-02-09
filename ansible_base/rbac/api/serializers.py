@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
+from django.db.utils import IntegrityError
 from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 
@@ -124,8 +125,11 @@ class BaseAssignmentSerializer(CommonModelSerializer):
         if not requesting_user.has_obj_perm(obj, 'change'):
             raise PermissionDenied
 
-        with transaction.atomic():
-            assignment = rd.give_permission(actor, obj)
+        try:
+            with transaction.atomic():
+                assignment = rd.give_permission(actor, obj)
+        except IntegrityError:
+            assignment = self.Meta.model.objects.get(role_definition=rd, object_id=obj.pk, **{self.actor_field: actor})
 
         return assignment
 

@@ -25,6 +25,11 @@ logger = logging.getLogger('ansible_base.rbac.models')
 
 class RoleDefinitionManager(models.Manager):
     def give_creator_permissions(self, user, obj):
+        # If the user is a superuser, no need to bother giving the creator permissions
+        for super_flag in settings.ANSIBLE_BASE_BYPASS_SUPERUSER_FLAGS:
+            if getattr(user, super_flag):
+                return True
+
         needed_actions = settings.ANSIBLE_BASE_CREATOR_DEFAULTS
 
         needed_perms = set()
@@ -33,9 +38,12 @@ class RoleDefinitionManager(models.Manager):
             if action in needed_actions:
                 needed_perms.add(perm.codename)
 
-        has_permissions = RoleEvaluation.get_permissions(user, obj)
+        has_permissions = set(RoleEvaluation.get_permissions(user, obj))
+        has_permissions.update(user.singleton_permissions())
         if set(needed_perms) - set(has_permissions):
-            rd, _ = self.get_or_create(permissions=needed_perms, name=f'{obj._meta.model_name}-creator-permission')
+            rd, _ = self.get_or_create(
+                permissions=needed_perms, name=f'{obj._meta.model_name}-creator-permission', defaults={'content_type': ContentType.objects.get_for_model(obj)}
+            )
 
             rd.give_permission(user, obj)
 
@@ -482,6 +490,10 @@ class RoleEvaluationFields(models.Model):
 
     @classmethod
     def get_permissions(cls, user, obj):
+        """
+        Returns permissions that a user has to obj from object-roles,
+        does not consider permissions from user flags or system-wide roles
+        """
         return cls.objects.filter(role__in=user.has_roles.all(), content_type_id=ContentType.objects.get_for_model(obj).id, object_id=obj.id).values_list(
             'codename', flat=True
         )

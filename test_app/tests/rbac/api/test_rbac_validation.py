@@ -50,6 +50,5 @@ def test_no_double_assignment(admin_api_client, rando, inventory, inv_rd):
     url = reverse('roleuserassignment-list')
     response = admin_api_client.post(url, data={'object_id': inventory.id, 'user': rando.id, 'role_definition': inv_rd.id})
     assert response.status_code == 201
-    with pytest.raises(IntegrityError):
-        # processing is assumed to be done on the app side, at least it is for AWX
-        response = admin_api_client.post(url, data={'object_id': inventory.id, 'user': rando.id, 'role_definition': inv_rd.id})
+    response = admin_api_client.post(url, data={'object_id': inventory.id, 'user': rando.id, 'role_definition': inv_rd.id})
+    assert response.status_code == 201
