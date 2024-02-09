@@ -4,9 +4,9 @@ from django.db import transaction
 from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 
-from ansible_base.lib.serializers.common import CommonModelSerializer
 from ansible_base.lib.abstract_models.common import get_url_for_object
-from ansible_base.rbac.models import ObjectRole, RoleDefinition, RoleTeamAssignment, RoleUserAssignment
+from ansible_base.lib.serializers.common import CommonModelSerializer
+from ansible_base.rbac.models import RoleDefinition, RoleTeamAssignment, RoleUserAssignment
 from ansible_base.rbac.permission_registry import permission_registry  # careful for circular imports
 from ansible_base.rbac.validators import validate_permissions_for_model
 
@@ -91,7 +91,6 @@ class ManyRelatedListField(serializers.ListField):
 
 
 class RoleDefinitionSerializer(CommonModelSerializer):
-    reverse_url_name = 'roledefinition-detail'
     # Relational versions - we may switch to these if custom permission and type models are exposed but out of scope here
     # permissions = serializers.SlugRelatedField(many=True, slug_field='codename', queryset=permission_registry.permission_model.objects.all())
     # content_type = ContentTypeField(slug_field='model', queryset=permission_registry.content_type_model.objects.all(), allow_null=True, default=None)
@@ -111,16 +110,7 @@ class RoleDefinitionDetailSeraizler(RoleDefinitionSerializer):
     content_type = ContentTypeField(read_only=True)
 
 
-class ObjectRoleSerializer(serializers.ModelSerializer):
-    content_type = ContentTypeField(allow_null=True, default=None)
-
-    class Meta:
-        model = ObjectRole
-        fields = ('id', 'content_type', 'object_id', 'role_definition')
-
-
 class BaseAssignmentSerializer(CommonModelSerializer):
-    object_role = ObjectRoleSerializer(read_only=True)
     content_type = ContentTypeField(read_only=True)
 
     def create(self, validated_data):
@@ -155,7 +145,6 @@ class BaseAssignmentSerializer(CommonModelSerializer):
 
 
 class RoleUserAssignmentSerializer(BaseAssignmentSerializer):
-    reverse_url_name = 'roleuserassignment-detail'
     actor_field = 'user'
 
     class Meta:
@@ -164,7 +153,6 @@ class RoleUserAssignmentSerializer(BaseAssignmentSerializer):
 
 
 class RoleTeamAssignmentSerializer(BaseAssignmentSerializer):
-    reverse_url_name = 'roleteamassignment-detail'
     actor_field = 'team'
 
     class Meta:

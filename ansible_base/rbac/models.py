@@ -88,6 +88,7 @@ class RoleDefinition(CommonModel):
     )
 
     objects = RoleDefinitionManager()
+    router_basename = 'roledefinition'
 
     def __str__(self):
         managed_str = ''
@@ -175,7 +176,7 @@ class RoleDefinition(CommonModel):
         return assignment
 
     def summary_fields(self):
-        return {'name': self.name, 'description': self.description, 'managed': self.managed}
+        return {'id': self.id, 'name': self.name, 'description': self.description, 'managed': self.managed}
 
 
 class ObjectRoleFields(models.Model):
@@ -213,7 +214,7 @@ class AssignmentBase(CommonModel, ObjectRoleFields):
     both models are immutable, making caching easy.
     """
 
-    object_role = models.ForeignKey('dab_rbac.ObjectRole', on_delete=models.CASCADE)
+    object_role = models.ForeignKey('dab_rbac.ObjectRole', on_delete=models.CASCADE, editable=False)
     modified_on = None
     created_on = models.DateTimeField(
         default=timezone.now,  # Needed to work in migrations as a through field, which CommonModel can not do
@@ -251,6 +252,7 @@ class AssignmentBase(CommonModel, ObjectRoleFields):
 
 class RoleUserAssignment(AssignmentBase):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    router_basename = 'roleuserassignment'
 
     def __repr__(self):
         return f'RoleUserAssignment(pk={self.id})'
@@ -258,6 +260,7 @@ class RoleUserAssignment(AssignmentBase):
 
 class RoleTeamAssignment(AssignmentBase):
     team = models.ForeignKey(settings.ANSIBLE_BASE_TEAM_MODEL, on_delete=models.CASCADE)
+    router_basename = 'roleteamassignment'
 
     def __repr__(self):
         return f'RoleTeamAssignment(pk={self.id})'
@@ -310,6 +313,9 @@ class ObjectRole(ObjectRoleFields):
         if self.id:
             raise RuntimeError('ObjectRole model is immutable, use RoleDefinition.give_permission method')
         return super().save(*args, **kwargs)
+
+    def summary_fields(self):
+        return {'id': self.id}
 
     def descendent_roles(self):
         "Returns a set of roles that you implicitly have if you have this role"

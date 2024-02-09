@@ -16,7 +16,13 @@ from ansible_base.rbac.models import RoleDefinition
 
 class RoleDefinitionViewSet(ModelViewSet):
     """
-    As per docs, RoleDefinition is interacted with like a normal model.
+    Role Definitions (roles) contain a list of permissions and can be used to
+    assign those permissions to a user or team through the respective
+    assignment endpoints.
+
+    Custom roles can be created, modified, and deleted through this endpoint.
+    System-managed roles are shown here, which cannot be edited or deleted,
+    but can be assigned to users.
     """
 
     queryset = RoleDefinition.objects.all()
@@ -63,8 +69,30 @@ class BaseAssignmentViewSet(ModelViewSet):
 
 
 class RoleTeamAssignmentViewSet(BaseAssignmentViewSet):
+    """
+    Use this endpoint to give a user permission to a resource or an organization.
+    The needed data is the user, the role definition, and the object id.
+    The object must be of the type specified in the role definition.
+    The type given in the role definition and the provided object_id are used
+    to look up the resource.
+
+    After creation, the assignment cannot be edited, but can be deleted to
+    remove those permissions.
+    """
+
     serializer_class = RoleTeamAssignmentSerializer
 
 
 class RoleUserAssignmentViewSet(BaseAssignmentViewSet):
+    """
+    Use this endpoint to give a team permission to a resource or an organization.
+    The needed data is the team, the role definition, and the object id.
+    The object must be of the type specified in the role definition.
+    The type given in the role definition and the provided object_id are used
+    to look up the resource.
+
+    After creation, the assignment cannot be edited, but can be deleted to
+    remove those permissions.
+    """
+
     serializer_class = RoleUserAssignmentSerializer
