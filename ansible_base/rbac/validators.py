@@ -7,7 +7,7 @@ from ansible_base.rbac.permission_registry import permission_registry
 
 
 def system_roles_enabled():
-    return bool(settings.ANSIBLE_BASE_SINGLETON_USER_RELATIONSHIP or settings.ANSIBLE_BASE_SINGLETON_USER_RELATIONSHIP)
+    return bool(settings.ANSIBLE_BASE_SINGLETON_USER_RELATIONSHIP or settings.ANSIBLE_BASE_SINGLETON_TEAM_RELATIONSHIP)
 
 
 def validate_permissions_for_model(permissions, content_type):
