@@ -1,5 +1,4 @@
 import pytest
-from django.db.utils import IntegrityError
 from django.urls import reverse
 
 from ansible_base.rbac.models import RoleDefinition

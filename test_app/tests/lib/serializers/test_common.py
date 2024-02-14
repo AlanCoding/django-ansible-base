@@ -58,10 +58,11 @@ def test_no_reverse_url_name():
     assert serializer.get_url(model) == ''
 
 
+@pytest.mark.django_db
 def test_encrypted_model_reverse_url_name():
     model = EncryptionModel.objects.create()
     serializer = EncryptionModelSerializer()
-    assert serializer.get_url(model) == '/api/v1/encryption_models/1/'
+    assert serializer.get_url(model) == '/api/v1/encrypted_models/1/'
 
 
 def test_summary_of_none():
