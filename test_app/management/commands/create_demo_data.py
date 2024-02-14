@@ -29,11 +29,11 @@ class Command(BaseCommand):
         spud.save()
         with impersonate(spud):
             Team.objects.get_or_create(name='awx_docs', defaults={'organization': awx})
-            Team.objects.get_or_create(name='awx_devs', defaults={'organization': awx})
+            awx_devs, _ = Team.objects.get_or_create(name='awx_devs', defaults={'organization': awx})
             EncryptionModel.objects.get_or_create(
                 name='foo', defaults={'testing1': 'should not show this value!!', 'testing2': 'this value should also not be shown!'}
             )
-            Organization.objects.get_or_create(name='Operator_community')
+            operator_stuff, _ = Organization.objects.get_or_create(name='Operator_community')
             (db_authenticator, _) = Authenticator.objects.get_or_create(
                 name='Local Database Authenticator',
                 defaults={
@@ -51,11 +51,7 @@ class Command(BaseCommand):
                     'provider': db_authenticator,
                 },
             )
-            Team.objects.create(name='awx_docs', organization=awx)
-            awx_devs = Team.objects.create(name='awx_devs', organization=awx)
-            operator_stuff = Organization.objects.create(name='Operator_community')
 
-            EncryptionModel.objects.create(name='foo', testing1='should not show this value!!', testing2='this value should also not be shown!')
             # Inventory objects exist inside of an organization
             Inventory.objects.create(name='K8S clusters', organization=operator_stuff)
             Inventory.objects.create(name='Galaxy Host', organization=galaxy)
@@ -69,20 +65,20 @@ class Command(BaseCommand):
 
         # NOTE: managed role definitions are turned off, you could turn them on and get rid of these
         awx_perms = list(Permission.objects.filter(content_type__model__in=['organization', 'inventory']).values_list('codename', flat=True))
-        org_admin = RoleDefinition.objects.create_from_permissions(
-            name='AWX Organization admin permissions', content_type=ContentType.objects.get_for_model(Organization), permissions=awx_perms
+        org_admin, _ = RoleDefinition.objects.get_or_create(
+            name='AWX Organization admin permissions', permissions=awx_perms, defaults={'content_type': ContentType.objects.get_for_model(Organization)}
         )
-        ig_admin = RoleDefinition.objects.create_from_permissions(
+        ig_admin, _ = RoleDefinition.objects.get_or_create(
             name='AWX InstanceGroup admin',
-            content_type=ContentType.objects.get_for_model(InstanceGroup),
             permissions=['change_instancegroup', 'delete_instancegroup', 'view_instancegroup'],
+            defaults={'content_type': ContentType.objects.get_for_model(InstanceGroup)},
         )
-        team_member = RoleDefinition.objects.create_from_permissions(
-            name='Special Team member role', content_type=ContentType.objects.get_for_model(Team), permissions=['view_team', 'member_team']
+        team_member, _ = RoleDefinition.objects.get_or_create(
+            name='Special Team member role', permissions=['view_team', 'member_team'], defaults={'content_type': ContentType.objects.get_for_model(Team)}
         )
 
-        org_admin_user = User.objects.create(username='org_admin')
-        ig_admin_user = User.objects.create(username='instance_group_admin')
+        org_admin_user, _ = User.objects.get_or_create(username='org_admin')
+        ig_admin_user, _ = User.objects.get_or_create(username='instance_group_admin')
         org_admin.give_permission(org_admin_user, awx)
         ig_admin.give_permission(ig_admin_user, isolated_group)
         for user in (org_admin_user, ig_admin_user, spud):

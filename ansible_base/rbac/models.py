@@ -158,12 +158,12 @@ class RoleDefinition(CommonModel):
         assignment = None
         if actor._meta.model_name == 'user':
             if giving:
-                assignment = RoleUserAssignment.objects.create(user=actor, object_role=object_role)
+                assignment, created = RoleUserAssignment.objects.get_or_create(user=actor, object_role=object_role)
             else:
                 object_role.users.remove(actor)
         elif isinstance(actor, permission_registry.team_model):
             if giving:
-                assignment = RoleTeamAssignment.objects.create(team=actor, object_role=object_role)
+                assignment, created = RoleTeamAssignment.objects.get_or_create(team=actor, object_role=object_role)
             else:
                 object_role.teams.remove(actor)
         else:
