@@ -465,7 +465,7 @@ class RoleEvaluationFields(models.Model):
         return (self.codename, self.content_type_id, self.object_id)
 
     @classmethod
-    def accessible_ids(eval_cls, cls, actor, codename, content_types=None):
+    def accessible_ids(cls, model_cls, actor, codename, content_types=None):
         """
         Corresponds to AWX accessible_pk_qs
 
@@ -481,12 +481,12 @@ class RoleEvaluationFields(models.Model):
         if content_types:
             filter_kwargs['content_type_id__in'] = content_types
         else:
-            filter_kwargs['content_type_id'] = ContentType.objects.get_for_model(cls).id
-        return eval_cls.objects.filter(**filter_kwargs).values_list('object_id').distinct()
+            filter_kwargs['content_type_id'] = ContentType.objects.get_for_model(model_cls).id
+        return cls.objects.filter(**filter_kwargs).values_list('object_id').distinct()
 
     @classmethod
-    def accessible_objects(eval_cls, cls, user, codename):
-        return cls.objects.filter(pk__in=eval_cls.accessible_ids(cls, user, codename))
+    def accessible_objects(cls, model_cls, user, codename):
+        return model_cls.objects.filter(pk__in=cls.accessible_ids(model_cls, user, codename))
 
     @classmethod
     def get_permissions(cls, user, obj):
