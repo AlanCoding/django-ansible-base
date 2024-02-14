@@ -1,6 +1,7 @@
 import pytest
 from django.apps import apps
 from django.test.utils import override_settings
+from django.contrib.contenttypes.models import ContentType
 
 from ansible_base.rbac.migrations._managed_definitions import setup_managed_role_definitions
 from ansible_base.rbac.migrations._utils import give_permissions
@@ -56,7 +57,21 @@ def test_give_permissions(organization, inventory, inv_rd):
         inv_rd,
         users=[user],
         teams=[team],
-        obj=inventory
+        object_id=inventory.id,
+        content_type_id=ContentType.objects.get_for_model(inventory).id
     )
     assert RoleUserAssignment.objects.filter(user=user).exists()
+    assert RoleTeamAssignment.objects.filter(team=team).exists()
+
+
+@pytest.mark.django_db
+def test_give_permissions_by_id(organization, inventory, inv_rd):
+    team = Team.objects.create(name='ateam', organization=organization)
+    give_permissions(
+        apps,
+        inv_rd,
+        teams=[team.id],
+        object_id=inventory.id,
+        content_type_id=ContentType.objects.get_for_model(inventory).id
+    )
     assert RoleTeamAssignment.objects.filter(team=team).exists()
