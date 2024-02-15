@@ -19,8 +19,11 @@ class ChoiceLikeMixin(serializers.ChoiceField):
     """
 
     default_error_messages = serializers.PrimaryKeyRelatedField.default_error_messages
-    psuedo_model = None  # define in subclass
     psuedo_field = None  # define in subclass
+
+    def get_model_for_init(self):
+        "Delay any model references until serializer initialization due to load order concerns"
+        raise NotImplementedError
 
     def get_dynamic_choices(self):
         raise NotImplementedError
@@ -33,7 +36,7 @@ class ChoiceLikeMixin(serializers.ChoiceField):
 
     def __init__(self, **kwargs):
         choices = self.get_dynamic_choices()
-        kwargs['help_text'] = self.psuedo_model._meta.get_field(self.psuedo_field).help_text
+        kwargs['help_text'] = self.get_model_for_init()._meta.get_field(self.psuedo_field).help_text
         super().__init__(choices=choices, **kwargs)
 
     def to_internal_value(self, data):
@@ -46,8 +49,10 @@ class ChoiceLikeMixin(serializers.ChoiceField):
 
 
 class ContentTypeField(ChoiceLikeMixin):
-    psuedo_model = permission_registry.content_type_model
     psuedo_field = 'model'
+
+    def get_model_for_init(self):
+        return permission_registry.content_type_model
 
     def get_dynamic_choices(self):
         return [
@@ -64,8 +69,10 @@ class ContentTypeField(ChoiceLikeMixin):
 
 
 class PermissionField(ChoiceLikeMixin):
-    psuedo_model = permission_registry.permission_model
     psuedo_field = 'codename'
+
+    def get_model_for_init(self):
+        return permission_registry.permission_model
 
     def get_dynamic_choices(self):
         perms = []
