@@ -2,8 +2,10 @@ from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 from django.db.utils import IntegrityError
+from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
+from rest_framework.fields import flatten_choices_dict, to_choices_dict
 
 from ansible_base.lib.abstract_models.common import get_url_for_object
 from ansible_base.lib.serializers.common import CommonModelSerializer
@@ -35,9 +37,26 @@ class ChoiceLikeMixin(serializers.ChoiceField):
         raise NotImplementedError
 
     def __init__(self, **kwargs):
+        # Workaround so that the parent class does not resolve the choices right away
+        super(serializers.ChoiceField, self).__init__(**kwargs)
+
+    def _initialize_choices(self):
         choices = self.get_dynamic_choices()
-        kwargs['help_text'] = self.get_model_for_init()._meta.get_field(self.psuedo_field).help_text
-        super().__init__(choices=choices, **kwargs)
+        self._grouped_choices = to_choices_dict(choices)
+        self._choices = flatten_choices_dict(self._grouped_choices)
+        self.choice_strings_to_values = {str(k): k for k in self._choices}
+
+    @property
+    def grouped_choices(self):
+        if not hasattr(self, '_grouped_choices'):
+            self._initialize_choices()
+        return self._grouped_choices
+
+    @property
+    def choices(self):
+        if not hasattr(self, '_choices'):
+            self._initialize_choices()
+        return self._choices
 
     def to_internal_value(self, data):
         try:
@@ -50,6 +69,10 @@ class ChoiceLikeMixin(serializers.ChoiceField):
 
 class ContentTypeField(ChoiceLikeMixin):
     psuedo_field = 'model'
+
+    def __init__(self, **kwargs):
+        kwargs['help_text'] = _('The type of resource this applies to')
+        super().__init__(**kwargs)
 
     def get_model_for_init(self):
         return permission_registry.content_type_model
