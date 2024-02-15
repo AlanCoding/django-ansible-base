@@ -1,8 +1,8 @@
-from rest_framework.routers import SimpleRouter
+from ansible_base.lib.routers import AssociationResourceRouter
 
 from ansible_base.rbac.api import views
 
-router = SimpleRouter()
+router = AssociationResourceRouter()
 
 router.register(r'role_definitions', views.RoleDefinitionViewSet, basename='roledefinition')
 router.register(r'role_user_assignments', views.RoleUserAssignmentViewSet, basename='roleuserassignment')

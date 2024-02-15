@@ -3,6 +3,7 @@ from rest_framework import permissions
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.viewsets import ModelViewSet
 
+from ansible_base.lib.utils.views.django_app_api import AnsibleBaseDjangoAppApiView
 from ansible_base.rbac.api.permissions import AuthenticatedReadAdminChange
 from ansible_base.rbac.api.serializers import (
     RoleDefinitionDetailSeraizler,
@@ -14,7 +15,7 @@ from ansible_base.rbac.evaluations import has_super_permission
 from ansible_base.rbac.models import RoleDefinition
 
 
-class RoleDefinitionViewSet(ModelViewSet):
+class RoleDefinitionViewSet(ModelViewSet, AnsibleBaseDjangoAppApiView):
     """
     Role Definitions (roles) contain a list of permissions and can be used to
     assign those permissions to a user or team through the respective
@@ -47,7 +48,7 @@ class RoleDefinitionViewSet(ModelViewSet):
         return super().perform_destroy(instance)
 
 
-class BaseAssignmentViewSet(ModelViewSet):
+class BaseAssignmentViewSet(ModelViewSet, AnsibleBaseDjangoAppApiView):
     permission_classes = [permissions.IsAuthenticated]
     # PUT and PATCH are not allowed because these are immutable
     http_method_names = ['get', 'post', 'head', 'options', 'delete']
