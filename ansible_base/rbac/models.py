@@ -84,7 +84,7 @@ class RoleDefinition(CommonModel):
         verbose_name_plural = _('role_definition')
 
     name = models.TextField(db_index=True, unique=True)
-    description = models.TextField(null=True, blank=True)
+    description = models.TextField(blank=True)
     managed = models.BooleanField(default=False, editable=False)  # pulp definition of Role uses locked
     permissions = models.ManyToManyField(settings.ANSIBLE_BASE_PERMISSION_MODEL)
     content_type = models.ForeignKey(
@@ -97,6 +97,7 @@ class RoleDefinition(CommonModel):
 
     objects = RoleDefinitionManager()
     router_basename = 'roledefinition'
+    ignore_relations = ['permissions', 'object_roles', 'teams', 'users']
 
     def __str__(self):
         managed_str = ''
@@ -193,11 +194,7 @@ class ObjectRoleFields(models.Model):
     class Meta:
         abstract = True
 
-    role_definition = models.ForeignKey(
-        RoleDefinition,
-        on_delete=models.CASCADE,
-        help_text=_("The role definition which defines what permissions this object role grants"),
-    )
+    # role_definition set on child models to set appropriate help_text and related_name
     content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
     object_id = models.TextField(null=False)
     content_object = GenericForeignKey('content_type', 'object_id')
@@ -259,6 +256,12 @@ class AssignmentBase(CommonModel, ObjectRoleFields):
 
 
 class RoleUserAssignment(AssignmentBase):
+    role_definition = models.ForeignKey(
+        RoleDefinition,
+        on_delete=models.CASCADE,
+        help_text=_("The role definition which defines permissions conveyed by this assignment"),
+        related_name='user_assignments',
+    )
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     router_basename = 'roleuserassignment'
 
@@ -271,6 +274,12 @@ class RoleUserAssignment(AssignmentBase):
 
 
 class RoleTeamAssignment(AssignmentBase):
+    role_definition = models.ForeignKey(
+        RoleDefinition,
+        on_delete=models.CASCADE,
+        help_text=_("The role definition which defines permissions conveyed by this assignment"),
+        related_name='team_assignments',
+    )
     team = models.ForeignKey(settings.ANSIBLE_BASE_TEAM_MODEL, on_delete=models.CASCADE)
     router_basename = 'roleteamassignment'
 
@@ -300,6 +309,12 @@ class ObjectRole(ObjectRoleFields):
         ordering = ("content_type", "object_id")
         constraints = [models.UniqueConstraint(name='one_object_role_per_object_and_role', fields=['object_id', 'content_type', 'role_definition'])]
 
+    role_definition = models.ForeignKey(
+        RoleDefinition,
+        on_delete=models.CASCADE,
+        help_text=_("The role definition which defines what permissions this object role grants"),
+        related_name='object_roles',
+    )
     users = models.ManyToManyField(
         to=settings.AUTH_USER_MODEL,
         through='dab_rbac.RoleUserAssignment',

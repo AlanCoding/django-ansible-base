@@ -46,7 +46,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='team',
             name='singleton_roles',
-            field=models.ManyToManyField(blank=True, to='dab_rbac.roledefinition'),
+            field=models.ManyToManyField(blank=True, related_name='singleton_teams', to='dab_rbac.roledefinition'),
         ),
         migrations.AddField(
             model_name='user',

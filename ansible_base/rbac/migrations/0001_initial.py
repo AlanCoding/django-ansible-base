@@ -21,7 +21,7 @@ class Migration(migrations.Migration):
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('name', models.TextField(db_index=True, unique=True)),
-                ('description', models.TextField(null=True)),
+                ('description', models.TextField(blank=True)),
                 ('managed', models.BooleanField(default=False, editable=False)),
                 ('permissions', models.ManyToManyField(to=settings.ANSIBLE_BASE_PERMISSION_MODEL)),
                 ('content_type', models.ForeignKey(
@@ -64,10 +64,8 @@ class Migration(migrations.Migration):
                 ('content_type', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='contenttypes.contenttype')),
                 ('object_id', models.TextField(null=False)),
                 ('role_definition', models.ForeignKey(
-                    help_text='The role definition which defines what permissions this object role grants',
-                    on_delete=django.db.models.deletion.CASCADE,
-                    to='dab_rbac.roledefinition'
-                )),
+                    help_text='The role definition which defines permissions conveyed by this assignment', on_delete=django.db.models.deletion.CASCADE,
+                    related_name='team_assignments', to='dab_rbac.roledefinition')),
             ],
             options={
                 'abstract': False,
@@ -99,10 +97,8 @@ class Migration(migrations.Migration):
                 ('content_type', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='contenttypes.contenttype')),
                 ('object_id', models.TextField(null=False)),
                 ('role_definition', models.ForeignKey(
-                    help_text='The role definition which defines what permissions this object role grants',
-                    on_delete=django.db.models.deletion.CASCADE,
-                    to='dab_rbac.roledefinition'
-                )),
+                    help_text='The role definition which defines permissions conveyed by this assignment', on_delete=django.db.models.deletion.CASCADE,
+                    related_name='user_assignments', to='dab_rbac.roledefinition')),
             ],
             options={
                 'abstract': False,
@@ -136,8 +132,8 @@ class Migration(migrations.Migration):
                     help_text='Users who have this role obtain member access to these teams, and inherit all their permissions',
                     related_name='member_roles', to=settings.ANSIBLE_BASE_TEAM_MODEL)),
                 ('role_definition', models.ForeignKey(
-                    help_text='The role definition which defines what permissions this object role grants',
-                    on_delete=django.db.models.deletion.CASCADE, to='dab_rbac.roledefinition')),
+                    help_text='The role definition which defines what permissions this object role grants', on_delete=django.db.models.deletion.CASCADE,
+                    related_name='object_roles', to='dab_rbac.roledefinition')),
             ],
             options={
                 'verbose_name_plural': 'object_roles',
@@ -227,11 +223,6 @@ class Migration(migrations.Migration):
                 related_name='member_roles',
                 to=settings.ANSIBLE_BASE_TEAM_MODEL
             ),
-        ),
-        migrations.AlterField(
-            model_name='roledefinition',
-            name='description',
-            field=models.TextField(blank=True, null=True),
         ),
         migrations.CreateModel(
             name='RoleEvaluationUUID',

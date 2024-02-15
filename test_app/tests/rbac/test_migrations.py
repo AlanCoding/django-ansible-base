@@ -1,13 +1,12 @@
 import pytest
 from django.apps import apps
-from django.test.utils import override_settings
 from django.contrib.contenttypes.models import ContentType
+from django.test.utils import override_settings
 
 from ansible_base.rbac.migrations._managed_definitions import setup_managed_role_definitions
 from ansible_base.rbac.migrations._utils import give_permissions
-from ansible_base.rbac.models import RoleDefinition, RoleUserAssignment, RoleTeamAssignment
-
-from test_app.models import User, Team
+from ansible_base.rbac.models import RoleDefinition, RoleTeamAssignment, RoleUserAssignment
+from test_app.models import Team, User
 
 INVENTORY_OBJ_PERMISSIONS = ['view_inventory', 'change_inventory', 'delete_inventory', 'update_inventory']
 
