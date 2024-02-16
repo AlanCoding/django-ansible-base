@@ -181,4 +181,16 @@ class Migration(migrations.Migration):
             name='encryptioner',
             field=models.ForeignKey(null=True, on_delete=django.db.models.deletion.SET_NULL, to='test_app.encryptionmodel'),
         ),
+        migrations.CreateModel(
+            name='TestPermission',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('name', models.CharField(max_length=255, verbose_name='name')),
+                ('codename', models.CharField(max_length=100, verbose_name='codename')),
+                ('content_type', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='contenttypes.contenttype', verbose_name='content type')),
+            ],
+            options={
+                'unique_together': {('content_type', 'codename')},
+            },
+        ),
     ]

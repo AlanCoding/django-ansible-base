@@ -2,6 +2,7 @@ import uuid
 
 from django.conf import settings
 from django.contrib.auth.models import AbstractUser
+from django.contrib.contenttypes.models import ContentType
 from django.db import models
 
 from ansible_base.lib.abstract_models import AbstractOrganization, AbstractTeam
@@ -118,6 +119,17 @@ class UUIDModel(models.Model):
     "Tests that system works with a model that has a string uuid primary key"
     id = models.UUIDField(primary_key=True, default=uuid.uuid4)
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE)
+
+
+class TestPermission(models.Model):
+    "Used for testing using a custom permission, only used in special cases"
+    name = models.CharField("name", max_length=255)
+    content_type = models.ForeignKey(ContentType, models.CASCADE, verbose_name="content type")
+    codename = models.CharField("codename", max_length=100)
+
+    class Meta:
+        app_label = 'test_app'
+        unique_together = [["content_type", "codename"]]
 
 
 permission_registry.register(Organization, Inventory, Namespace, Team, Cow, UUIDModel)
