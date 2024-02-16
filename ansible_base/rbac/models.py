@@ -365,7 +365,7 @@ class ObjectRole(ObjectRoleFields):
         for permission in types_prefetch.permissions_for_object_role(self):
             permission_content_type = types_prefetch.get_content_type(permission.content_type_id)
 
-            if permission.content_type_id == self.content_type_id:
+            if permission.content_type_id == self.content_type_id:  # direct object permission
                 model = permission_content_type.model_class()
                 # ObjectRole.object_id is stored as text, we convert it to the model pk native type
                 object_id = model._meta.pk.to_python(self.object_id)
@@ -379,7 +379,7 @@ class ObjectRole(ObjectRoleFields):
                     continue
                 object_id = model._meta.pk.to_python(self.object_id)
                 expected_evaluations.add((permission.codename, self.content_type_id, object_id))
-            else:
+            else:  # child object permission
                 id_list = []
                 # fetching child objects of an organization is very performance sensitive
                 # for multiple permissions of same type, make sure to only do query once
@@ -389,8 +389,8 @@ class ObjectRole(ObjectRoleFields):
                     # model must be in same app as organization
                     for filter_path, model in permission_registry.get_child_models(role_content_type.model):
                         if model._meta.model_name == permission_content_type.model:
-                            object_id = model._meta.pk.get_db_prep_value(self.object_id, connection)
-                            id_list = model.objects.filter(**{filter_path: object_id}).values_list('id', flat=True)
+                            object_id = role_content_type.model_class()._meta.pk.get_db_prep_value(self.object_id, connection)
+                            id_list = model.objects.filter(**{filter_path: object_id}).values_list('pk', flat=True)
                             cached_id_lists[permission.content_type_id] = list(id_list)
                             break
                     else:
