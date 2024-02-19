@@ -43,16 +43,23 @@ class AnsibleBaseObjectPermissions(DjangoObjectPermissions):
             return True
 
         if request.method == 'POST':
-            queryset = self._queryset(view)
-            model_cls = queryset.model
-            parent_field_name = permission_registry.get_parent_fd_name(model_cls)
-            parent_model = permission_registry.get_parent_model(model_cls)
-            parent_obj = parent_model.objects.get(pk=request.data[parent_field_name])
-            return request.user.has_obj_perm(parent_obj, f'add_{model_cls._meta.model_name}')
+            if view.action == 'create':
+                queryset = self._queryset(view)
+                model_cls = queryset.model
+                parent_field_name = permission_registry.get_parent_fd_name(model_cls)
+                parent_model = permission_registry.get_parent_model(model_cls)
+                parent_obj = parent_model.objects.get(pk=request.data[parent_field_name])
+                return request.user.has_obj_perm(parent_obj, f'add_{model_cls._meta.model_name}')
 
         # As an exception to this, AWX calls access methods with None in place of data
         # which results in POST or PUT being excluded from OPTIONS for permissions reasons
         return True
+
+    def get_required_object_permissions(self, method, model_cls, view=None):
+        special_action = getattr(view, 'rbac_action', None)
+        if special_action:
+            return [f'{special_action}_{model_cls._meta.model_name}']
+        return super().get_required_object_permissions(method, model_cls)
 
     def has_object_permission(self, request, view, obj):
         "Original version of this comes from DjangoModelPermissions, overridden to use has_obj_perm"
@@ -60,7 +67,7 @@ class AnsibleBaseObjectPermissions(DjangoObjectPermissions):
         model_cls = queryset.model
         user = request.user
 
-        perms = self.get_required_object_permissions(request.method, model_cls)
+        perms = self.get_required_object_permissions(request.method, model_cls, view=view)
 
         if not all(user.has_obj_perm(obj, perm) for perm in perms):
             # If the user does not have permissions we need to determine if

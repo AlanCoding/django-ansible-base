@@ -74,10 +74,9 @@ def test_add_permission(user_api_client, user, view_inv_rd, organization):
 
 
 @pytest.mark.django_db
-@pytest.mark.xfail
 def test_custom_action(user_api_client, user, organization):
-    rd, _ = RoleDefinition.objects.get_or_create(
-        name='change-cow', permissions=['change_cow', 'view_cow', 'delete_cow'], defaults={'content_type': ContentType.objects.get_for_model(Cow)}
+    rd = RoleDefinition.objects.create_from_permissions(
+        name='change-cow', permissions=['change_cow', 'view_cow', 'delete_cow'], content_type=ContentType.objects.get_for_model(Cow)
     )
     cow = Cow.objects.create(organization=organization)
     rd.give_permission(user, cow)
@@ -86,4 +85,15 @@ def test_custom_action(user_api_client, user, organization):
     r = user_api_client.patch(cow_url, {})
     assert r.status_code == 200
 
-    r = user_api_client.post(cow_url, {})
+    cow_say_url = reverse('cow-cowsay', kwargs={'pk': cow.id})
+    r = user_api_client.post(cow_say_url, {})
+    assert r.status_code == 403
+
+    say_rd = RoleDefinition.objects.create_from_permissions(
+        name='say-cow', permissions=['view_cow', 'say_cow'], content_type=ContentType.objects.get_for_model(Cow)
+    )
+    say_rd.give_permission(user, cow)
+
+    cow_say_url = reverse('cow-cowsay', kwargs={'pk': cow.id})
+    r = user_api_client.post(cow_say_url, {})
+    assert r.status_code == 200

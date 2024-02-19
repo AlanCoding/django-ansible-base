@@ -53,9 +53,11 @@ class InventoryViewSet(TestAppViewSet):
 
 class CowViewSet(TestAppViewSet):
     serializer_class = serializers.CowSerializer
+    rbac_action = None
 
-    @action(detail=True, methods=['post'])
+    @action(detail=True, rbac_action='say', methods=['post'])
     def cowsay(self, request, pk=None):
+        self.get_object()  # this triggers the permission check
         return Response({'detail': 'moooooo'})
 
 
