@@ -1,6 +1,7 @@
 from django.http import Http404
 from rest_framework.permissions import SAFE_METHODS, BasePermission, DjangoObjectPermissions
 
+from ansible_base.rbac import permission_registry
 from ansible_base.rbac.evaluations import has_super_permission
 
 
@@ -41,9 +42,13 @@ class AnsibleBaseObjectPermissions(DjangoObjectPermissions):
         if getattr(view, '_ignore_model_permissions', False):
             return True
 
-        # Here is where one would check if the user has general permission to the _endpont_
-        # but RBAC models expose their views to all users and hide objects by filtering
-        # if you need a different behavior you likely need a different class like IsAdminUser
+        if request.method == 'POST':
+            queryset = self._queryset(view)
+            model_cls = queryset.model
+            parent_field_name = permission_registry.get_parent_fd_name(model_cls)
+            parent_model = permission_registry.get_parent_model(model_cls)
+            parent_obj = parent_model.objects.get(pk=request.data[parent_field_name])
+            return request.user.has_obj_perm(parent_obj, f'add_{model_cls._meta.model_name}')
 
         # As an exception to this, AWX calls access methods with None in place of data
         # which results in POST or PUT being excluded from OPTIONS for permissions reasons

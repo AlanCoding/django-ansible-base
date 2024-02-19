@@ -21,7 +21,11 @@ def validate_codename_for_model(codename, model):
         # convience to call JobTemplate.accessible_objects(u, 'execute')
         name = f'{codename}_{model._meta.model_name}'
     else:
-        name = codename
+        # sometimes permissions are referred to with the app name, like test_app.say_cow
+        if '.' in codename:
+            name = codename.split('.')[-1]
+        else:
+            name = codename
     if name.startswith('add'):
         if model._meta.model_name != 'organization':
             raise RuntimeError(f'Add permissions only valid for organization, received for {model._meta.model_name}')
