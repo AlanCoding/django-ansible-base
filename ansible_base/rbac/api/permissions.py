@@ -44,6 +44,13 @@ class AnsibleBaseObjectPermissions(DjangoObjectPermissions):
 
         if request.method == 'POST':
             if view.action == 'create':
+                # Identify cloned requests used by API browser
+                # the renderer class calls show_form_for_method which checks POST permissions
+                # on a GET request about whether to show the POST form
+                # philosophy is that all users have the abstract ability to post
+                # and the object permissions (data) tells whether it is possible
+                if request.method != request._request.method and (not request.data):
+                    return True
                 queryset = self._queryset(view)
                 model_cls = queryset.model
                 parent_field_name = permission_registry.get_parent_fd_name(model_cls)

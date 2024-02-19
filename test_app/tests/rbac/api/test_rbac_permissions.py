@@ -56,7 +56,6 @@ def test_change_permission(user_api_client, user, org_inv_rd, view_inv_rd, inven
 @pytest.mark.django_db
 def test_add_permission(user_api_client, user, view_inv_rd, organization):
     view_inv_rd.give_permission(user, organization)
-    url = reverse('inventory-list')
 
     r = user_api_client.post(reverse('inventory-list'), {'name': 'test', 'organization': organization.id})
     assert r.status_code == 403, r.data
