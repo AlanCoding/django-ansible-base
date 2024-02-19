@@ -66,7 +66,9 @@ class AnsibleBaseObjectPermissions(DjangoObjectPermissions):
         special_action = getattr(view, 'rbac_action', None)
         if special_action:
             return [f'{special_action}_{model_cls._meta.model_name}']
-        return super().get_required_object_permissions(method, model_cls)
+        perms = super().get_required_object_permissions(method, model_cls)
+        # Remove add permissions, since they are handled in has_permission
+        return [p for p in perms if 'add_' not in p]
 
     def has_object_permission(self, request, view, obj):
         "Original version of this comes from DjangoModelPermissions, overridden to use has_obj_perm"
