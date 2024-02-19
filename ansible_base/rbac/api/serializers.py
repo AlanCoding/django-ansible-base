@@ -38,6 +38,10 @@ class ChoiceLikeMixin(serializers.ChoiceField):
 
     def __init__(self, **kwargs):
         # Workaround so that the parent class does not resolve the choices right away
+        self.html_cutoff = kwargs.pop('html_cutoff', self.html_cutoff)
+        self.html_cutoff_text = kwargs.pop('html_cutoff_text', self.html_cutoff_text)
+
+        self.allow_blank = kwargs.pop('allow_blank', False)
         super(serializers.ChoiceField, self).__init__(**kwargs)
 
     def _initialize_choices(self):
