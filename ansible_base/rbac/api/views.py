@@ -60,13 +60,13 @@ class BaseAssignmentViewSet(ModelViewSet, AnsibleBaseDjangoAppApiView):
         return model.visible_items(self.request.user).prefetch_related('content_object')
 
     def perform_destroy(self, instance):
-        if not self.request.user.has_obj_perm(instance, 'delete'):
+        if not self.request.user.has_obj_perm(instance, 'change'):
             raise PermissionDenied
 
         rd = instance.object_role.role_definition
         obj = instance.object_role.content_object
         with transaction.atomic():
-            rd.remove_permission(self.request.user, obj)
+            rd.remove_permission(instance.user, obj)
 
 
 class RoleTeamAssignmentViewSet(BaseAssignmentViewSet):

@@ -3,7 +3,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.urls import reverse
 
 from ansible_base.rbac import permission_registry
-from ansible_base.rbac.models import RoleDefinition
+from ansible_base.rbac.models import RoleDefinition, RoleUserAssignment
 from test_app.models import Cow, Inventory, Organization
 
 
@@ -51,6 +51,17 @@ def test_change_permission(user_api_client, user, org_inv_rd, view_inv_rd, inven
 
     r = user_api_client.patch(inv_detail, {})
     assert r.status_code == 200, r.data
+
+
+@pytest.mark.django_db
+def test_revoke_a_permission(admin_api_client, user, org_inv_rd, view_inv_rd, organization):
+    assignment = view_inv_rd.give_permission(user, organization)
+
+    assignment_detail = reverse('roleuserassignment-detail', kwargs={'pk': assignment.id})
+    r = admin_api_client.delete(assignment_detail, {})
+    assert r.status_code == 204, r.data
+
+    assert not RoleUserAssignment.objects.filter(id=assignment.id).exists()
 
 
 @pytest.mark.django_db
