@@ -8,7 +8,6 @@ from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.db import connection, models
-from django.db.models.functions import Concat
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
@@ -201,9 +200,11 @@ class ObjectRoleFields(models.Model):
 
     @classmethod
     def visible_items(cls, user):
-        # TODO: when and if it is available on needed models, replace representer with ansible_id
-        representer = Concat(models.F('object_id'), models.Value(':'), models.F('content_type_id'), output_field=models.CharField())
-        return cls.objects.annotate(tmp_id=representer).filter(tmp_id__in=RoleEvaluation.objects.filter(role__in=user.has_roles.all()).values_list(representer))
+        permission_qs = RoleEvaluation.objects.filter(
+            role__in=user.has_roles.all(),
+            content_type_id=models.OuterRef('content_type_id'),
+        )
+        return cls.objects.filter(object_id__in=permission_qs.values('object_id'))
 
     @property
     def cache_id(self):
