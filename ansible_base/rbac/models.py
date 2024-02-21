@@ -141,7 +141,9 @@ class RoleDefinition(CommonModel):
     def give_or_remove_permission(self, actor, content_object, giving=True, sync_action=False):
         "Shortcut method to do whatever needed to give user or team these permissions"
         obj_ct = ContentType.objects.get_for_model(content_object)
-        kwargs = dict(role_definition=self, content_type=obj_ct, object_id=content_object.id)
+        # sanitize the object_id to its database version, practically, remove "-" chars from uuids
+        object_id = content_object._meta.pk.get_db_prep_value(content_object.id, connection)
+        kwargs = dict(role_definition=self, content_type=obj_ct, object_id=object_id)
 
         created = False
         object_role = ObjectRole.objects.filter(**kwargs).first()
@@ -199,12 +201,17 @@ class ObjectRoleFields(models.Model):
     content_object = GenericForeignKey('content_type', 'object_id')
 
     @classmethod
-    def visible_items(cls, user):
-        permission_qs = RoleEvaluation.objects.filter(
+    def _visible_items(cls, eval_cls, user):
+        permission_qs = eval_cls.objects.filter(
             role__in=user.has_roles.all(),
             content_type_id=models.OuterRef('content_type_id'),
         )
         return cls.objects.filter(object_id__in=permission_qs.values('object_id'))
+
+    @classmethod
+    def visible_items(cls, user):
+        "This ORs querysets to show assignments to both UUID and integer pk models"
+        return cls._visible_items(RoleEvaluation, user) | cls._visible_items(RoleEvaluationUUID, user)
 
     @property
     def cache_id(self):
