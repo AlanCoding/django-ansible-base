@@ -385,7 +385,7 @@ class ObjectRole(ObjectRoleFields):
                     # NOTE: this should also be validated when creating a role definition
                     logger.warning(f'{self} lists {permission.codename} for an object that is not a child object')
                     continue
-                object_id = model._meta.pk.to_python(self.object_id)
+                object_id = role_content_type.model_class()._meta.pk.to_python(self.object_id)
                 expected_evaluations.add((permission.codename, self.content_type_id, object_id))
             else:  # child object permission
                 id_list = []

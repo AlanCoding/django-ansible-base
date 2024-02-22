@@ -50,7 +50,7 @@ def test_filter_uuid_model(rando, organization, view_uuid_rd):
 @pytest.mark.django_db
 def test_organization_uuid_model_permission(rando):
     rd, _ = RoleDefinition.objects.get_or_create(
-        permissions=['view_uuidmodel', 'view_organization'],
+        permissions=['add_uuidmodel', 'view_uuidmodel', 'view_organization'],
         name='org-see UUID model',
         content_type=permission_registry.content_type_model.objects.get_for_model(Organization),
     )
@@ -63,6 +63,9 @@ def test_organization_uuid_model_permission(rando):
 
     assert rando.has_obj_perm(uuid_objs[1], 'view')
     assert list(UUIDModel.access_qs(rando)) == [uuid_objs[1]]
+
+    assert rando.has_obj_perm(orgs[1], 'add_uuidmodel')
+    assert list(Organization.access_qs(rando, 'add_uuidmodel')) == [orgs[1]]
 
 
 @pytest.mark.django_db
