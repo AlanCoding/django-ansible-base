@@ -249,7 +249,8 @@ class AssignmentBase(CommonModel, ObjectRoleFields):
         if not self.id:
             user = get_current_user()
             if user:
-                self.created_by = user
+                # Hazard: user can be a SimpleLazyObject, so use id
+                self.created_by_id = user.id
         # Cache fields from the associated object_role
         if self.object_role_id and not self.object_id:
             self.object_id = self.object_role.object_id
