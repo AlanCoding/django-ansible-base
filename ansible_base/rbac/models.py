@@ -389,6 +389,7 @@ class ObjectRole(ObjectRoleFields):
                 expected_evaluations.add((permission.codename, self.content_type_id, object_id))
             else:  # child object permission
                 id_list = []
+                object_id = role_content_type.model_class()._meta.pk.to_python(self.object_id)
                 # fetching child objects of an organization is very performance sensitive
                 # for multiple permissions of same type, make sure to only do query once
                 if permission.content_type_id in cached_id_lists:
@@ -397,7 +398,6 @@ class ObjectRole(ObjectRoleFields):
                     # model must be in same app as organization
                     for filter_path, model in permission_registry.get_child_models(role_content_type.model):
                         if model._meta.model_name == permission_content_type.model:
-                            object_id = role_content_type.model_class()._meta.pk.get_db_prep_value(self.object_id, connection)
                             id_list = model.objects.filter(**{filter_path: object_id}).values_list('pk', flat=True)
                             cached_id_lists[permission.content_type_id] = list(id_list)
                             break
@@ -407,6 +407,8 @@ class ObjectRole(ObjectRoleFields):
 
                 for id in id_list:
                     expected_evaluations.add((permission.codename, permission.content_type_id, id))
+                if settings.ANSIBLE_BASE_CACHE_PARENT_PERMISSIONS:
+                    expected_evaluations.add((permission.codename, self.content_type_id, object_id))
         return expected_evaluations
 
     def needed_cache_updates(self, types_prefetch=None):
