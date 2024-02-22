@@ -242,8 +242,20 @@ def rbac_post_delete_remove_object_roles(instance, *args, **kwargs):
         compute_team_member_roles()
         compute_object_role_permissions(object_roles=indirectly_affected_roles)
 
+        # Similar to user deletion, clean up any orphaned object roles
+        ObjectRole.objects.filter(users__isnull=True, teams__isnull=True).delete()
+
     ct = ContentType.objects.get_for_model(instance)
     ObjectRole.objects.filter(content_type=ct, object_id=instance.id).delete()
+
+
+def rbac_post_user_delete(instance, *args, **kwargs):
+    """
+    After you delete a user, all their permissions should be removed as well
+    """
+    # Any RoleUserAssignment entries will already be cascade deleted
+    # Just clean up any object roles that may be orphaned by this deletion
+    ObjectRole.objects.filter(users__isnull=True, teams__isnull=True).delete()
 
 
 def post_migration_rbac_setup(*args, **kwargs):

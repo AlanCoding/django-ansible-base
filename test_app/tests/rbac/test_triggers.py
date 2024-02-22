@@ -1,5 +1,7 @@
 import pytest
+from django.contrib.contenttypes.models import ContentType
 
+from ansible_base.rbac.models import ObjectRole, RoleEvaluation, RoleTeamAssignment, RoleUserAssignment
 from test_app.models import Inventory, Organization
 
 
@@ -42,3 +44,35 @@ def test_perform_unrelated_update(inventory):
     inv_copy.save()
 
     assert 'organization_id' not in inv_copy.__dict__
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize('what_to_delete', ['user', 'object'])
+def test_delete_signals(organization, inventory, rando, inv_rd, what_to_delete):
+    assignment = inv_rd.give_permission(rando, inventory)
+    inv_id = inventory.id
+    user_id = rando.id
+    inv_ct = ContentType.objects.get_for_model(inventory)
+    if what_to_delete == 'user':
+        rando.delete()
+    else:
+        organization.delete()
+    assert not RoleUserAssignment.objects.filter(user_id=user_id).exists()
+    assert not ObjectRole.objects.filter(id=assignment.object_role_id).exists()
+    assert not RoleEvaluation.objects.filter(content_type_id=inv_ct.id, object_id=inv_id).exists()
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize('what_to_delete', ['team', 'object'])
+def test_delete_signals_team(organization, inventory, team, inv_rd, what_to_delete):
+    assignment = inv_rd.give_permission(team, inventory)
+    inv_id = inventory.id
+    team_id = team.id
+    inv_ct = ContentType.objects.get_for_model(inventory)
+    if what_to_delete == 'team':
+        team.delete()
+    else:
+        organization.delete()
+    assert not RoleTeamAssignment.objects.filter(team_id=team_id).exists()
+    assert not ObjectRole.objects.filter(id=assignment.object_role_id).exists()
+    assert not RoleEvaluation.objects.filter(content_type_id=inv_ct.id, object_id=inv_id).exists()

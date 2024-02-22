@@ -2,7 +2,7 @@ import logging
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.db.models.signals import post_migrate
+from django.db.models.signals import post_delete, post_migrate
 from django.utils.functional import cached_property
 
 """
@@ -80,8 +80,8 @@ class PermissionRegistry:
         return child_filters
 
     def call_when_apps_ready(self, apps, app_config):
+        from ansible_base.rbac import triggers
         from ansible_base.rbac.evaluations import bound_has_obj_perm, bound_singleton_permissions, connect_rbac_methods
-        from ansible_base.rbac.triggers import TrackedRelationship, connect_rbac_signals, post_migration_rbac_setup
 
         self.apps = apps
         self.apps_ready = True
@@ -89,20 +89,21 @@ class PermissionRegistry:
         if self.team_model not in self._registry:
             self._registry.add(self.team_model)
 
-        post_migrate.connect(post_migration_rbac_setup, sender=app_config)
+        post_migrate.connect(triggers.post_migration_rbac_setup, sender=app_config)
 
         self.user_model.add_to_class('has_obj_perm', bound_has_obj_perm)
         self.user_model.add_to_class('singleton_permissions', bound_singleton_permissions)
+        post_delete.connect(triggers.rbac_post_user_delete, sender=self.user_model, dispatch_uid='permission-registry-user-delete')
 
         for cls in self._registry:
-            connect_rbac_signals(cls)
+            triggers.connect_rbac_signals(cls)
             connect_rbac_methods(cls)
 
         for cls, relationship, role_name in self._tracked_relationships:
             if role_name in self._trackers:
                 tracker = self._trackers[role_name]
             else:
-                tracker = TrackedRelationship(cls, role_name)
+                tracker = triggers.TrackedRelationship(cls, role_name)
                 self._trackers[role_name] = tracker
             tracker.initialize(relationship)
 
