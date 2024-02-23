@@ -22,14 +22,10 @@ class User(AbstractUser, CommonModel):
     def summary_fields(self):
         return user_summary_fields(self)
 
-    singleton_roles = models.ManyToManyField('dab_rbac.RoleDefinition', related_name='singleton_users', blank=True)
-
 
 class Team(AbstractTeam):
     tracked_users = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name='tracked_teams', blank=True)
     team_parents = models.ManyToManyField('Team', related_name='team_children', blank=True)
-
-    singleton_roles = models.ManyToManyField('dab_rbac.RoleDefinition', related_name='singleton_teams', blank=True)
 
     encryptioner = models.ForeignKey('test_app.EncryptionModel', on_delete=models.SET_NULL, null=True)
 

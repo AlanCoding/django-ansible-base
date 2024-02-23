@@ -3,7 +3,7 @@ import re
 from django.conf import settings
 
 from ansible_base.rbac import permission_registry
-from ansible_base.rbac.models import ObjectRole, get_evaluation_model
+from ansible_base.rbac.models import ObjectRole, RoleDefinition, get_evaluation_model
 
 '''
 RoleEvaluation or RoleEvaluationUUID models are the authority for permission evaluations,
@@ -105,23 +105,15 @@ def bound_singleton_permissions(self) -> set[str]:
     if hasattr(self, '_singleton_permissions'):
         return self._singleton_permissions
     perm_set = set()
-    if settings.ANSIBLE_BASE_SINGLETON_USER_RELATIONSHIP:
-        field = permission_registry.user_model._meta.get_field(settings.ANSIBLE_BASE_SINGLETON_USER_RELATIONSHIP)
-        reverse_name = field.remote_field.name
-        perm_set.update(
-            set(permission_registry.permission_model.objects.filter(**{f'roledefinition__{reverse_name}': self}).values_list('codename', flat=True))
-        )
-    if settings.ANSIBLE_BASE_SINGLETON_TEAM_RELATIONSHIP:
-        field = permission_registry.team_model._meta.get_field(settings.ANSIBLE_BASE_SINGLETON_TEAM_RELATIONSHIP)
-        reverse_name = field.remote_field.name
-        all_user_teams_qs = permission_registry.team_model.objects.filter(member_roles__in=ObjectRole.objects.filter(users=self))
-        perm_set.update(
-            set(
-                permission_registry.permission_model.objects.filter(**{f'roledefinition__{reverse_name}__in': all_user_teams_qs}).values_list(
-                    'codename', flat=True
-                )
-            )
-        )
+    if settings.ANSIBLE_BASE_ALLOW_SINGLETON_USER_ROLES:
+        rd_qs = RoleDefinition.objects.filter(user_assignments__user=self, content_type=None)
+        perm_qs = permission_registry.permission_model.objects.filter(role_definitions__in=rd_qs)
+        perm_set.update(perm_qs.values_list('codename', flat=True))
+    if settings.ANSIBLE_BASE_ALLOW_SINGLETON_TEAM_ROLES:
+        user_teams_qs = permission_registry.team_model.objects.filter(member_roles__in=ObjectRole.objects.filter(users=self))
+        rd_qs = RoleDefinition.objects.filter(team_assignments__team__in=user_teams_qs, content_type=None)
+        perm_qs = permission_registry.permission_model.objects.filter(role_definitions__in=rd_qs)
+        perm_set.update(perm_qs.values_list('codename', flat=True))
     return perm_set
 
 

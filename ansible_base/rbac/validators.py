@@ -7,12 +7,15 @@ from ansible_base.rbac.permission_registry import permission_registry
 
 
 def system_roles_enabled():
-    return bool(settings.ANSIBLE_BASE_SINGLETON_USER_RELATIONSHIP or settings.ANSIBLE_BASE_SINGLETON_TEAM_RELATIONSHIP)
+    return bool(settings.ANSIBLE_BASE_ALLOW_SINGLETON_USER_ROLES or settings.ANSIBLE_BASE_ALLOW_SINGLETON_TEAM_ROLES)
 
 
 def validate_permissions_for_model(permissions, content_type):
-    if content_type is None and not system_roles_enabled():
-        raise ValidationError('System-wide roles are not enabled')
+    if content_type is None:
+        if not system_roles_enabled():
+            raise ValidationError('System-wide roles are not enabled')
+        if permission_registry.team_permission in permissions:
+            raise ValidationError(f'The {permission_registry.team_permission} permission can not be used in global roles')
 
     # organize permissions by what model they should apply to
     # the "add" permission applies to the parent model of a permission

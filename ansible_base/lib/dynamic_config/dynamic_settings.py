@@ -133,9 +133,9 @@ if 'ansible_base.rbac' in INSTALLED_APPS:
     # Allow using a custom permission model
     ANSIBLE_BASE_PERMISSION_MODEL = 'auth.Permission'
 
-    # Allows managing singleton permissions with a user-defined relationship
-    ANSIBLE_BASE_SINGLETON_USER_RELATIONSHIP = ''
-    ANSIBLE_BASE_SINGLETON_TEAM_RELATIONSHIP = ''
+    # Allows managing singleton permissions
+    ANSIBLE_BASE_ALLOW_SINGLETON_USER_ROLES = False
+    ANSIBLE_BASE_ALLOW_SINGLETON_TEAM_ROLES = False
 
     ANSIBLE_BASE_CACHE_PARENT_PERMISSIONS = False
 
