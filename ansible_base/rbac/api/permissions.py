@@ -1,8 +1,14 @@
+import logging
+
 from django.http import Http404
+from django.db.models import Model
 from rest_framework.permissions import SAFE_METHODS, BasePermission, DjangoObjectPermissions
 
 from ansible_base.rbac import permission_registry
 from ansible_base.rbac.evaluations import has_super_permission
+
+
+logger = logging.getLogger('ansible_base.rbac.api.permissions')
 
 
 class IsSystemAdminOrAuditor(BasePermission):
@@ -75,7 +81,10 @@ class AnsibleBaseObjectPermissions(DjangoObjectPermissions):
         return [p for p in perms if 'add_' not in p]
 
     def has_object_permission(self, request, view, obj):
-        "Original version of this comes from DjangoModelPermissions, overridden to use has_obj_perm"
+        if not isinstance(obj, Model):
+            logger.info(f'Object-permission check called with non-object {type(obj)} for {request.method}')
+            return True  # for the DRF browsable API, showing PATCH form field
+
         queryset = self._queryset(view)
         model_cls = queryset.model
         user = request.user
