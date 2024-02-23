@@ -64,7 +64,7 @@ def has_super_permission(user, codename='change'):
 class AccessibleObjectsDescriptor(BaseEvaluationDescriptor):
     def __call__(self, user, codename='view', **kwargs):
         full_codename = validate_codename_for_model(codename, self.cls)
-        if has_super_permission(user, codename):
+        if has_super_permission(user, codename) or (full_codename in user.singleton_permissions()):
             return self.cls.objects.all()
         return get_evaluation_model(self.cls).accessible_objects(self.cls, user, full_codename, **kwargs)
 
@@ -79,9 +79,7 @@ class AccessibleIdsDescriptor(BaseEvaluationDescriptor):
 
 def bound_has_obj_perm(self, obj, codename):
     full_codename = validate_codename_for_model(codename, obj)
-    if has_super_permission(self, codename):
-        return True
-    if full_codename in self.singleton_permissions():
+    if has_super_permission(self, codename) or (full_codename in self.singleton_permissions()):
         return True
     return get_evaluation_model(obj).has_obj_perm(self, obj, full_codename)
 
