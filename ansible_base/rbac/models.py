@@ -281,6 +281,11 @@ class RoleUserAssignment(AssignmentBase):
     def __repr__(self):
         return f'RoleUserAssignment(pk={self.id})'
 
+    @property
+    def actor(self):
+        "Really simple helper to give same behavior between user and role assignments"
+        return self.user
+
 
 class RoleTeamAssignment(AssignmentBase):
     role_definition = models.ForeignKey(
@@ -298,6 +303,11 @@ class RoleTeamAssignment(AssignmentBase):
 
     def __repr__(self):
         return f'RoleTeamAssignment(pk={self.id})'
+
+    @property
+    def actor(self):
+        "Really simple helper to give same behavior between user and role assignments"
+        return self.team
 
 
 class ObjectRole(ObjectRoleFields):

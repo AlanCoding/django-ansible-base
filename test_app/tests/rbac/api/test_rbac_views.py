@@ -54,3 +54,23 @@ def test_make_user_assignment(admin_api_client, inv_rd, rando, inventory):
     response = admin_api_client.post(url, data=data, format="json")
     assert response.status_code == 201, response.data
     assert response.data['created_by']
+
+
+@pytest.mark.django_db
+def test_remove_user_assignment(admin_api_client, inv_rd, rando, inventory):
+    assignment = inv_rd.give_permission(rando, inventory)
+    url = reverse('roleuserassignment-detail', kwargs={'pk': assignment.pk})
+    response = admin_api_client.delete(url)
+    assert response.status_code == 204, response.data
+
+    assert not type(assignment).objects.filter(pk=assignment.pk).exists()
+
+
+@pytest.mark.django_db
+def test_remove_team_assignment(admin_api_client, inv_rd, team, inventory):
+    assignment = inv_rd.give_permission(team, inventory)
+    url = reverse('roleteamassignment-detail', kwargs={'pk': assignment.pk})
+    response = admin_api_client.delete(url)
+    assert response.status_code == 204, response.data
+
+    assert not type(assignment).objects.filter(pk=assignment.pk).exists()

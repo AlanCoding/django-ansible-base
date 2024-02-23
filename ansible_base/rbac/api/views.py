@@ -66,7 +66,7 @@ class BaseAssignmentViewSet(ModelViewSet, AnsibleBaseDjangoAppApiView):
         rd = instance.object_role.role_definition
         obj = instance.object_role.content_object
         with transaction.atomic():
-            rd.remove_permission(instance.user, obj)
+            rd.remove_permission(instance.actor, obj)
 
 
 class RoleTeamAssignmentViewSet(BaseAssignmentViewSet):
