@@ -8,6 +8,7 @@ from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.db import connection, models
+from django.db.models.functions import Cast
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
@@ -206,7 +207,11 @@ class ObjectRoleFields(models.Model):
             role__in=user.has_roles.all(),
             content_type_id=models.OuterRef('content_type_id'),
         )
-        return cls.objects.filter(object_id__in=permission_qs.values('object_id'))
+        # NOTE: type casting is necessary in postgres but not sqlite3
+        object_id_field = cls._meta.get_field('object_id')
+        return cls.objects.filter(object_id__in=permission_qs.values_list(
+            Cast('object_id', output_field=object_id_field)
+        ))
 
     @classmethod
     def visible_items(cls, user):
