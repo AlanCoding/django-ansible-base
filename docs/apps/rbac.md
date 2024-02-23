@@ -300,22 +300,21 @@ will produce nothing for the superuser if they have not been assigned any roles.
 
 ### Global Roles
 
-Global roles have very important implementation differences compared to object roles,
-and are not enabled by default. You must declare a ManyToMany relationship that exists
-in your user and/or team model to be able to give a role globally.
+Global roles have very important implementation differences compared to object roles.
+They must be enabled using these settings for users and/or teams.
 
 ```
-ANSIBLE_BASE_SINGLETON_USER_RELATIONSHIP = 'global_roles'
-ANSIBLE_BASE_SINGLETON_TEAM_RELATIONSHIP = 'global_roles'
+ANSIBLE_BASE_ALLOW_SINGLETON_USER_ROLES = True
+ANSIBLE_BASE_ALLOW_SINGLETON_TEAM_ROLES = True
 ```
 
-With this, you could call `user.global_roles.add(rd)` or `team.global_roles.add(rd)`
-for that user or team to get the global permission offered by the role definition.
-The `rd.give_global_permission(user)` does the same thing but also clears cached values.
+With this, you can use the `give_global_permission` methods to assign a role globally.
+This means the user or team receiving this permission will have the role's permissions
+for all objects in the system.
 
-You can view a user's global permissions from `user.singleton_roles()`.
-Global roles will affect the outcome of `user.has_obj_perm` and `MyModel.access_qs` calls.
-This is similar to configuring the user flags bypass.
+Global roles are not cached in the `RoleEvaluation` table.
+This means that if you're creating a display of users who have access to an object,
+global roles require special consideration.
 
 ### Tracked Relationships
 

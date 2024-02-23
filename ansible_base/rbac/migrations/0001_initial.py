@@ -23,7 +23,7 @@ class Migration(migrations.Migration):
                 ('name', models.TextField(db_index=True, unique=True)),
                 ('description', models.TextField(blank=True)),
                 ('managed', models.BooleanField(default=False, editable=False)),
-                ('permissions', models.ManyToManyField(to=settings.ANSIBLE_BASE_PERMISSION_MODEL)),
+                ('permissions', models.ManyToManyField(related_name='role_definitions', to=settings.ANSIBLE_BASE_PERMISSION_MODEL)),
                 ('content_type', models.ForeignKey(
                     default=None,
                     help_text='Type of resource this can apply to, only used for validation and user assistance',
@@ -61,8 +61,11 @@ class Migration(migrations.Migration):
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('created_on', models.DateTimeField(default=django.utils.timezone.now, editable=False, help_text='The date/time this resource was created')),
-                ('content_type', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='contenttypes.contenttype')),
-                ('object_id', models.TextField(null=False)),
+                ('content_type', models.ForeignKey(null=True, on_delete=django.db.models.deletion.CASCADE, to='contenttypes.contenttype')),
+                ('object_id', models.TextField(
+                    blank=True,
+                    help_text='Primary key of the object this assignment applies to, null value indicates system-wide assignment',
+                    null=True)),
                 ('role_definition', models.ForeignKey(
                     help_text='The role definition which defines permissions conveyed by this assignment', on_delete=django.db.models.deletion.CASCADE,
                     related_name='team_assignments', to='dab_rbac.roledefinition')),
@@ -94,8 +97,11 @@ class Migration(migrations.Migration):
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('created_on', models.DateTimeField(default=django.utils.timezone.now, editable=False, help_text='The date/time this resource was created')),
-                ('content_type', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='contenttypes.contenttype')),
-                ('object_id', models.TextField(null=False)),
+                ('content_type', models.ForeignKey(null=True, on_delete=django.db.models.deletion.CASCADE, to='contenttypes.contenttype')),
+                ('object_id', models.TextField(
+                    blank=True,
+                    help_text='Primary key of the object this assignment applies to, null value indicates system-wide assignment',
+                    null=True)),
                 ('role_definition', models.ForeignKey(
                     help_text='The role definition which defines permissions conveyed by this assignment', on_delete=django.db.models.deletion.CASCADE,
                     related_name='user_assignments', to='dab_rbac.roledefinition')),
@@ -143,12 +149,12 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='roleuserassignment',
             name='object_role',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='dab_rbac.objectrole', editable=False),
+            field=models.ForeignKey(editable=False, null=True, on_delete=django.db.models.deletion.CASCADE, to='dab_rbac.objectrole'),
         ),
         migrations.AddField(
             model_name='roleteamassignment',
             name='object_role',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='dab_rbac.objectrole', editable=False),
+            field=models.ForeignKey(editable=False, null=True, on_delete=django.db.models.deletion.CASCADE, to='dab_rbac.objectrole'),
         ),
         migrations.AddField(
             model_name='objectrole',

@@ -38,7 +38,7 @@ def test_creator_permissions_for_superuser(inventory):
 @pytest.mark.django_db
 def test_no_creator_assignment_with_system_perms(rando, inventory):
     rd = RoleDefinition.objects.create_from_permissions(name='global-inventory-admin', permissions=INVENTORY_OBJ_PERMS)
-    rando.singleton_roles.add(rd)
+    rd.give_global_permission(rando)
     RoleDefinition.objects.give_creator_permissions(rando, inventory)
     assert not rando.has_roles.exists()
 

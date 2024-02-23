@@ -43,14 +43,4 @@ class Migration(migrations.Migration):
             code=create_test_data,
             reverse_code=migrations.RunPython.noop
         ),
-        migrations.AddField(
-            model_name='team',
-            name='singleton_roles',
-            field=models.ManyToManyField(blank=True, related_name='singleton_teams', to='dab_rbac.roledefinition'),
-        ),
-        migrations.AddField(
-            model_name='user',
-            name='singleton_roles',
-            field=models.ManyToManyField(blank=True, related_name='singleton_users', to='dab_rbac.roledefinition'),
-        ),
     ]

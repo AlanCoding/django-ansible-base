@@ -153,7 +153,7 @@ class BaseAssignmentSerializer(CommonModelSerializer):
 
     def create(self, validated_data):
         rd = validated_data['role_definition']
-        model = rd.content_type.model_class()
+        requesting_user = self.context['view'].request.user
 
         # Resolve actor - team or user
         actor_aid_field = f'{self.actor_field}_ansible_id'
@@ -170,27 +170,36 @@ class BaseAssignmentSerializer(CommonModelSerializer):
         else:
             raise ValidationError(self.id_fields_error)
 
-        # Resolve content object
-        obj = model.objects.get(pk=validated_data['object_id'])
+        if rd.content_type:
+            # Object role assignment, resolve object
+            model = rd.content_type.model_class()
+            obj = model.objects.get(pk=validated_data['object_id'])
 
-        # validate user has permission
-        requesting_user = self.context['view'].request.user
-        if not requesting_user.has_obj_perm(obj, 'change'):
-            raise PermissionDenied
+            # validate user has permission
+            if not requesting_user.has_obj_perm(obj, 'change'):
+                raise PermissionDenied
 
-        try:
+            try:
+                with transaction.atomic():
+                    assignment = rd.give_permission(actor, obj)
+            except IntegrityError:
+                assignment = self.Meta.model.objects.get(role_definition=rd, object_id=obj.pk, **{self.actor_field: actor})
+        else:
+            # Global role assignment, only allowed by superuser
+            if not requesting_user.is_superuser:
+                raise PermissionDenied
+
             with transaction.atomic():
-                assignment = rd.give_permission(actor, obj)
-        except IntegrityError:
-            assignment = self.Meta.model.objects.get(role_definition=rd, object_id=obj.pk, **{self.actor_field: actor})
+                assignment = rd.give_global_permission(actor)
 
         return assignment
 
     def _get_related(self, obj):
         related = super()._get_related(obj)
         content_obj = obj.content_object
-        if related_url := get_url_for_object(content_obj):
-            related['content_object'] = related_url
+        if content_obj:
+            if related_url := get_url_for_object(content_obj):
+                related['content_object'] = related_url
         return related
 
     def _get_summary_fields(self, obj):

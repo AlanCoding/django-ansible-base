@@ -86,7 +86,7 @@ class RoleDefinition(CommonModel):
     name = models.TextField(db_index=True, unique=True)
     description = models.TextField(blank=True)
     managed = models.BooleanField(default=False, editable=False)  # pulp definition of Role uses locked
-    permissions = models.ManyToManyField(settings.ANSIBLE_BASE_PERMISSION_MODEL)
+    permissions = models.ManyToManyField(settings.ANSIBLE_BASE_PERMISSION_MODEL, related_name='role_definitions')
     content_type = models.ForeignKey(
         ContentType,
         help_text=_('Type of resource this can apply to, only used for validation and user assistance'),
@@ -112,26 +112,34 @@ class RoleDefinition(CommonModel):
         return self.give_or_remove_global_permission(actor, giving=False)
 
     def give_or_remove_global_permission(self, actor, giving=True):
+        if self.content_type is not None:
+            raise RuntimeError('Role definition content type must be null to assign globally')
+
         if actor._meta.model_name == 'user':
-            rel = settings.ANSIBLE_BASE_SINGLETON_USER_RELATIONSHIP
-            if not rel:
-                raise RuntimeError('No global role relationship configured for users')
+            if not settings.ANSIBLE_BASE_ALLOW_SINGLETON_USER_ROLES:
+                raise RuntimeError('Singleton roles not enabled for users')
+            kwargs = dict(object_role=None, user=actor, role_definition=self)
+            cls = RoleUserAssignment
         elif isinstance(actor, permission_registry.team_model):
-            rel = settings.ANSIBLE_BASE_SINGLETON_TEAM_RELATIONSHIP
-            if not rel:
-                raise RuntimeError('No global role relationship configured for users')
+            if not settings.ANSIBLE_BASE_ALLOW_SINGLETON_TEAM_ROLES:
+                raise RuntimeError('Singleton roles not enabled for teams')
+            kwargs = dict(object_role=None, team=actor, role_definition=self)
+            cls = RoleTeamAssignment
         else:
             raise RuntimeError(f'Cannot give permission to {actor}, must be a user or team')
 
-        manager = getattr(actor, rel)
         if giving:
-            manager.add(self)
+            assignment, _ = cls.objects.get_or_create(**kwargs)
         else:
-            manager.remove(self)
+            assignment = cls.objects.filter(**kwargs).first()
+            if assignment:
+                assignment.delete()
 
         # Clear any cached permissions, if applicable
         if hasattr(actor, '_singleton_permissions'):
             delattr(actor, '_singleton_permissions')
+
+        return assignment
 
     def give_permission(self, actor, content_object):
         return self.give_or_remove_permission(actor, content_object, giving=True)
@@ -230,7 +238,11 @@ class AssignmentBase(CommonModel, ObjectRoleFields):
     both models are immutable, making caching easy.
     """
 
-    object_role = models.ForeignKey('dab_rbac.ObjectRole', on_delete=models.CASCADE, editable=False)
+    object_role = models.ForeignKey('dab_rbac.ObjectRole', on_delete=models.CASCADE, editable=False, null=True)
+    object_id = models.TextField(
+        null=True, blank=True, help_text=_('Primary key of the object this assignment applies to, null value indicates system-wide assignment')
+    )
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE, null=True)
     modified_on = None
     created_on = models.DateTimeField(
         default=timezone.now,  # Needed to work in migrations as a through field, which CommonModel can not do
