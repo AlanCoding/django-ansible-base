@@ -1,12 +1,11 @@
 import logging
 
-from django.http import Http404
 from django.db.models import Model
+from django.http import Http404
 from rest_framework.permissions import SAFE_METHODS, BasePermission, DjangoObjectPermissions
 
 from ansible_base.rbac import permission_registry
 from ansible_base.rbac.evaluations import has_super_permission
-
 
 logger = logging.getLogger('ansible_base.rbac.api.permissions')
 

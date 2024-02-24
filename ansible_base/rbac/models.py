@@ -209,9 +209,7 @@ class ObjectRoleFields(models.Model):
         )
         # NOTE: type casting is necessary in postgres but not sqlite3
         object_id_field = cls._meta.get_field('object_id')
-        return cls.objects.filter(object_id__in=permission_qs.values_list(
-            Cast('object_id', output_field=object_id_field)
-        ))
+        return cls.objects.filter(object_id__in=permission_qs.values_list(Cast('object_id', output_field=object_id_field)))
 
     @classmethod
     def visible_items(cls, user):
