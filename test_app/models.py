@@ -121,6 +121,12 @@ class UUIDModel(models.Model):
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE)
 
 
+class PositionModel(models.Model):
+    "Uses a primary key other than id to test that everything still works"
+    position = models.BigIntegerField(primary_key=True)
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE)
+
+
 class TestPermission(models.Model):
     "Used for testing using a custom permission, only used in special cases"
     name = models.CharField("name", max_length=255)
@@ -132,7 +138,7 @@ class TestPermission(models.Model):
         unique_together = [["content_type", "codename"]]
 
 
-permission_registry.register(Organization, Inventory, Namespace, Team, Cow, UUIDModel)
+permission_registry.register(Organization, Inventory, Namespace, Team, Cow, UUIDModel, PositionModel)
 permission_registry.register(CollectionImport, parent_field_name='namespace')
 permission_registry.register(InstanceGroup, parent_field_name=None)
 

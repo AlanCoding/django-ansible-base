@@ -143,7 +143,7 @@ class RoleDefinition(CommonModel):
         "Shortcut method to do whatever needed to give user or team these permissions"
         obj_ct = ContentType.objects.get_for_model(content_object)
         # sanitize the object_id to its database version, practically, remove "-" chars from uuids
-        object_id = content_object._meta.pk.get_db_prep_value(content_object.id, connection)
+        object_id = content_object._meta.pk.get_db_prep_value(content_object.pk, connection)
         kwargs = dict(role_definition=self, content_type=obj_ct, object_id=object_id)
 
         created = False
@@ -544,7 +544,7 @@ class RoleEvaluationFields(models.Model):
         method on permission classes, but it is named differently to avoid unintentionally conflicting
         """
         return cls.objects.filter(
-            role__in=user.has_roles.all(), content_type_id=ContentType.objects.get_for_model(obj).id, object_id=obj.id, codename=codename
+            role__in=user.has_roles.all(), content_type_id=ContentType.objects.get_for_model(obj).id, object_id=obj.pk, codename=codename
         ).exists()
 
 

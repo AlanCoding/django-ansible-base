@@ -193,4 +193,11 @@ class Migration(migrations.Migration):
                 'unique_together': {('content_type', 'codename')},
             },
         ),
+        migrations.CreateModel(
+            name='PositionModel',
+            fields=[
+                ('position', models.BigIntegerField(primary_key=True, serialize=False)),
+                ('organization', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='test_app.organization')),
+            ],
+        ),
     ]

@@ -151,7 +151,7 @@ class BaseAssignmentSerializer(CommonModelSerializer):
     def create(self, validated_data):
         rd = validated_data['role_definition']
         model = rd.content_type.model_class()
-        obj = model.objects.get(id=validated_data['object_id'])
+        obj = model.objects.get(pk=validated_data['object_id'])
 
         # validate user has permission
         actor = validated_data[self.actor_field]
