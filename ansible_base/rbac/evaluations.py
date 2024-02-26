@@ -49,9 +49,7 @@ def validate_codename_for_model(codename: str, model) -> str:
     for rel, child_cls in permission_registry.get_child_models(model):
         if name in codenames_for_cls(child_cls):
             return name
-    else:
-        raise RuntimeError(f'The permission {name} is not valid for model {model._meta.model_name}')
-    return name
+    raise RuntimeError(f'The permission {name} is not valid for model {model._meta.model_name}')
 
 
 class BaseEvaluationDescriptor:
@@ -65,7 +63,7 @@ class BaseEvaluationDescriptor:
         self.cls = cls
 
 
-def has_super_permission(user, codename='change'):
+def has_super_permission(user, codename='change') -> bool:
     if user._meta.model_name != permission_registry.user_model._meta.model_name:
         if user._meta.model_name == permission_registry.team_model._meta.model_name:
             return False  # Super permission flags only exist for users, teams can use global roles
@@ -96,14 +94,14 @@ class AccessibleIdsDescriptor(BaseEvaluationDescriptor):
         return get_evaluation_model(self.cls).accessible_ids(self.cls, user, full_codename, **kwargs)
 
 
-def bound_has_obj_perm(self, obj, codename):
+def bound_has_obj_perm(self, obj, codename) -> bool:
     full_codename = validate_codename_for_model(codename, obj)
     if has_super_permission(self, codename) or (full_codename in self.singleton_permissions()):
         return True
     return get_evaluation_model(obj).has_obj_perm(self, obj, full_codename)
 
 
-def bound_singleton_permissions(self):
+def bound_singleton_permissions(self) -> set[str]:
     if hasattr(self, '_singleton_permissions'):
         return self._singleton_permissions
     perm_set = set()

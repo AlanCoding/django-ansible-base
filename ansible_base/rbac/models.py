@@ -547,7 +547,7 @@ class RoleEvaluationFields(models.Model):
         )
 
     @classmethod
-    def has_obj_perm(cls, user, obj, codename):
+    def has_obj_perm(cls, user, obj, codename) -> bool:
         """
         Note this behaves similar in function to the REST Framework has_object_permission
         method on permission classes, but it is named differently to avoid unintentionally conflicting
