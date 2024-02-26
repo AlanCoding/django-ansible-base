@@ -41,10 +41,15 @@ def validate_codename_for_model(codename: str, model) -> str:
             name = codename.split('.')[-1]
         else:
             name = codename
-    if name.startswith('add'):
-        if model._meta.model_name != 'organization':
-            raise RuntimeError(f'Add permissions only valid for organization, received for {model._meta.model_name}')
-    elif name not in valid_codenames:
+    if name in valid_codenames:
+        if name.startswith('add'):
+            raise RuntimeError(f'Add permissions only valid for parent models, received for {model._meta.model_name}')
+        return name
+
+    for rel, child_cls in permission_registry.get_child_models(model):
+        if name in codenames_for_cls(child_cls):
+            return name
+    else:
         raise RuntimeError(f'The permission {name} is not valid for model {model._meta.model_name}')
     return name
 
@@ -87,7 +92,7 @@ class AccessibleIdsDescriptor(BaseEvaluationDescriptor):
     def __call__(self, user, codename, **kwargs):
         full_codename = validate_codename_for_model(codename, self.cls)
         if has_super_permission(user, codename):
-            return self.cls.objects.values_list('id', flat=True)  # hopefully we never need this...
+            return self.cls.objects.values_list('id', flat=True)
         return get_evaluation_model(self.cls).accessible_ids(self.cls, user, full_codename, **kwargs)
 
 

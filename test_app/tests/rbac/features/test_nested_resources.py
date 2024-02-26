@@ -27,10 +27,32 @@ def test_parent_resource_utils():
 
 
 @pytest.mark.django_db
-def test_grandparent_assignment(rando, organization, collection):
+def test_grandparent_assignment(rando, organization, namespace, collection):
     rd, _ = RoleDefinition.objects.get_or_create(
         permissions=['change_collectionimport', 'delete_collectionimport', 'add_collectionimport', 'view_collectionimport', 'view_namespace'],
         name='collection-manager',
+        content_type=permission_registry.content_type_model.objects.get_for_model(organization),
     )
     rd.give_permission(rando, organization)
     assert rando.has_obj_perm(collection, 'change_collectionimport')
+
+    assert rando.has_obj_perm(namespace, 'add_collectionimport')
+    assert rando.has_obj_perm(organization, 'add_collectionimport')
+
+    assert set(Organization.access_qs(rando, 'add_collectionimport')) == set([organization])
+
+
+@pytest.mark.django_db
+def test_parent_assignment(rando, organization, namespace, collection):
+    rd, _ = RoleDefinition.objects.get_or_create(
+        permissions=['change_collectionimport', 'delete_collectionimport', 'add_collectionimport', 'view_collectionimport', 'view_namespace'],
+        name='collection-manager',
+        content_type=permission_registry.content_type_model.objects.get_for_model(namespace),
+    )
+    rd.give_permission(rando, namespace)
+    assert rando.has_obj_perm(collection, 'change_collectionimport')
+
+    assert rando.has_obj_perm(namespace, 'add_collectionimport')
+    assert not rando.has_obj_perm(organization, 'add_collectionimport')
+
+    assert set(Namespace.access_qs(rando, 'add_collectionimport')) == set([namespace])

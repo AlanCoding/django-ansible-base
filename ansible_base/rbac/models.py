@@ -384,45 +384,54 @@ class ObjectRole(ObjectRoleFields):
         if not types_prefetch:
             types_prefetch = TypesPrefetch()
         role_content_type = types_prefetch.get_content_type(self.content_type_id)
+        # ObjectRole.object_id is stored as text, we convert it to the model pk native type
+        object_id = role_content_type.model_class()._meta.pk.to_python(self.object_id)
         for permission in types_prefetch.permissions_for_object_role(self):
             permission_content_type = types_prefetch.get_content_type(permission.content_type_id)
 
-            if permission.content_type_id == self.content_type_id:  # direct object permission
-                model = permission_content_type.model_class()
-                # ObjectRole.object_id is stored as text, we convert it to the model pk native type
-                object_id = model._meta.pk.to_python(self.object_id)
+            # direct object permission
+            if permission.content_type_id == self.content_type_id:
                 expected_evaluations.add((permission.codename, self.content_type_id, object_id))
-            elif permission.codename.startswith('add'):
-                model = permission_content_type.model_class()
-                role_child_models = set(cls for filter_path, cls in permission_registry.get_child_models(role_content_type.model))
-                if model not in role_child_models:
-                    # NOTE: this should also be validated when creating a role definition
-                    logger.warning(f'{self} lists {permission.codename} for an object that is not a child object')
-                    continue
-                object_id = role_content_type.model_class()._meta.pk.to_python(self.object_id)
-                expected_evaluations.add((permission.codename, self.content_type_id, object_id))
-            else:  # child object permission
-                id_list = []
-                object_id = role_content_type.model_class()._meta.pk.to_python(self.object_id)
-                # fetching child objects of an organization is very performance sensitive
-                # for multiple permissions of same type, make sure to only do query once
-                if permission.content_type_id in cached_id_lists:
-                    id_list = cached_id_lists[permission.content_type_id]
-                else:
-                    # model must be in same app as organization
-                    for filter_path, model in permission_registry.get_child_models(role_content_type.model):
-                        if model._meta.model_name == permission_content_type.model:
-                            id_list = model.objects.filter(**{filter_path: object_id}).values_list('pk', flat=True)
-                            cached_id_lists[permission.content_type_id] = list(id_list)
-                            break
-                    else:
-                        logger.warning(f'{self.role_definition} listed {permission.codename} but model is not a child, ignoring')
-                        continue
+                continue
 
-                for id in id_list:
-                    expected_evaluations.add((permission.codename, permission.content_type_id, id))
-                if settings.ANSIBLE_BASE_CACHE_PARENT_PERMISSIONS:
-                    expected_evaluations.add((permission.codename, self.content_type_id, object_id))
+            # add child permission on the parent object, usually only for add permission
+            if permission.codename.startswith('add') or settings.ANSIBLE_BASE_CACHE_PARENT_PERMISSIONS:
+                expected_evaluations.add((permission.codename, self.content_type_id, object_id))
+
+            # add child object permission on child objects
+            # Only propogate add permission to children which are parents of the permission model
+            filter_path = None
+            child_model = None
+            if permission.codename.startswith('add'):
+                for path, model in permission_registry.get_child_models(role_content_type.model):
+                    if '__' in path and model._meta.model_name == permission_content_type.model:
+                        path_to_parent, filter_path = path.split('__', 1)
+                        child_model = permission_content_type.model_class()._meta.get_field(path_to_parent).related_model
+                        eval_ct = ContentType.objects.get_for_model(child_model).id
+                if not child_model:
+                    continue
+            else:
+                for path, model in permission_registry.get_child_models(role_content_type.model):
+                    if model._meta.model_name == permission_content_type.model:
+                        filter_path = path
+                        child_model = model
+                        eval_ct = permission.content_type_id
+                        break
+                else:
+                    logger.warning(f'{self.role_definition} listed {permission.codename} but model is not a child, ignoring')
+                    continue
+
+            # fetching child objects of an organization is very performance sensitive
+            # for multiple permissions of same type, make sure to only do query once
+            id_list = []
+            if eval_ct in cached_id_lists:
+                id_list = cached_id_lists[eval_ct]
+            else:
+                id_list = child_model.objects.filter(**{filter_path: object_id}).values_list('pk', flat=True)
+                cached_id_lists[eval_ct] = list(id_list)
+
+            for id in id_list:
+                expected_evaluations.add((permission.codename, eval_ct, id))
         return expected_evaluations
 
     def needed_cache_updates(self, types_prefetch=None):
