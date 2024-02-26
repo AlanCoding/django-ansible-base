@@ -6,9 +6,11 @@ from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.fields import flatten_choices_dict, to_choices_dict
+from rest_framework.serializers import ValidationError
 
 from ansible_base.lib.abstract_models.common import get_url_for_object
 from ansible_base.lib.serializers.common import CommonModelSerializer
+from ansible_base.lib.utils.validation import ansible_id_validator
 from ansible_base.rbac.models import RoleDefinition, RoleTeamAssignment, RoleUserAssignment
 from ansible_base.rbac.permission_registry import permission_registry  # careful for circular imports
 from ansible_base.rbac.validators import validate_permissions_for_model
@@ -148,13 +150,43 @@ class RoleDefinitionDetailSeraizler(RoleDefinitionSerializer):
 class BaseAssignmentSerializer(CommonModelSerializer):
     content_type = ContentTypeField(read_only=True)
 
+    def get_fields(self):
+        """
+        We want to allow ansible_id override of user and team fields
+        but want to keep the non-null database constraint, which leads to this solution
+        """
+        fields = dict(super().get_fields())
+        fields[self.actor_field].required = False
+        return fields
+
+    @property
+    def id_fields_error(self):
+        msg = _(f'Provide exactly one of {self.actor_field} or {self.actor_field}_ansible_id')
+        return {self.actor_field: msg, f'{self.actor_field}_ansible_id': msg}
+
     def create(self, validated_data):
         rd = validated_data['role_definition']
         model = rd.content_type.model_class()
+
+        # Resolve actor - team or user
+        actor_aid_field = f'{self.actor_field}_ansible_id'
+        if validated_data.get(self.actor_field) and validated_data.get(actor_aid_field):
+            raise ValidationError(self.id_fields_error)
+
+        if validated_data.get(self.actor_field):
+            actor = validated_data[self.actor_field]
+        elif ansible_id := validated_data.pop(actor_aid_field):
+            from ansible_base.resource_registry.models import Resource
+
+            resource = Resource.objects.get(resource_id=ansible_id.split(':')[-1])
+            actor = resource.content_object
+        else:
+            raise ValidationError(self.id_fields_error)
+
+        # Resolve content object
         obj = model.objects.get(pk=validated_data['object_id'])
 
         # validate user has permission
-        actor = validated_data[self.actor_field]
         requesting_user = self.context['view'].request.user
         if not requesting_user.has_obj_perm(obj, 'change'):
             raise PermissionDenied
@@ -184,6 +216,7 @@ class BaseAssignmentSerializer(CommonModelSerializer):
 
 class RoleUserAssignmentSerializer(BaseAssignmentSerializer):
     actor_field = 'user'
+    user_ansible_id = serializers.CharField(validators=[ansible_id_validator], required=False)
 
     class Meta:
         model = RoleUserAssignment
@@ -192,6 +225,7 @@ class RoleUserAssignmentSerializer(BaseAssignmentSerializer):
 
 class RoleTeamAssignmentSerializer(BaseAssignmentSerializer):
     actor_field = 'team'
+    team_ansible_id = serializers.CharField(validators=[ansible_id_validator], required=False)
 
     class Meta:
         model = RoleTeamAssignment
