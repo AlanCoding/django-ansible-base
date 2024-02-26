@@ -1,3 +1,5 @@
+import re
+
 from django.conf import settings
 
 from ansible_base.rbac import permission_registry
@@ -16,8 +18,21 @@ models in an app using these RBAC internals.
 '''
 
 
-def validate_codename_for_model(codename, model):
-    if '_' not in codename:
+def codenames_for_cls(cls) -> list[str]:
+    return set([t[0] for t in cls._meta.permissions]) | set(f'{act}_{cls._meta.model_name}' for act in cls._meta.default_permissions)
+
+
+def validate_codename_for_model(codename: str, model) -> str:
+    """
+    This institutes a shortcut for easier use of the evaluation methods
+    so that user.has_obj_perm(obj, 'change') is the same as user.has_obj_perm(obj, 'change_inventory')
+    assuming obj is an inventory.
+    It also tries to protect the user by throwing an error if the permission does not work.
+    """
+    valid_codenames = codenames_for_cls(model)
+    if (not codename.startswith('add')) and codename in valid_codenames:
+        return codename
+    if re.match(r'^[a-z]+$', codename):
         # convience to call JobTemplate.accessible_objects(u, 'execute')
         name = f'{codename}_{model._meta.model_name}'
     else:
@@ -29,9 +44,8 @@ def validate_codename_for_model(codename, model):
     if name.startswith('add'):
         if model._meta.model_name != 'organization':
             raise RuntimeError(f'Add permissions only valid for organization, received for {model._meta.model_name}')
-    else:
-        if (name not in [t[0] for t in model._meta.permissions]) and (name.split('_', 1)[0] not in model._meta.default_permissions):
-            raise RuntimeError(f'The permission {name} is not valid for model {model._meta.model_name}')
+    elif name not in valid_codenames:
+        raise RuntimeError(f'The permission {name} is not valid for model {model._meta.model_name}')
     return name
 
 

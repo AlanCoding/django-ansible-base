@@ -200,4 +200,14 @@ class Migration(migrations.Migration):
                 ('organization', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='test_app.organization')),
             ],
         ),
+        migrations.CreateModel(
+            name='WeirdPerm',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('organization', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='test_app.organization')),
+            ],
+            options={
+                'permissions': [("I'm a lovely coconut", 'You can be a lovely coconut with this object'), ('crack', 'Can crack open this coconut')],
+            },
+        ),
     ]

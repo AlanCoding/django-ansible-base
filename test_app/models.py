@@ -127,6 +127,15 @@ class PositionModel(models.Model):
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE)
 
 
+class WeirdPerm(models.Model):
+    "Uses a weird permission name"
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE)
+
+    class Meta:
+        app_label = 'test_app'
+        permissions = [("I'm a lovely coconut", "You can be a lovely coconut with this object"), ("crack", "Can crack open this coconut")]
+
+
 class TestPermission(models.Model):
     "Used for testing using a custom permission, only used in special cases"
     name = models.CharField("name", max_length=255)
@@ -138,7 +147,7 @@ class TestPermission(models.Model):
         unique_together = [["content_type", "codename"]]
 
 
-permission_registry.register(Organization, Inventory, Namespace, Team, Cow, UUIDModel, PositionModel)
+permission_registry.register(Organization, Inventory, Namespace, Team, Cow, UUIDModel, PositionModel, WeirdPerm)
 permission_registry.register(CollectionImport, parent_field_name='namespace')
 permission_registry.register(InstanceGroup, parent_field_name=None)
 
