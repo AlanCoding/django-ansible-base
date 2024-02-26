@@ -7,7 +7,7 @@ from ansible_base.rbac.migrations._managed_definitions import setup_managed_role
 from ansible_base.rbac.migrations._utils import create_custom_permissions, give_permissions
 from ansible_base.rbac.models import RoleDefinition, RoleTeamAssignment, RoleUserAssignment
 from ansible_base.rbac.permission_registry import permission_registry
-from test_app.models import Team, TestPermission, User
+from test_app.models import CustomPermission, Team, User
 
 INVENTORY_OBJ_PERMISSIONS = ['view_inventory', 'change_inventory', 'delete_inventory', 'update_inventory']
 
@@ -66,7 +66,7 @@ def test_give_permissions_by_id(organization, inventory, inv_rd):
 
 @pytest.mark.django_db
 def test_custom_permission_migration():
-    assert TestPermission.objects.count() == 0
-    with override_settings(ANSIBLE_BASE_PERMISSION_MODEL='test_app.TestPermission'):
+    assert CustomPermission.objects.count() == 0
+    with override_settings(ANSIBLE_BASE_PERMISSION_MODEL='test_app.CustomPermission'):
         create_custom_permissions(apps.get_app_config('test_app'))
-    assert len(TestPermission.objects.values_list('content_type').distinct()) == len(permission_registry.all_registered_models)
+    assert len(CustomPermission.objects.values_list('content_type').distinct()) == len(permission_registry.all_registered_models)

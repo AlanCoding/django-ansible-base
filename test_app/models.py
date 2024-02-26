@@ -136,7 +136,7 @@ class WeirdPerm(models.Model):
         permissions = [("I'm a lovely coconut", "You can be a lovely coconut with this object"), ("crack", "Can crack open this coconut")]
 
 
-class TestPermission(models.Model):
+class CustomPermission(models.Model):
     "Used for testing using a custom permission, only used in special cases"
     name = models.CharField("name", max_length=255)
     content_type = models.ForeignKey(ContentType, models.CASCADE, verbose_name="content type")
