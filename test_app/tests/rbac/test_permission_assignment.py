@@ -149,7 +149,7 @@ class TestRoleTeamAssignment:
 @pytest.mark.django_db
 class TestOrgTeamMemberAssignment:
     def test_organization_team_assignment(self, rando, organization, member_rd, inv_rd):
-        assert permission_registry.permission_model.objects.filter(codename='member_team').exists()  # sanity
+        assert permission_registry.permission_qs.filter(codename='member_team').exists()  # sanity
         inv1 = Inventory.objects.create(name='inv1', organization=organization)
         inv2 = Inventory.objects.create(name='inv2', organization=organization)
 

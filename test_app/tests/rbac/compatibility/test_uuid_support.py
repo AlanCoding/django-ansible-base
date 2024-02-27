@@ -77,7 +77,7 @@ def test_add_uuid_permission_to_role(rando, organization):
     rd.give_permission(rando, organization)
     assert not rando.has_obj_perm(uuid_obj, 'view')
 
-    perm = permission_registry.permission_model.objects.get(codename='view_uuidmodel')
+    perm = permission_registry.permission_qs.get(codename='view_uuidmodel')
     rd.permissions.add(perm)
     assert rando.has_obj_perm(uuid_obj, 'view')
 

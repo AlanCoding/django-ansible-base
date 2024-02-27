@@ -63,7 +63,7 @@ class RoleDefinitionManager(models.Manager):
 
     def create_from_permissions(self, permissions=(), **kwargs):
         "Create from a list of text-type permissions and do validation"
-        perm_list = [permission_registry.permission_model.objects.get(codename=str_perm) for str_perm in permissions]
+        perm_list = [permission_registry.permission_qs.get(codename=str_perm) for str_perm in permissions]
 
         ct = kwargs.get('content_type', None)
         if kwargs.get('content_type_id', None):

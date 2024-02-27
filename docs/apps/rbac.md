@@ -203,6 +203,20 @@ model of `MyModel`, or `None`.
 TODO: Update to allow ManyToMany parent relationship in addition to ForeignKey
 https://github.com/ansible/django-ansible-base/issues/78
 
+#### Django Model, Apps, and Permission Constraints
+
+It is fine to register models from multiple apps, but among the registered models,
+the `._meta.model_name` must be unique. If, in the above example,
+you registered `my_app.mymodel` then it is fine if other models by that same
+name exist like `your_app.mymodel`, but _registering both_ models will throw an error.
+
+A similar constraint exists for the permission `codename`.
+If the `Meta` of `MyModel` lists `permissions = [("move", "Can move my model")]`,
+then no other _registered_ model should list that permission.
+
+This rules out things like registering a model, and also registering a proxy
+model _of that model_.
+
 ### Parent Resources
 
 Assuming `obj` has a related `organization` which was declared by `parent_field_name` when registering,

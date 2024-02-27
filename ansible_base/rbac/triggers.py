@@ -117,7 +117,7 @@ def permissions_changed(instance, action, model, pk_set, reverse, **kwargs):
         raise RuntimeError('Removal of permssions through reverse relationship not supported')
 
     if action in ('post_add', 'post_remove'):
-        if permission_registry.permission_model.objects.filter(codename=permission_registry.team_permission, pk__in=pk_set).exists():
+        if permission_registry.permission_qs.filter(codename=permission_registry.team_permission, pk__in=pk_set).exists():
             for object_role in to_recompute.copy():
                 to_recompute.update(object_role.descendent_roles())
             compute_team_member_roles()

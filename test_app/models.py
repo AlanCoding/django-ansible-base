@@ -143,6 +143,19 @@ class CustomPermission(models.Model):
         unique_together = [["content_type", "codename"]]
 
 
+class ProxyInventory(Inventory):
+    "This is not a registered permissions model. It exposes issues with duplicate permission codenames."
+
+    class Meta:
+        proxy = True
+        permissions = [
+            ("view_inventory", "Can view inventory"),
+            ("change_inventory", "Can change inventory"),
+            ("add_inventory", "Can add inventory"),
+            ("delete_inventory", "Can delete inventory"),
+        ]
+
+
 permission_registry.register(Organization, Inventory, Namespace, Team, Cow, UUIDModel, PositionModel, WeirdPerm)
 permission_registry.register(CollectionImport, parent_field_name='namespace')
 permission_registry.register(InstanceGroup, parent_field_name=None)

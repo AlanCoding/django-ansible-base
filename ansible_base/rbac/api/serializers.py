@@ -102,7 +102,7 @@ class PermissionField(ChoiceLikeMixin):
 
     def get_dynamic_object(self, data):
         codename = data.rsplit('.')[-1]
-        return permission_registry.permission_model.objects.get(codename=codename)
+        return permission_registry.permission_qs.get(codename=codename)
 
     def to_representation(self, value):
         return f'{settings.ANSIBLE_BASE_SERVICE_PREFIX}.{value.codename}'

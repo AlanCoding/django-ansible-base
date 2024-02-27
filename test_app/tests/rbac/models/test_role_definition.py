@@ -4,6 +4,7 @@ from rest_framework.exceptions import ValidationError
 
 from ansible_base.rbac import permission_registry
 from ansible_base.rbac.models import ObjectRole, RoleDefinition, RoleEvaluation
+from ansible_base.rbac.validators import validate_permissions_for_model
 from test_app.models import ExampleEvent, Organization
 
 
@@ -30,8 +31,9 @@ def test_missing_use_permission():
 @pytest.mark.django_db
 def test_permission_for_unregistered_model():
     with pytest.raises(ValidationError):
-        RoleDefinition.objects.create_from_permissions(
-            permissions=['view_exampleevent'], name='not-cool', content_type=ContentType.objects.get_for_model(ExampleEvent)
+        validate_permissions_for_model(
+            permissions=[permission_registry.permission_model.objects.get(codename='view_exampleevent')],
+            content_type=ContentType.objects.get_for_model(ExampleEvent),
         )
 
 
@@ -58,7 +60,7 @@ def test_change_role_definition_permission(organization, team, inventory, member
     # sanity
     assert [u.has_obj_perm(inventory, 'update') for u in (team_user, org_user)] == [False, False]
 
-    new_perm = permission_registry.permission_model.objects.get(codename='update_inventory')
+    new_perm = permission_registry.permission_qs.get(codename='update_inventory')
     org_inv_rd.permissions.add(new_perm)
 
     # Users get new permission
@@ -88,7 +90,7 @@ def test_change_role_definition_member_permission(organization, inventory, membe
     assert [u.has_obj_perm(inventory, 'change') for u in (team_user, org_team_user)] == [True, True]
 
     # Removing memberships takes away the permission
-    member_perm = permission_registry.permission_model.objects.get(codename='member_team')
+    member_perm = permission_registry.permission_qs.get(codename='member_team')
     member_rd.permissions.remove(member_perm)
     assert [u.has_obj_perm(inventory, 'change') for u in (team_user, org_team_user)] == [False, False]
 

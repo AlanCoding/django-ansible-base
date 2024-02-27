@@ -144,6 +144,12 @@ class PermissionRegistry:
         return self.apps.get_model(settings.ANSIBLE_BASE_PERMISSION_MODEL)
 
     @property
+    def permission_qs(self):
+        "Return a queryset of the permission model restricted to the RBAC-tracked models"
+        all_cts = self.content_type_model.objects.get_for_models(*self.all_registered_models)
+        return self.permission_model.objects.filter(content_type__in=all_cts.values())
+
+    @property
     def team_permission(self):
         return f'member_{self.team_model._meta.model_name}'
 

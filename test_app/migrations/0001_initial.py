@@ -210,4 +210,16 @@ class Migration(migrations.Migration):
                 'permissions': [("I'm a lovely coconut", 'You can be a lovely coconut with this object'), ('crack', 'Can crack open this coconut')],
             },
         ),
+        migrations.CreateModel(
+            name='ProxyInventory',
+            fields=[
+            ],
+            options={
+                'permissions': [('view_inventory', 'Can view inventory'), ('change_inventory', 'Can change inventory'), ('add_inventory', 'Can add inventory'), ('delete_inventory', 'Can delete inventory')],
+                'proxy': True,
+                'indexes': [],
+                'constraints': [],
+            },
+            bases=('test_app.inventory',),
+        ),
     ]
