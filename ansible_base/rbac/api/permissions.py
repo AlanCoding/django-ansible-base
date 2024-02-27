@@ -4,6 +4,7 @@ from django.db.models import Model
 from django.http import Http404
 from rest_framework.permissions import SAFE_METHODS, BasePermission, DjangoObjectPermissions
 
+from ansible_base.lib.utils.models import is_add_perm
 from ansible_base.rbac import permission_registry
 from ansible_base.rbac.evaluations import has_super_permission
 
@@ -59,7 +60,7 @@ class AnsibleBaseObjectPermissions(DjangoObjectPermissions):
             queryset = self._queryset(view)
             model_cls = queryset.model
             parent_field_name = permission_registry.get_parent_fd_name(model_cls)
-            if parent_field_name not in request.data or parent_field_name is None:
+            if parent_field_name is None or parent_field_name not in request.data:
                 return bool(request.user.is_superuser)
             elif parent_field_name not in request.data:
                 return False
@@ -77,7 +78,7 @@ class AnsibleBaseObjectPermissions(DjangoObjectPermissions):
             return [f'{special_action}_{model_cls._meta.model_name}']
         perms = super().get_required_object_permissions(method, model_cls)
         # Remove add permissions, since they are handled in has_permission
-        return [p for p in perms if 'add_' not in p]
+        return [p for p in perms if not is_add_perm(p)]
 
     def has_object_permission(self, request, view, obj):
         if not isinstance(obj, Model):

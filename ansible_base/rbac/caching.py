@@ -10,7 +10,7 @@ from ansible_base.rbac.prefetch import TypesPrefetch
 logger = logging.getLogger('ansible_base.rbac.caching')
 
 
-'''
+"""
 This module has callable methods to fill in things marked with COMPUTED DATA in the models
 from the user-specifications in other fields.
 These need to be called in specific hooks to assure that evaluations remain correct,
@@ -19,7 +19,7 @@ logic for triggers are in the triggers module.
 NOTE:
 This is highly dependent on the model methods ObjectRole.needed_cache_updates and expected_direct_permissions
 Those methods are what truly dictate the object-role to object-permission translation
-'''
+"""
 
 
 def all_team_parents(team_id: int, team_team_parents: dict, seen: Optional[set] = None) -> set[int]:

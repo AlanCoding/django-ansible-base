@@ -3,6 +3,7 @@ from collections import defaultdict
 from django.conf import settings
 from rest_framework.exceptions import ValidationError
 
+from ansible_base.lib.utils.models import is_add_perm
 from ansible_base.rbac.permission_registry import permission_registry
 
 
@@ -23,7 +24,7 @@ def validate_permissions_for_model(permissions, content_type):
     permissions_by_model = defaultdict(list)
     for perm in permissions:
         cls = perm.content_type.model_class()
-        if perm.codename.startswith('add_'):
+        if is_add_perm(perm.codename):
             to_model = permission_registry.get_parent_model(cls)
             if to_model is None and not system_roles_enabled():
                 raise ValidationError(f'{perm.codename} permission requires system-wide roles, which are not enabled')

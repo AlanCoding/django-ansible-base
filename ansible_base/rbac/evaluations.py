@@ -5,7 +5,7 @@ from django.conf import settings
 from ansible_base.rbac import permission_registry
 from ansible_base.rbac.models import ObjectRole, RoleDefinition, get_evaluation_model
 
-'''
+"""
 RoleEvaluation or RoleEvaluationUUID models are the authority for permission evaluations,
 meaning, determining whether a user has a permission to an object.
 
@@ -15,7 +15,7 @@ are defined on the RoleEvaluation model.
 
 This module has logic to attach those evaluation methods to the external
 models in an app using these RBAC internals.
-'''
+"""
 
 
 def codenames_for_cls(cls) -> list[str]:
@@ -53,11 +53,11 @@ def validate_codename_for_model(codename: str, model) -> str:
 
 
 class BaseEvaluationDescriptor:
-    '''
+    """
     Descriptors have to be used to attach what are effectively a @classmethod
     to an external model, like MyModel.accessible_objects(u, 'view_mymodel')
     because this how we obtain a reference to MyModel
-    '''
+    """
 
     def __init__(self, cls):
         self.cls = cls

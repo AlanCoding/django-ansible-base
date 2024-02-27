@@ -16,6 +16,7 @@ from django.utils.translation import gettext_lazy as _
 from ansible_base.lib.abstract_models.common import CommonModel
 
 # ansible_base RBAC logic imports
+from ansible_base.lib.utils.models import is_add_perm
 from ansible_base.rbac.permission_registry import permission_registry
 from ansible_base.rbac.prefetch import TypesPrefetch
 from ansible_base.rbac.validators import validate_permissions_for_model
@@ -407,14 +408,14 @@ class ObjectRole(ObjectRoleFields):
                 continue
 
             # add child permission on the parent object, usually only for add permission
-            if permission.codename.startswith('add') or settings.ANSIBLE_BASE_CACHE_PARENT_PERMISSIONS:
+            if is_add_perm(permission.codename) or settings.ANSIBLE_BASE_CACHE_PARENT_PERMISSIONS:
                 expected_evaluations.add((permission.codename, self.content_type_id, object_id))
 
             # add child object permission on child objects
             # Only propogate add permission to children which are parents of the permission model
             filter_path = None
             child_model = None
-            if permission.codename.startswith('add'):
+            if is_add_perm(permission.codename):
                 for path, model in permission_registry.get_child_models(role_content_type.model):
                     if '__' in path and model._meta.model_name == permission_content_type.model:
                         path_to_parent, filter_path = path.split('__', 1)

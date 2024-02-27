@@ -16,11 +16,11 @@ from ansible_base.rbac.permission_registry import permission_registry
 logger = logging.getLogger('ansible_base.rbac.triggers')
 
 
-'''
+"""
 As the caching module will fill in cached data,
 this module shall manage the calling of the caching methods.
 Sounds simple, but is actually more complicated that the caching logic itself.
-'''
+"""
 
 
 def team_ancestor_roles(team):
@@ -138,12 +138,12 @@ m2m_changed.connect(permissions_changed, sender=RoleDefinition.permissions.throu
 
 
 def rbac_post_init_set_original_parent(sender, instance, **kwargs):
-    '''
+    """
     connect to post_init signal
     Used to set the original, or
     pre-save parent id (usually organization), so we can later determine if
     the organization field has changed.
-    '''
+    """
     parent_field_name = permission_registry.get_parent_fd_name(instance)
     if parent_field_name is None:
         return
