@@ -118,7 +118,7 @@ class PermissionRegistry:
                 self._trackers[role_name] = tracker
             tracker.initialize(relationship)
 
-    @cached_property
+    @property
     def team_model(self):
         return self.apps.get_model(settings.ANSIBLE_BASE_TEAM_MODEL)
 
@@ -126,11 +126,11 @@ class PermissionRegistry:
     def team_ct_id(self):
         return self.content_type_model.objects.get_for_model(self.team_model).id
 
-    @cached_property
+    @property
     def user_model(self):
         return get_user_model()
 
-    @cached_property
+    @property
     def content_type_model(self):
         return self.apps.get_model('contenttypes.ContentType')
 
@@ -139,11 +139,11 @@ class PermissionRegistry:
         team_parent_model = self.get_parent_model(self.team_model)
         return self.content_type_model.objects.get_for_model(team_parent_model).id
 
-    @cached_property
+    @property
     def permission_model(self):
         return self.apps.get_model(settings.ANSIBLE_BASE_PERMISSION_MODEL)
 
-    @cached_property
+    @property
     def team_permission(self):
         return f'member_{self.team_model._meta.model_name}'
 

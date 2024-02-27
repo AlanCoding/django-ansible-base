@@ -2,6 +2,7 @@ from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 from django.db.utils import IntegrityError
+from django.utils.functional import cached_property
 from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
@@ -23,11 +24,6 @@ class ChoiceLikeMixin(serializers.ChoiceField):
     """
 
     default_error_messages = serializers.PrimaryKeyRelatedField.default_error_messages
-    psuedo_field = None  # define in subclass
-
-    def get_model_for_init(self):
-        "Delay any model references until serializer initialization due to load order concerns"
-        raise NotImplementedError
 
     def get_dynamic_choices(self):
         raise NotImplementedError
@@ -58,7 +54,7 @@ class ChoiceLikeMixin(serializers.ChoiceField):
             self._initialize_choices()
         return self._grouped_choices
 
-    @property
+    @cached_property
     def choices(self):
         if not hasattr(self, '_choices'):
             self._initialize_choices()
@@ -74,14 +70,10 @@ class ChoiceLikeMixin(serializers.ChoiceField):
 
 
 class ContentTypeField(ChoiceLikeMixin):
-    psuedo_field = 'model'
 
     def __init__(self, **kwargs):
         kwargs['help_text'] = _('The type of resource this applies to')
         super().__init__(**kwargs)
-
-    def get_model_for_init(self):
-        return permission_registry.content_type_model
 
     def get_dynamic_choices(self):
         return [
@@ -98,11 +90,6 @@ class ContentTypeField(ChoiceLikeMixin):
 
 
 class PermissionField(ChoiceLikeMixin):
-    psuedo_field = 'codename'
-
-    def get_model_for_init(self):
-        return permission_registry.permission_model
-
     def get_dynamic_choices(self):
         perms = []
         for cls in permission_registry.all_registered_models:
