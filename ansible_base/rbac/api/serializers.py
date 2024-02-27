@@ -162,7 +162,7 @@ class BaseAssignmentSerializer(CommonModelSerializer):
 
         if validated_data.get(self.actor_field):
             actor = validated_data[self.actor_field]
-        elif ansible_id := validated_data.pop(actor_aid_field):
+        elif ansible_id := validated_data.pop(actor_aid_field, None):
             from ansible_base.resource_registry.models import Resource
 
             resource = Resource.objects.get(resource_id=ansible_id.split(':')[-1])

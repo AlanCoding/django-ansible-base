@@ -29,3 +29,33 @@ def test_team_assignment_ansible_id(admin_api_client, inv_rd, team, inventory, m
     team_role = ObjectRole.objects.get(object_id=team.id, content_type=team_ct, role_definition=member_rd)
     assert RoleEvaluation.objects.filter(role=team_role, codename='change_inventory', object_id=inventory.id).count() == 1
     assert rando.has_obj_perm(inventory, 'change')
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize('actor', ['user', 'team'])
+def test_assignment_id_validation(admin_api_client, inv_rd, team, inventory, rando, actor):
+    if actor == 'user':
+        actor_obj = rando
+    else:
+        actor_obj = team
+    resource = Resource.objects.get(object_id=actor_obj.pk, content_type=ContentType.objects.get_for_model(actor_obj).pk)
+    url = reverse(f'role{actor}assignment-list')
+    test_fields = (actor, f'{actor}_ansible_id')
+
+    # Provide too little data
+    data = dict(role_definition=inv_rd.id, content_type='local.inventory', object_id=inventory.id)
+    response = admin_api_client.post(url, data=data, format="json")
+    assert response.status_code == 400, response.data
+    for field_name in test_fields:
+        assert 'Provide exactly one of' in str(response.data[field_name])
+
+    # Provide too much data
+    data[f'{actor}_ansible_id'] = str(resource.ansible_id)
+    data[actor] = actor_obj.id
+    response = admin_api_client.post(url, data=data, format="json")
+    assert response.status_code == 400, response.data
+    for field_name in test_fields:
+        assert 'Provide exactly one of' in str(response.data[field_name])
+
+    # And we rolled back or did not take the action, right?
+    assert not rando.has_obj_perm(inventory, 'change')
