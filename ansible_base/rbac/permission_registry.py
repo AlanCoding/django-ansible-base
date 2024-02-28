@@ -51,10 +51,12 @@ class PermissionRegistry:
         return model_name_or_model._meta.model_name
 
     def get_parent_model(self, model_name_or_model):
-        parent_field_name = self.get_parent_fd_name(self.get_model_name(model_name_or_model))
+        model_name = self.get_model_name(model_name_or_model)
+        model = self._name_to_model[model_name]
+        parent_field_name = self.get_parent_fd_name(model_name)
         if parent_field_name is None:
             return None
-        return self._name_to_model[parent_field_name]
+        return model._meta.get_field(parent_field_name).related_model
 
     def get_parent_fd_name(self, model_name_or_model):
         return self._parent_fields.get(self.get_model_name(model_name_or_model))
@@ -68,12 +70,15 @@ class PermissionRegistry:
         child_filters = []
         parent_model_name = self.get_model_name(model_name_or_model)
         for model_name, parent_field_name in self._parent_fields.items():
-            # NOTE: right now this only supports names that are the same as the type
-            if parent_field_name == parent_model_name:
+            if parent_field_name is None:
+                continue
+            child_model = self._name_to_model[model_name]
+            this_parent_name = child_model._meta.get_field(parent_field_name).related_model._meta.model_name
+            if this_parent_name == parent_model_name:
                 if model_name in seen:
                     continue
                 seen.add(model_name)
-                child_model = self._name_to_model[model_name]
+
                 child_filters.append((parent_field_name, child_model))
                 for next_parent_filter, grandchild_model in self.get_child_models(child_model, seen=seen):
                     child_filters.append((f'{next_parent_filter}__{parent_field_name}', grandchild_model))

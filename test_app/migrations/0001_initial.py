@@ -222,4 +222,11 @@ class Migration(migrations.Migration):
             },
             bases=('test_app.inventory',),
         ),
+        migrations.CreateModel(
+            name='ParentName',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('my_organization', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='test_app.organization')),
+            ],
+        ),
     ]
