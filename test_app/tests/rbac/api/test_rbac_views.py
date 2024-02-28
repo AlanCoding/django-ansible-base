@@ -66,6 +66,15 @@ def test_make_user_assignment(admin_api_client, inv_rd, rando, inventory):
 
 
 @pytest.mark.django_db
+def test_invalid_user_assignment(admin_api_client, inv_rd, inventory):
+    url = reverse('roleuserassignment-list')
+    data = dict(role_definition=inv_rd.id, user=12345, object_id=inventory.id)
+    response = admin_api_client.post(url, data=data, format="json")
+    assert response.status_code == 400, response.data
+    assert 'object does not exist' in str(response.data['user'])
+
+
+@pytest.mark.django_db
 def test_make_global_user_assignment(admin_api_client, rando, inventory):
     rd = RoleDefinition.objects.create_from_permissions(
         permissions=['change_inventory', 'view_inventory'],

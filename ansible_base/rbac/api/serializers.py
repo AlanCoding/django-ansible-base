@@ -1,3 +1,4 @@
+from django.apps import apps
 from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
@@ -136,6 +137,11 @@ class RoleDefinitionDetailSeraizler(RoleDefinitionSerializer):
 
 class BaseAssignmentSerializer(CommonModelSerializer):
     content_type = ContentTypeField(read_only=True)
+    object_ansible_id = serializers.CharField(
+        validators=[ansible_id_validator],
+        required=False,
+        help_text=_('Resource id of the object this role applies to. Alternative to the object_id field.'),
+    )
 
     def get_fields(self):
         """
@@ -146,34 +152,66 @@ class BaseAssignmentSerializer(CommonModelSerializer):
         fields[self.actor_field].required = False
         return fields
 
-    @property
-    def id_fields_error(self):
+    def raise_id_fields_error(self, field1, field2):
         msg = _(f'Provide exactly one of {self.actor_field} or {self.actor_field}_ansible_id')
-        return {self.actor_field: msg, f'{self.actor_field}_ansible_id': msg}
+        raise ValidationError({self.actor_field: msg, f'{self.actor_field}_ansible_id': msg})
+
+    def get_by_ansible_id(self, ansible_id, for_field):
+        try:
+            resource_cls = apps.get_model('dab_resource_registry', 'Resource')
+        except LookupError:
+            raise ValidationError({for_field: _('Django-ansible-base resource registry must be installed to use ansible_id fields')})
+
+        try:
+            resource = resource_cls.objects.get(resource_id=ansible_id.split(':')[-1])
+        except ObjectDoesNotExist:
+            msg = serializers.PrimaryKeyRelatedField.default_error_messages['does_not_exist']
+            raise ValidationError({for_field: msg.format(pk_value=ansible_id)})
+        return resource.content_object
+
+    def get_actor_from_data(self, validated_data):
+        actor_aid_field = f'{self.actor_field}_ansible_id'
+        if validated_data.get(self.actor_field) and validated_data.get(actor_aid_field):
+            self.raise_id_fields_error(self.actor_field, actor_aid_field)
+        elif validated_data.get(self.actor_field):
+            actor = validated_data[self.actor_field]
+        elif ansible_id := validated_data.get(actor_aid_field):
+            actor = self.get_by_ansible_id(ansible_id, for_field=actor_aid_field)
+        else:
+            self.raise_id_fields_error(self.actor_field, f'{self.actor_field}_ansible_id')
+        return actor
+
+    def get_object_from_data(self, validated_data, role_definition):
+        obj = None
+        if validated_data.get('object_id') and validated_data.get('object_ansible_id'):
+            self.raise_id_fields_error('object_id', 'object_ansible_id')
+        elif validated_data.get('object_id'):
+            if not role_definition.content_type:
+                raise ValidationError({'object_id': _('System role does not allow for object assignment')})
+            model = role_definition.content_type.model_class()
+            obj = model.objects.get(pk=validated_data['object_id'])
+        elif validated_data.get('object_ansible_id'):
+            obj = self.get_by_ansible_id(validated_data.get('object_ansible_id'), for_field='object_ansible_id')
+            if permission_registry.content_type_model.objects.get_for_model(obj) != role_definition.content_type:
+                raise ValidationError(
+                    {'object_ansible_id': _(f'Object type of {obj._meta.model_name} does not match role type of {role_definition.content_type.model}')}
+                )
+        return obj
 
     def create(self, validated_data):
         rd = validated_data['role_definition']
         requesting_user = self.context['view'].request.user
 
         # Resolve actor - team or user
-        actor_aid_field = f'{self.actor_field}_ansible_id'
-        if validated_data.get(self.actor_field) and validated_data.get(actor_aid_field):
-            raise ValidationError(self.id_fields_error)
+        actor = self.get_actor_from_data(validated_data)
 
-        if validated_data.get(self.actor_field):
-            actor = validated_data[self.actor_field]
-        elif ansible_id := validated_data.pop(actor_aid_field, None):
-            from ansible_base.resource_registry.models import Resource
-
-            resource = Resource.objects.get(resource_id=ansible_id.split(':')[-1])
-            actor = resource.content_object
-        else:
-            raise ValidationError(self.id_fields_error)
+        # Resolve object
+        obj = self.get_object_from_data(validated_data, rd)
 
         if rd.content_type:
-            # Object role assignment, resolve object
-            model = rd.content_type.model_class()
-            obj = model.objects.get(pk=validated_data['object_id'])
+            # Object role assignment
+            if not obj:
+                raise ValidationError({'object_id': _('Object must be specified for this role assignment')})
 
             # validate user has permission
             if not requesting_user.has_obj_perm(obj, 'change'):
@@ -212,7 +250,11 @@ class BaseAssignmentSerializer(CommonModelSerializer):
 
 class RoleUserAssignmentSerializer(BaseAssignmentSerializer):
     actor_field = 'user'
-    user_ansible_id = serializers.CharField(validators=[ansible_id_validator], required=False)
+    user_ansible_id = serializers.CharField(
+        validators=[ansible_id_validator],
+        required=False,
+        help_text=_('Resource id of the user who will receive permissions from this assignment. Alternative to user field.'),
+    )
 
     class Meta:
         model = RoleUserAssignment
@@ -221,7 +263,11 @@ class RoleUserAssignmentSerializer(BaseAssignmentSerializer):
 
 class RoleTeamAssignmentSerializer(BaseAssignmentSerializer):
     actor_field = 'team'
-    team_ansible_id = serializers.CharField(validators=[ansible_id_validator], required=False)
+    team_ansible_id = serializers.CharField(
+        validators=[ansible_id_validator],
+        required=False,
+        help_text=_('Resource id of the team who will receive permissions from this assignment. Alternative to team field.'),
+    )
 
     class Meta:
         model = RoleTeamAssignment

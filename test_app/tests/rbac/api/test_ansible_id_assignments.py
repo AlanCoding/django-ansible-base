@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 import pytest
 from django.contrib.contenttypes.models import ContentType
 from django.urls import reverse
@@ -59,3 +61,48 @@ def test_assignment_id_validation(admin_api_client, inv_rd, team, inventory, ran
 
     # And we rolled back or did not take the action, right?
     assert not rando.has_obj_perm(inventory, 'change')
+
+
+@pytest.mark.django_db
+def test_object_ansible_id_user(admin_api_client, org_inv_rd, rando, inventory, organization):
+    resource = Resource.objects.get(object_id=organization.pk, content_type=ContentType.objects.get_for_model(organization).pk)
+    url = reverse('roleuserassignment-list')
+    data = dict(role_definition=org_inv_rd.id, user=rando.id, object_ansible_id=str(resource.ansible_id))
+    response = admin_api_client.post(url, data=data, format="json")
+    assert response.status_code == 201, response.data
+    assert rando.has_obj_perm(inventory, 'change')
+
+
+@pytest.mark.django_db
+def test_missing_object(admin_api_client, inv_rd, rando):
+    url = reverse('roleuserassignment-list')
+    data = dict(role_definition=inv_rd.id, user=rando.id)
+    response = admin_api_client.post(url, data=data, format="json")
+    assert response.status_code == 400, response.data
+    assert response.data['object_id'] == 'Object must be specified for this role assignment'
+
+
+@pytest.mark.django_db
+def test_invalid_ansible_id(admin_api_client, org_inv_rd, rando):
+    url = reverse('roleuserassignment-list')
+    bad_ansible_id = f'12345678:{uuid4()}'
+    data = dict(role_definition=org_inv_rd.id, user=rando.id, object_ansible_id=bad_ansible_id)
+    response = admin_api_client.post(url, data=data, format="json")
+    assert response.status_code == 400, response.data
+    assert 'object does not exist' in response.data['object_ansible_id']
+    assert bad_ansible_id in response.data['object_ansible_id']
+
+
+@pytest.mark.django_db
+def test_object_ansible_id_bad_type(admin_api_client, inv_rd, rando, organization):
+    """If giving object_id, type is implied from role definition.
+
+    When giving ansible_id that no longer holds true, and user can give any type.
+    This expects a validation error when the object type does not match the role type.
+    """
+    resource = Resource.objects.get(object_id=organization.pk, content_type=ContentType.objects.get_for_model(organization).pk)
+    url = reverse('roleuserassignment-list')
+    data = dict(role_definition=inv_rd.id, user=rando.id, object_ansible_id=str(resource.ansible_id))
+    response = admin_api_client.post(url, data=data, format="json")
+    assert response.status_code == 400, response.data
+    assert 'organization does not match role type of inventory' in str(response.data['object_ansible_id'])
