@@ -33,7 +33,7 @@ def validate_permissions_for_model(permissions, content_type):
             to_model = cls
         if content_type and to_model._meta.model_name != content_type.model:
             # it is also valid to attach permissions to a role for the parent model
-            child_model_names = [child_cls._meta.model_name for rel, child_cls in permission_registry.get_child_models(content_type.model)]
+            child_model_names = [child_cls._meta.model_name for rel, child_cls in permission_registry.get_child_models(content_type.model_class())]
             if cls._meta.model_name not in child_model_names:
                 raise ValidationError(f'{perm.codename} is not valid for content type {content_type.model}')
         permissions_by_model[to_model].append(perm)

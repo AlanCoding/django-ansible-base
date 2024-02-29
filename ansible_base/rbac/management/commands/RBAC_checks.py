@@ -36,7 +36,7 @@ class Command(BaseCommand):
             for permission in role.role_definition.permissions.all():
                 if permission.content_type_id != role.content_type_id:
                     if permission.content_type.model_class() not in set(
-                        cls for filter_path, cls in permission_registry.get_child_models(role.content_type.model)
+                        cls for filter_path, cls in permission_registry.get_child_models(role.content_type.model_class())
                     ):
                         self.stdout.write(
                             self.style.WARNING(f'Object role {role} has permission {permission.codename} for an unlike content type {permission.content_type}')

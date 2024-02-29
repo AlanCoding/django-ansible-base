@@ -405,8 +405,9 @@ class ObjectRole(ObjectRoleFields):
         if not types_prefetch:
             types_prefetch = TypesPrefetch()
         role_content_type = types_prefetch.get_content_type(self.content_type_id)
+        role_model = role_content_type.model_class()
         # ObjectRole.object_id is stored as text, we convert it to the model pk native type
-        object_id = role_content_type.model_class()._meta.pk.to_python(self.object_id)
+        object_id = role_model._meta.pk.to_python(self.object_id)
         for permission in types_prefetch.permissions_for_object_role(self):
             permission_content_type = types_prefetch.get_content_type(permission.content_type_id)
 
@@ -424,7 +425,7 @@ class ObjectRole(ObjectRoleFields):
             filter_path = None
             child_model = None
             if is_add_perm(permission.codename):
-                for path, model in permission_registry.get_child_models(role_content_type.model):
+                for path, model in permission_registry.get_child_models(role_model):
                     if '__' in path and model._meta.model_name == permission_content_type.model:
                         path_to_parent, filter_path = path.split('__', 1)
                         child_model = permission_content_type.model_class()._meta.get_field(path_to_parent).related_model
@@ -432,7 +433,7 @@ class ObjectRole(ObjectRoleFields):
                 if not child_model:
                     continue
             else:
-                for path, model in permission_registry.get_child_models(role_content_type.model):
+                for path, model in permission_registry.get_child_models(role_model):
                     if model._meta.model_name == permission_content_type.model:
                         filter_path = path
                         child_model = model
