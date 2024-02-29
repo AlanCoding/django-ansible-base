@@ -1,6 +1,7 @@
 import pytest
 from django.test.utils import override_settings
 
+from ansible_base.lib.utils.models import is_add_perm
 from ansible_base.rbac.models import ObjectRole, RoleDefinition, RoleEvaluation, RoleUserAssignment
 from ansible_base.rbac.permission_registry import permission_registry
 from test_app.models import Inventory, Organization
@@ -84,3 +85,18 @@ def test_superuser_can_do_anything(inventory):
 def test_superuser_flag_not_considered(inventory):
     user = permission_registry.user_model.objects.create(username='superuser', is_superuser=True)
     assert not user.has_obj_perm(inventory, 'change')
+
+
+@pytest.mark.parametrize(
+    'codename,expect',
+    [
+        ('change_inventory', False),
+        ('add_inventory', True),
+        ('lovely coconut', False),
+        ('addition master', False),
+        ('my_app.add_inventory', True),
+        ('something.something.add_inventory', False),
+    ],
+)
+def test_is_add_perm(codename, expect):
+    assert is_add_perm(codename) is expect

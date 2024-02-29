@@ -34,7 +34,10 @@ def is_add_perm(codename: str) -> bool:
     in DAB RBAC because the permission defers to the parent object.
     Although the function is trivial, this standardizes the criteria.
     """
-    return codename.startswith('add_')
+    use_codename = codename
+    if codename.count('.') == 1:
+        _, use_codename = codename.split('.')
+    return use_codename.startswith('add_')
 
 
 def prevent_search(relation):
