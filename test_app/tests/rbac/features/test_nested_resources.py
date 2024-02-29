@@ -56,3 +56,11 @@ def test_parent_assignment(rando, organization, namespace, collection):
     assert not rando.has_obj_perm(organization, 'add_collectionimport')
 
     assert set(Namespace.access_qs(rando, 'add_collectionimport')) == set([namespace])
+
+
+@pytest.mark.django_db
+def test_creator_permissions_for_parent(rando, organization, namespace, collection):
+    RoleDefinition.objects.give_creator_permissions(rando, namespace)
+    assert rando.has_obj_perm(namespace, 'change_namespace')  # would be the same without nesting
+    assert rando.has_obj_perm(namespace, 'add_collectionimport')
+    assert rando.has_obj_perm(collection, 'change_collectionimport')

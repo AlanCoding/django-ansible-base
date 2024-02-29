@@ -122,7 +122,7 @@ if 'ansible_base.rbac' in INSTALLED_APPS:
     }
 
     # Permissions a user will get when creating a new item
-    ANSIBLE_BASE_CREATOR_DEFAULTS = ['change', 'delete', 'view']
+    ANSIBLE_BASE_CREATOR_DEFAULTS = ['add', 'change', 'delete', 'view']
 
     # Specific feature enablement bits
     ANSIBLE_BASE_TEAM_TEAM_ALLOWED = True

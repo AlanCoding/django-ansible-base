@@ -36,6 +36,17 @@ def test_creator_permissions_for_superuser(inventory):
 
 
 @pytest.mark.django_db
+def test_creator_permissions_for_organization(organization, inventory, rando):
+    "This is necessary if someone were to use add_organization permission system level"
+    RoleDefinition.objects.give_creator_permissions(rando, organization)
+    assert rando.has_obj_perm(organization, 'change_organization')
+    assert rando.has_obj_perm(organization, 'add_inventory')
+    assert rando.has_obj_perm(organization, 'add_namespace')
+    assert rando.has_obj_perm(organization, 'add_collectionimport')
+    assert rando.has_obj_perm(inventory, 'change')
+
+
+@pytest.mark.django_db
 def test_no_creator_assignment_with_system_perms(rando, inventory):
     rd = RoleDefinition.objects.create_from_permissions(name='global-inventory-admin', permissions=INVENTORY_OBJ_PERMS)
     rd.give_global_permission(rando)

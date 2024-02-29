@@ -33,10 +33,18 @@ class RoleDefinitionManager(models.Manager):
 
         needed_actions = settings.ANSIBLE_BASE_CREATOR_DEFAULTS
 
+        # User should get permissions to the object and any child objects under it
+        model_and_children = set(cls for rel, cls in permission_registry.get_child_models(obj))
+        model_and_children.add(type(obj))
+        cts = ContentType.objects.get_for_models(*model_and_children).values()
+
         needed_perms = set()
-        for perm in permission_registry.permission_model.objects.filter(content_type=ContentType.objects.get_for_model(obj)):
+        for perm in permission_registry.permission_model.objects.filter(content_type__in=cts).prefetch_related('content_type'):
             action = perm.codename.split('_', 1)[0]
             if action in needed_actions:
+                # do not save add permission on the object level, which does not make sense
+                if is_add_perm(perm.codename) and perm.content_type.model == obj._meta.model_name:
+                    continue
                 needed_perms.add(perm.codename)
 
         has_permissions = set(RoleEvaluation.get_permissions(user, obj))

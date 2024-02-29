@@ -1,9 +1,8 @@
-import re
-
 from django.conf import settings
 
 from ansible_base.rbac import permission_registry
 from ansible_base.rbac.models import ObjectRole, RoleDefinition, get_evaluation_model
+from ansible_base.rbac.validators import validate_codename_for_model
 
 """
 RoleEvaluation or RoleEvaluationUUID models are the authority for permission evaluations,
@@ -16,40 +15,6 @@ are defined on the RoleEvaluation model.
 This module has logic to attach those evaluation methods to the external
 models in an app using these RBAC internals.
 """
-
-
-def codenames_for_cls(cls) -> list[str]:
-    return set([t[0] for t in cls._meta.permissions]) | set(f'{act}_{cls._meta.model_name}' for act in cls._meta.default_permissions)
-
-
-def validate_codename_for_model(codename: str, model) -> str:
-    """
-    This institutes a shortcut for easier use of the evaluation methods
-    so that user.has_obj_perm(obj, 'change') is the same as user.has_obj_perm(obj, 'change_inventory')
-    assuming obj is an inventory.
-    It also tries to protect the user by throwing an error if the permission does not work.
-    """
-    valid_codenames = codenames_for_cls(model)
-    if (not codename.startswith('add')) and codename in valid_codenames:
-        return codename
-    if re.match(r'^[a-z]+$', codename):
-        # convience to call JobTemplate.accessible_objects(u, 'execute')
-        name = f'{codename}_{model._meta.model_name}'
-    else:
-        # sometimes permissions are referred to with the app name, like test_app.say_cow
-        if '.' in codename:
-            name = codename.split('.')[-1]
-        else:
-            name = codename
-    if name in valid_codenames:
-        if name.startswith('add'):
-            raise RuntimeError(f'Add permissions only valid for parent models, received for {model._meta.model_name}')
-        return name
-
-    for rel, child_cls in permission_registry.get_child_models(model):
-        if name in codenames_for_cls(child_cls):
-            return name
-    raise RuntimeError(f'The permission {name} is not valid for model {model._meta.model_name}')
 
 
 class BaseEvaluationDescriptor:
