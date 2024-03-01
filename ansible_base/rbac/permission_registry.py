@@ -46,12 +46,7 @@ class PermissionRegistry:
     def track_relationship(self, cls, relationship, role_name):
         self._tracked_relationships.add((cls, relationship, role_name))
 
-    def _assure_model_or_instance(self, model):
-        if not hasattr(model, '_meta'):
-            raise RuntimeError(f'Expected Django model or instance, got {type(model)}')
-
     def get_parent_model(self, model) -> Optional[Model]:
-        self._assure_model_or_instance(model)
         model = self._name_to_model[model._meta.model_name]
         parent_field_name = self.get_parent_fd_name(model)
         if parent_field_name is None:
@@ -59,14 +54,12 @@ class PermissionRegistry:
         return model._meta.get_field(parent_field_name).related_model
 
     def get_parent_fd_name(self, model) -> Optional[str]:
-        self._assure_model_or_instance(model)
         return self._parent_fields.get(model._meta.model_name)
 
     def get_child_models(self, parent_model, seen=None):
         """
         Returns a set of tuples that give the filter args and the model for child resources
         """
-        self._assure_model_or_instance(parent_model)
         if not seen:
             seen = set()
         child_filters = []

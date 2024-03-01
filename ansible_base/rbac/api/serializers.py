@@ -76,11 +76,28 @@ class ContentTypeField(ChoiceLikeMixin):
         kwargs['help_text'] = _('The type of resource this applies to')
         super().__init__(**kwargs)
 
+    def get_resource_type_name(self, cls):
+        if 'ansible_base.resource_registry' not in settings.INSTALLED_APPS:
+            return f'local.{cls._meta.model_name}'
+
+        from ansible_base.resource_registry.registry import get_registry
+
+        registry = get_registry()
+
+        # duplicates logic in ansible_base/resource_registry/apps.py
+        use_registry_name = True
+        try:
+            resource_config = registry.get_config_for_model(cls)
+            if serializer := resource_config.managed_serializer:
+                return f"shared.{serializer.RESOURCE_TYPE}"
+        except KeyError:
+            pass
+
+        # Fallback for unregistered and local (is_provider) models
+        return f"{registry.api_config.service_type}.{cls._meta.model_name}"
+
     def get_dynamic_choices(self):
-        return [
-            (f'{settings.ANSIBLE_BASE_SERVICE_PREFIX}.{cls._meta.model_name}', cls._meta.verbose_name.title())
-            for cls in permission_registry.all_registered_models
-        ]
+        return [(self.get_resource_type_name(cls), cls._meta.verbose_name.title()) for cls in permission_registry.all_registered_models]
 
     def get_dynamic_object(self, data):
         model = data.rsplit('.')[-1]
