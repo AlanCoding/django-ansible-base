@@ -12,7 +12,7 @@ from ansible_base.resource_registry.models import Resource
 def test_user_assignment_ansible_id(admin_api_client, inv_rd, rando, inventory):
     resource = Resource.objects.get(object_id=rando.pk, content_type=ContentType.objects.get_for_model(rando).pk)
     url = reverse('roleuserassignment-list')
-    data = dict(role_definition=inv_rd.id, content_type='local.inventory', user_ansible_id=str(resource.ansible_id), object_id=inventory.id)
+    data = dict(role_definition=inv_rd.id, content_type='aap.inventory', user_ansible_id=str(resource.ansible_id), object_id=inventory.id)
     response = admin_api_client.post(url, data=data, format="json")
     assert response.status_code == 201, response.data
     assert rando.has_obj_perm(inventory, 'change')
@@ -24,7 +24,7 @@ def test_team_assignment_ansible_id(admin_api_client, inv_rd, team, inventory, m
     team_ct = ContentType.objects.get_for_model(team)
     resource = Resource.objects.get(object_id=team.pk, content_type=team_ct.pk)
     url = reverse('roleteamassignment-list')
-    data = dict(role_definition=inv_rd.id, content_type='local.inventory', team_ansible_id=str(resource.ansible_id), object_id=inventory.id)
+    data = dict(role_definition=inv_rd.id, content_type='aap.inventory', team_ansible_id=str(resource.ansible_id), object_id=inventory.id)
     response = admin_api_client.post(url, data=data, format="json")
     assert response.status_code == 201, response.data
 
@@ -45,7 +45,7 @@ def test_assignment_id_validation(admin_api_client, inv_rd, team, inventory, ran
     test_fields = (actor, f'{actor}_ansible_id')
 
     # Provide too little data
-    data = dict(role_definition=inv_rd.id, content_type='local.inventory', object_id=inventory.id)
+    data = dict(role_definition=inv_rd.id, content_type='aap.inventory', object_id=inventory.id)
     response = admin_api_client.post(url, data=data, format="json")
     assert response.status_code == 400, response.data
     for field_name in test_fields:

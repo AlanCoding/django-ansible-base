@@ -12,7 +12,6 @@ from rest_framework.serializers import ValidationError
 
 from ansible_base.lib.abstract_models.common import get_url_for_object
 from ansible_base.lib.serializers.common import CommonModelSerializer
-from ansible_base.lib.utils.validation import ansible_id_validator
 from ansible_base.rbac.models import RoleDefinition, RoleTeamAssignment, RoleUserAssignment
 from ansible_base.rbac.permission_registry import permission_registry  # careful for circular imports
 from ansible_base.rbac.validators import validate_permissions_for_model
@@ -69,6 +68,14 @@ class ChoiceLikeMixin(serializers.ChoiceField):
         except (TypeError, ValueError):
             self.fail('incorrect_type', data_type=type(data).__name__)
 
+    def get_resource_registry(self):
+        if 'ansible_base.resource_registry' not in settings.INSTALLED_APPS:
+            return None
+
+        from ansible_base.resource_registry.registry import get_registry
+
+        return get_registry()
+
 
 class ContentTypeField(ChoiceLikeMixin):
 
@@ -77,24 +84,20 @@ class ContentTypeField(ChoiceLikeMixin):
         super().__init__(**kwargs)
 
     def get_resource_type_name(self, cls):
-        if 'ansible_base.resource_registry' not in settings.INSTALLED_APPS:
-            return f'local.{cls._meta.model_name}'
+        if registry := self.get_resource_registry():
+            # duplicates logic in ansible_base/resource_registry/apps.py
+            use_registry_name = True
+            try:
+                resource_config = registry.get_config_for_model(cls)
+                if serializer := resource_config.managed_serializer:
+                    return f"shared.{serializer.RESOURCE_TYPE}"  # shared model
+            except KeyError:
+                pass  # unregistered model
 
-        from ansible_base.resource_registry.registry import get_registry
-
-        registry = get_registry()
-
-        # duplicates logic in ansible_base/resource_registry/apps.py
-        use_registry_name = True
-        try:
-            resource_config = registry.get_config_for_model(cls)
-            if serializer := resource_config.managed_serializer:
-                return f"shared.{serializer.RESOURCE_TYPE}"
-        except KeyError:
-            pass
-
-        # Fallback for unregistered and local (is_provider) models
-        return f"{registry.api_config.service_type}.{cls._meta.model_name}"
+            # Fallback for unregistered and non-shared models
+            return f"{registry.api_config.service_type}.{cls._meta.model_name}"
+        else:
+            return f'aap.{cls._meta.model_name}'
 
     def get_dynamic_choices(self):
         return [(self.get_resource_type_name(cls), cls._meta.verbose_name.title()) for cls in permission_registry.all_registered_models]
@@ -104,18 +107,24 @@ class ContentTypeField(ChoiceLikeMixin):
         return permission_registry.content_type_model.objects.get(model=model)
 
     def to_representation(self, value):
-        return f'{settings.ANSIBLE_BASE_SERVICE_PREFIX}.{value.model}'
+        return self.get_resource_type_name(value.model_class())
 
 
 class PermissionField(ChoiceLikeMixin):
+    @property
+    def service_prefix(self):
+        if registry := self.get_resource_registry():
+            return registry.api_config.service_type
+        return local
+
     def get_dynamic_choices(self):
         perms = []
         for cls in permission_registry.all_registered_models:
             cls_name = cls._meta.model_name
             for action in cls._meta.default_permissions:
-                perms.append(f'{settings.ANSIBLE_BASE_SERVICE_PREFIX}.{action}_{cls_name}')
+                perms.append(f'{self.service_prefix}.{action}_{cls_name}')
             for perm_name, description in cls._meta.permissions:
-                perms.append(f'{settings.ANSIBLE_BASE_SERVICE_PREFIX}.{perm_name}')
+                perms.append(f'{self.service_prefix}.{perm_name}')
         return perms
 
     def get_dynamic_object(self, data):
@@ -123,7 +132,7 @@ class PermissionField(ChoiceLikeMixin):
         return permission_registry.permission_qs.get(codename=codename)
 
     def to_representation(self, value):
-        return f'{settings.ANSIBLE_BASE_SERVICE_PREFIX}.{value.codename}'
+        return f'{self.service_prefix}.{value.codename}'
 
 
 class ManyRelatedListField(serializers.ListField):
@@ -154,8 +163,7 @@ class RoleDefinitionDetailSeraizler(RoleDefinitionSerializer):
 
 class BaseAssignmentSerializer(CommonModelSerializer):
     content_type = ContentTypeField(read_only=True)
-    object_ansible_id = serializers.CharField(
-        validators=[ansible_id_validator],
+    object_ansible_id = serializers.UUIDField(
         required=False,
         help_text=_('Resource id of the object this role applies to. Alternative to the object_id field.'),
     )
@@ -180,7 +188,7 @@ class BaseAssignmentSerializer(CommonModelSerializer):
             raise ValidationError({for_field: _('Django-ansible-base resource registry must be installed to use ansible_id fields')})
 
         try:
-            resource = resource_cls.objects.get(resource_id=ansible_id.split(':')[-1])
+            resource = resource_cls.objects.get(ansible_id=ansible_id)
         except ObjectDoesNotExist:
             msg = serializers.PrimaryKeyRelatedField.default_error_messages['does_not_exist']
             raise ValidationError({for_field: msg.format(pk_value=ansible_id)})
@@ -267,8 +275,7 @@ class BaseAssignmentSerializer(CommonModelSerializer):
 
 class RoleUserAssignmentSerializer(BaseAssignmentSerializer):
     actor_field = 'user'
-    user_ansible_id = serializers.CharField(
-        validators=[ansible_id_validator],
+    user_ansible_id = serializers.UUIDField(
         required=False,
         help_text=_('Resource id of the user who will receive permissions from this assignment. Alternative to user field.'),
     )
@@ -280,8 +287,7 @@ class RoleUserAssignmentSerializer(BaseAssignmentSerializer):
 
 class RoleTeamAssignmentSerializer(BaseAssignmentSerializer):
     actor_field = 'team'
-    team_ansible_id = serializers.CharField(
-        validators=[ansible_id_validator],
+    team_ansible_id = serializers.UUIDField(
         required=False,
         help_text=_('Resource id of the team who will receive permissions from this assignment. Alternative to team field.'),
     )

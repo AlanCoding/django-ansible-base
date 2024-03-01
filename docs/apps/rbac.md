@@ -29,7 +29,7 @@ A POST to this endpoint will create a new role definition, example data:
 ```json
 {
     "permissions": ["view_inventory"],
-    "content_type": "local.inventory",
+    "content_type": "aap.inventory",
     "name": "View a single inventory",
     "description": "custom role"
 }
@@ -114,7 +114,7 @@ Instead of giving permission to a single inventory, you can use roles to give
 permission to all inventories inside of an organization.
 
 The difference in the above steps are that
-- when creating a custom role definition the `content_type` would be "local.organization"
+- when creating a custom role definition the `content_type` would be "shared.organization"
 - when creating the assignment, the `object_id` would be the id of an organization
 
 ### Displaying Access

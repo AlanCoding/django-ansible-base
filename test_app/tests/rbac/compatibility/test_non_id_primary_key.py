@@ -35,7 +35,7 @@ def test_give_user_permission(user, nk_rd, position):
 @pytest.mark.django_db
 def test_make_non_id_api_assignment(admin_api_client, nk_rd, position, user):
     url = reverse('roleuserassignment-list')
-    data = dict(role_definition=nk_rd.id, user=user.id, content_type='local.positionmodel', object_id=position.position)
+    data = dict(role_definition=nk_rd.id, user=user.id, content_type='aap.positionmodel', object_id=position.position)
     response = admin_api_client.post(url, data=data, format="json")
     assert response.status_code == 201, response.data
 

@@ -65,7 +65,7 @@ def test_give_user_organization_wide_permission(user, org_pn_rd, pn_obj, organiz
 def test_make_org_api_assignment(admin_api_client, org_pn_rd, pn_obj, user):
     url = reverse('roleuserassignment-list')
     assert not user.has_obj_perm(pn_obj, 'change')
-    data = dict(role_definition=org_pn_rd.id, user=user.id, content_type='local.parentname', object_id=pn_obj.id)
+    data = dict(role_definition=org_pn_rd.id, user=user.id, content_type='aap.parentname', object_id=pn_obj.id)
     response = admin_api_client.post(url, data=data, format="json")
     assert response.status_code == 201, response.data
 

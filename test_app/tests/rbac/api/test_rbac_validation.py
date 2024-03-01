@@ -28,14 +28,14 @@ def test_assignments_are_immutable(admin_api_client, rando, inventory, inv_rd):
 @pytest.mark.django_db
 def test_permission_does_not_exist(admin_api_client):
     url = reverse('roledefinition-list')
-    response = admin_api_client.post(url, data={'name': 'foo', 'permissions': ['foo.foo_foooo'], 'content_type': 'local.inventory'})
+    response = admin_api_client.post(url, data={'name': 'foo', 'permissions': ['foo.foo_foooo'], 'content_type': 'aap.inventory'})
     assert response.status_code == 400
 
 
 @pytest.mark.django_db
 def test_using_permission_for_wrong_model(admin_api_client):
     url = reverse('roledefinition-list')
-    response = admin_api_client.post(url, data={'name': 'foo', 'permissions': ['local.view_inventory'], 'content_type': 'local.namespace'})
+    response = admin_api_client.post(url, data={'name': 'foo', 'permissions': ['aap.view_inventory'], 'content_type': 'aap.namespace'})
     assert response.status_code == 400
     assert 'view_inventory is not valid for content type' in str(response.data)
 

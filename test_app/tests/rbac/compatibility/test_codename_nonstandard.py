@@ -39,7 +39,7 @@ def test_give_user_permission(user, wp_rd, weird_obj):
 @pytest.mark.django_db
 def test_make_non_id_api_assignment(admin_api_client, wp_rd, weird_obj, user):
     url = reverse('roleuserassignment-list')
-    data = dict(role_definition=wp_rd.id, user=user.id, content_type='local.weirdperm', object_id=weird_obj.id)
+    data = dict(role_definition=wp_rd.id, user=user.id, content_type='aap.weirdperm', object_id=weird_obj.id)
     response = admin_api_client.post(url, data=data, format="json")
     assert response.status_code == 201, response.data
 

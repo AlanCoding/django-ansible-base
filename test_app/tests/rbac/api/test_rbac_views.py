@@ -9,7 +9,7 @@ def test_get_role_definition(admin_api_client, inv_rd):
     url = reverse('roledefinition-detail', kwargs={'pk': inv_rd.pk})
     response = admin_api_client.get(url)
     assert response.status_code == 200
-    assert set(response.data['permissions']) == set(['local.change_inventory', 'local.view_inventory'])
+    assert set(response.data['permissions']) == set(['aap.change_inventory', 'aap.view_inventory'])
 
 
 @pytest.mark.django_db
@@ -18,7 +18,7 @@ def test_create_role_definition(admin_api_client):
     Test creation of a custom role definition.
     """
     url = reverse("roledefinition-list")
-    data = dict(name='foo-role-def', description='bar', permissions=['local.view_organization', 'local.change_organization'], content_type='local.organization')
+    data = dict(name='foo-role-def', description='bar', permissions=['aap.view_organization', 'aap.change_organization'], content_type='shared.organization')
     response = admin_api_client.post(url, data=data, format="json")
     assert response.status_code == 201, response.data
     assert response.data['name'] == 'foo-role-def'
@@ -27,7 +27,7 @@ def test_create_role_definition(admin_api_client):
 @pytest.mark.django_db
 def test_create_global_role_definition(admin_api_client):
     url = reverse("roledefinition-list")
-    data = dict(name='global_view_org', description='bar', permissions=['local.view_organization'])
+    data = dict(name='global_view_org', description='bar', permissions=['aap.view_organization'])
     response = admin_api_client.post(url, data=data, format="json")
     assert response.status_code == 201, response.data
     assert response.data['name'] == 'global_view_org'
@@ -46,7 +46,7 @@ def test_get_user_assignment(admin_api_client, inv_rd, rando, inventory):
     assignment = inv_rd.give_permission(rando, inventory)
     url = reverse('roleuserassignment-detail', kwargs={'pk': assignment.pk})
     response = admin_api_client.get(url)
-    assert response.data['content_type'] == 'local.inventory'
+    assert response.data['content_type'] == 'aap.inventory'
     assert int(response.data['object_id']) == inventory.id
     assert response.data['role_definition'] == inv_rd.id
     assert not response.data['created_by']  # created by code, not by view
