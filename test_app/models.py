@@ -16,7 +16,7 @@ class User(AbstractUser, CommonModel):
 
 
 class Team(AbstractTeam):
-    encryptioner = models.ForeignKey('test_app.EncryptionModel', on_delete=models.SET_NULL, null=True)
+    pass
 
 
 class ResourceMigrationTestModel(models.Model):
