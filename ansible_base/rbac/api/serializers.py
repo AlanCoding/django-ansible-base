@@ -86,7 +86,6 @@ class ContentTypeField(ChoiceLikeMixin):
     def get_resource_type_name(self, cls):
         if registry := self.get_resource_registry():
             # duplicates logic in ansible_base/resource_registry/apps.py
-            use_registry_name = True
             try:
                 resource_config = registry.get_config_for_model(cls)
                 if serializer := resource_config.managed_serializer:
@@ -115,7 +114,7 @@ class PermissionField(ChoiceLikeMixin):
     def service_prefix(self):
         if registry := self.get_resource_registry():
             return registry.api_config.service_type
-        return local
+        return 'local'
 
     def get_dynamic_choices(self):
         perms = []
