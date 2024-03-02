@@ -85,7 +85,7 @@ def test_missing_object(admin_api_client, inv_rd, rando):
 @pytest.mark.django_db
 def test_invalid_ansible_id(admin_api_client, org_inv_rd, rando):
     url = reverse('roleuserassignment-list')
-    bad_ansible_id = f'12345678:{uuid4()}'
+    bad_ansible_id = f'{uuid4()}'
     data = dict(role_definition=org_inv_rd.id, user=rando.id, object_ansible_id=bad_ansible_id)
     response = admin_api_client.post(url, data=data, format="json")
     assert response.status_code == 400, response.data
