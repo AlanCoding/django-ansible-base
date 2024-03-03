@@ -12,10 +12,7 @@ from ansible_base.rbac import permission_registry
 
 
 class Organization(AbstractOrganization):
-    class Meta:
-        app_label = 'test_app'
-        # For root resources (no parent) we exclude the add permission which is a global permission
-        default_permissions = ('change', 'delete', 'view')
+    pass
 
 
 class User(AbstractUser, CommonModel):
@@ -79,10 +76,6 @@ class Inventory(models.Model):
 class InstanceGroup(models.Model):
     "Example of an object with no parent object, a root resource, a lone wolf"
     name = models.CharField(max_length=512)
-
-    class Meta:
-        app_label = 'test_app'
-        default_permissions = ('change', 'delete', 'view')
 
 
 class Namespace(models.Model):

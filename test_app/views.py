@@ -50,6 +50,10 @@ class InventoryViewSet(TestAppViewSet):
     serializer_class = serializers.InventorySerializer
 
 
+class InstanceGroupViewSet(TestAppViewSet):
+    serializer_class = serializers.InstanceGroupSerializer
+
+
 class CowViewSet(TestAppViewSet):
     serializer_class = serializers.CowSerializer
     rbac_action = None

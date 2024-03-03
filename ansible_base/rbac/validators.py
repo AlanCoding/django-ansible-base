@@ -26,20 +26,20 @@ def validate_permissions_for_model(permissions, content_type):
     for perm in permissions:
         cls = perm.content_type.model_class()
         if is_add_perm(perm.codename):
-            to_model = permission_registry.get_parent_model(cls)
-            if to_model is None and not system_roles_enabled():
+            role_model = permission_registry.get_parent_model(cls)
+            if role_model is None and not system_roles_enabled():
                 raise ValidationError(f'{perm.codename} permission requires system-wide roles, which are not enabled')
         else:
-            to_model = cls
-        if content_type and to_model._meta.model_name != content_type.model:
+            role_model = cls
+        if content_type and role_model._meta.model_name != content_type.model:
             # it is also valid to attach permissions to a role for the parent model
             child_model_names = [child_cls._meta.model_name for rel, child_cls in permission_registry.get_child_models(content_type.model_class())]
             if cls._meta.model_name not in child_model_names:
                 raise ValidationError(f'{perm.codename} is not valid for content type {content_type.model}')
-        permissions_by_model[to_model].append(perm)
+        permissions_by_model[role_model].append(perm)
 
-    # check that all provided permissions are for registered models
-    unregistered_models = set(permissions_by_model.keys()) - set(permission_registry.all_registered_models)
+    # check that all provided permissions are for registered models, or are system-wide
+    unregistered_models = set(permissions_by_model.keys()) - set(permission_registry.all_registered_models) - set([None])
     if unregistered_models:
         display_models = ', '.join(str(cls._meta.verbose_name) for cls in unregistered_models)
         raise ValidationError(f'Permissions for unregistered models were given: {display_models}')
@@ -48,6 +48,9 @@ def validate_permissions_for_model(permissions, content_type):
     for cls, model_permissions in permissions_by_model.items():
         for perm in model_permissions:
             if 'view' in perm.codename:
+                break
+            if cls is None and is_add_perm(perm.codename):
+                # special case for system add permissions, because there is no associated parent object
                 break
         else:
             display_perms = ', '.join([perm.codename for perm in model_permissions])

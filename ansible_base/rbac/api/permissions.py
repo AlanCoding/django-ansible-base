@@ -57,17 +57,16 @@ class AnsibleBaseObjectPermissions(DjangoObjectPermissions):
             # and the object permissions (data) tells whether it is possible
             if request.method != request._request.method and (not request.data):
                 return True
-            queryset = self._queryset(view)
-            model_cls = queryset.model
+
+            model_cls = self._queryset(view).model
+            full_codename = f'add_{model_cls._meta.model_name}'
             parent_field_name = permission_registry.get_parent_fd_name(model_cls)
             if parent_field_name is None or parent_field_name not in request.data:
-                return bool(request.user.is_superuser)
-            elif parent_field_name not in request.data:
-                return False
+                return has_super_permission(request.user, full_codename)
 
             parent_model = permission_registry.get_parent_model(model_cls)
             parent_obj = parent_model.objects.get(pk=request.data[parent_field_name])
-            return request.user.has_obj_perm(parent_obj, f'add_{model_cls._meta.model_name}')
+            return request.user.has_obj_perm(parent_obj, full_codename)
 
         # We are not checking many things here, a GET to list views can return 0 objects
         return True

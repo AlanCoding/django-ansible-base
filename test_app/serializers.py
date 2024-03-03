@@ -46,6 +46,12 @@ class InventorySerializer(ModelSerializer):
         fields = '__all__'
 
 
+class InstanceGroupSerializer(ModelSerializer):
+    class Meta:
+        model = models.InstanceGroup
+        fields = '__all__'
+
+
 class CowSerializer(ModelSerializer):
     class Meta:
         model = models.Cow

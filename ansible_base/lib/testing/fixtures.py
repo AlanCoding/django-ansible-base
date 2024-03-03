@@ -65,9 +65,7 @@ def admin_api_client(db, admin_user, unauthenticated_api_client, local_authentic
 
 @pytest.fixture
 def user(db, django_user_model, local_authenticator):
-    user = django_user_model.objects.create_user(username="user", password="password")
-    yield user
-    user.delete()
+    return django_user_model.objects.create_user(username="user", password="password")
 
 
 @pytest.fixture

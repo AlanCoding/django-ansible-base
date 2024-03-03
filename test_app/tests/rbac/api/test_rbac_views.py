@@ -1,5 +1,5 @@
 import pytest
-from django.urls import reverse
+from rest_framework.reverse import reverse
 
 from ansible_base.rbac.models import RoleDefinition
 
