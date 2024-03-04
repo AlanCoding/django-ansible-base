@@ -5,15 +5,6 @@ from ansible_base.rbac.models import RoleDefinition
 from test_app.models import Inventory, User
 
 
-@pytest.fixture
-def global_inv_rd():
-    return RoleDefinition.objects.create_from_permissions(
-        permissions=['change_inventory', 'view_inventory'],
-        name='global-change-inv',
-        content_type=None,
-    )
-
-
 @pytest.mark.django_db
 def test_user_singleton_role(rando, inventory, global_inv_rd):
     global_inv_rd.give_global_permission(rando)
@@ -28,8 +19,8 @@ def test_user_singleton_role(rando, inventory, global_inv_rd):
 
 
 @pytest.mark.django_db
-def test_singleton_role_via_team(rando, organization, team, inventory, global_inv_rd, member_rd):
-    assignment = member_rd.give_permission(rando, organization)
+def test_singleton_role_via_team(rando, organization, team, inventory, global_inv_rd, org_member_rd):
+    assignment = org_member_rd.give_permission(rando, organization)
     assert list(assignment.object_role.provides_teams.all()) == [team]
 
     global_inv_rd.give_global_permission(team)

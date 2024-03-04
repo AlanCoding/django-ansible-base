@@ -72,19 +72,19 @@ def test_change_role_definition_permission(organization, team, inventory, member
 
 
 @pytest.mark.django_db
-def test_change_role_definition_member_permission(organization, inventory, member_rd, org_inv_rd):
+def test_change_role_definition_member_permission(organization, inventory, org_member_rd, member_rd, inv_rd):
     team_user = permission_registry.user_model.objects.create(username='team-user')
     org_team_user = permission_registry.user_model.objects.create(username='org-team-user')
     team = permission_registry.team_model.objects.create(name='ateam', organization=organization)
     org_team = permission_registry.team_model.objects.create(name='org-team', organization=organization)
     in_org_team = permission_registry.team_model.objects.create(name='child-team', organization=organization)
 
-    org_inv_rd.give_permission(team, inventory)
+    inv_rd.give_permission(team, inventory)
     member_rd.give_permission(team_user, team)
 
-    member_rd.give_permission(org_team, organization)
+    org_member_rd.give_permission(org_team, organization)
     member_rd.give_permission(org_team_user, org_team)
-    org_inv_rd.give_permission(in_org_team, inventory)
+    inv_rd.give_permission(in_org_team, inventory)
 
     # sanity
     assert [u.has_obj_perm(inventory, 'change') for u in (team_user, org_team_user)] == [True, True]

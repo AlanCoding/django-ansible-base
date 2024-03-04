@@ -12,11 +12,17 @@ def system_roles_enabled():
     return bool(settings.ANSIBLE_BASE_ALLOW_SINGLETON_USER_ROLES or settings.ANSIBLE_BASE_ALLOW_SINGLETON_TEAM_ROLES)
 
 
-def validate_permissions_for_model(permissions, content_type):
+def validate_permissions_for_model(permissions, content_type) -> None:
+    """Validation for creating a RoleDefinition
+
+    This is called by the RoleDefinitionSerializer so clients will get these errors.
+    It is also called by manager helper methods like RoleDefinition.objects.create_from_permissions
+    which is done as an aid to tests and other apps integrating this library.
+    """
     if content_type is None:
         if not system_roles_enabled():
             raise ValidationError('System-wide roles are not enabled')
-        if permission_registry.team_permission in permissions:
+        if permission_registry.team_permission in [perm.codename for perm in permissions]:
             raise ValidationError(f'The {permission_registry.team_permission} permission can not be used in global roles')
 
     # organize permissions by what model they should apply to
@@ -58,11 +64,13 @@ def validate_permissions_for_model(permissions, content_type):
 
 
 def codenames_for_cls(cls) -> list[str]:
+    "Helper method that gives the Django permission codenames for a given class"
     return set([t[0] for t in cls._meta.permissions]) | set(f'{act}_{cls._meta.model_name}' for act in cls._meta.default_permissions)
 
 
 def validate_codename_for_model(codename: str, model) -> str:
-    """
+    """Shortcut method and validation to allow action name, codename, or app_name.codename
+
     This institutes a shortcut for easier use of the evaluation methods
     so that user.has_obj_perm(obj, 'change') is the same as user.has_obj_perm(obj, 'change_inventory')
     assuming obj is an inventory.
@@ -89,3 +97,45 @@ def validate_codename_for_model(codename: str, model) -> str:
         if name in codenames_for_cls(child_cls):
             return name
     raise RuntimeError(f'The permission {name} is not valid for model {model._meta.model_name}')
+
+
+def validate_assignment_enabled(actor, content_type, has_team_perm=False):
+    """Called in role assignment logic, inside RoleDefinition.give_permission
+
+    Raises error if a setting disables the kind of permission being given.
+    This mostly deals with team permissions.
+    """
+    team_team_allowed = settings.ANSIBLE_BASE_TEAM_TEAM_ALLOWED
+    team_org_allowed = settings.ANSIBLE_BASE_TEAM_ORG_ALLOWED
+    team_org_team_allowed = settings.ANSIBLE_BASE_TEAM_ORG_TEAM_ALLOWED
+
+    if all([team_team_allowed, team_org_allowed, team_org_team_allowed]):
+        return  # Everything is allowed
+    team_model_name = permission_registry.team_model._meta.model_name
+    if actor._meta.model_name != team_model_name:
+        return  # Current prohibition settings only apply to team actors
+
+    if not team_team_allowed and content_type.model == team_model_name:
+        raise ValidationError('Assigning team permissions to other teams is not allowed')
+
+    team_parent_model_name = permission_registry.get_parent_model(permission_registry.team_model)._meta.model_name
+    if not team_org_allowed and content_type.model == team_parent_model_name:
+        raise ValidationError(f'Assigning {team_parent_model_name} permissions to teams is not allowed')
+
+    if not team_org_team_allowed and content_type.model == team_parent_model_name and has_team_perm:
+        raise ValidationError(f'Assigning {team_parent_model_name} permissions to teams is not allowed')
+
+
+def validate_assignment(rd, actor, obj) -> None:
+    """General validation for making a role assignment
+
+    This is called programatically in the give_permission and give_global_permission methods.
+    Some of this covered by serializers as well by basic field validation and param gathering.
+    """
+    if actor._meta.model_name not in ('user', 'team'):
+        raise ValidationError(f'Cannot give permission to {actor}, must be a user or team')
+
+    obj_ct = permission_registry.content_type_model.objects.get_for_model(obj)
+    if obj_ct.id != rd.content_type_id:
+        rd_model = getattr(rd.content_type, "model", "global")
+        raise ValidationError(f'Role type {rd_model} does not match object {obj_ct.model}')

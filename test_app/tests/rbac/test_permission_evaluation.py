@@ -30,7 +30,11 @@ def test_org_inv_permissions(rando, inventory, org_inv_rd):
 
 @pytest.mark.django_db
 def test_resource_add_permission(rando, inventory):
-    rd, _ = RoleDefinition.objects.get_or_create(permissions=['add_inventory', 'view_organization'], name='can-add-inventory')
+    rd, _ = RoleDefinition.objects.get_or_create(
+        permissions=['add_inventory', 'view_organization'],
+        name='can-add-inventory',
+        content_type=permission_registry.content_type_model.objects.get_for_model(Organization),
+    )
     rd.give_permission(rando, inventory.organization)
 
     assert set(RoleEvaluation.get_permissions(rando, inventory.organization)) == set(['add_inventory', 'view_organization'])
@@ -66,7 +70,7 @@ def test_visible_items():
     assert u2.has_obj_perm(inv, 'view')
 
     inv_view, _ = RoleDefinition.objects.get_or_create(
-        permissions=['view_inventory'], name='view-inv', content_type=permission_registry.content_type_model.objects.get_for_model(Organization)
+        permissions=['view_inventory'], name='view-inv', content_type=permission_registry.content_type_model.objects.get_for_model(inv)
     )
     inv_1 = inv_view.give_permission(u3, inv)
 

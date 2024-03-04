@@ -6,9 +6,9 @@ from test_app.models import Inventory, Organization
 
 
 @pytest.mark.django_db
-def test_change_parent_field(team, rando, inventory, inv_rd, member_rd):
+def test_change_parent_field(team, rando, inventory, org_inv_rd, member_rd):
     member_rd.give_permission(rando, team)
-    inv_rd.give_permission(team, inventory.organization)
+    org_inv_rd.give_permission(team, inventory.organization)
     assert rando.has_obj_perm(inventory, 'change')
 
     inventory.organization = Organization.objects.create(name='new-org')
@@ -18,9 +18,9 @@ def test_change_parent_field(team, rando, inventory, inv_rd, member_rd):
 
 
 @pytest.mark.django_db
-def test_change_parent_field_with_only(team, rando, inventory, inv_rd, member_rd):
+def test_change_parent_field_with_only(team, rando, inventory, org_inv_rd, member_rd):
     member_rd.give_permission(rando, team)
-    inv_rd.give_permission(team, inventory.organization)
+    org_inv_rd.give_permission(team, inventory.organization)
     assert rando.has_obj_perm(inventory, 'change')
 
     inv_copy = Inventory.objects.only('id').get(id=inventory.id)

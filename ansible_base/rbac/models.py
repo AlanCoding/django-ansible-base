@@ -19,7 +19,7 @@ from ansible_base.lib.abstract_models.common import CommonModel
 from ansible_base.lib.utils.models import is_add_perm
 from ansible_base.rbac.permission_registry import permission_registry
 from ansible_base.rbac.prefetch import TypesPrefetch
-from ansible_base.rbac.validators import validate_permissions_for_model
+from ansible_base.rbac.validators import validate_assignment, validate_permissions_for_model
 
 logger = logging.getLogger('ansible_base.rbac.models')
 
@@ -165,6 +165,7 @@ class RoleDefinition(CommonModel):
 
     def give_or_remove_permission(self, actor, content_object, giving=True, sync_action=False):
         "Shortcut method to do whatever needed to give user or team these permissions"
+        validate_assignment(self, actor, content_object)
         obj_ct = ContentType.objects.get_for_model(content_object)
         # sanitize the object_id to its database version, practically, remove "-" chars from uuids
         object_id = content_object._meta.pk.get_db_prep_value(content_object.pk, connection)
@@ -193,8 +194,6 @@ class RoleDefinition(CommonModel):
                 assignment, created = RoleTeamAssignment.objects.get_or_create(team=actor, object_role=object_role)
             else:
                 object_role.teams.remove(actor)
-        else:
-            raise RuntimeError(f'Cannot give permission to {actor}, must be a user or team')
 
         if (not giving) and (not (object_role.users.exists() or object_role.teams.exists())):
             if object_role in to_update:

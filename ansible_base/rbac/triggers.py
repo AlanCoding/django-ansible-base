@@ -4,7 +4,6 @@ from contextlib import contextmanager
 from django.apps import apps
 from django.conf import settings
 from django.contrib.contenttypes.models import ContentType
-from django.core.exceptions import ValidationError
 from django.db.models.signals import m2m_changed, post_delete, post_init, post_save, pre_delete, pre_save
 from django.db.utils import ProgrammingError
 
@@ -12,6 +11,7 @@ from ansible_base.rbac.caching import compute_object_role_permissions, compute_t
 from ansible_base.rbac.migrations._managed_definitions import setup_managed_role_definitions
 from ansible_base.rbac.models import ObjectRole, RoleDefinition, RoleEvaluation
 from ansible_base.rbac.permission_registry import permission_registry
+from ansible_base.rbac.validators import validate_assignment_enabled
 
 logger = logging.getLogger('ansible_base.rbac.triggers')
 
@@ -31,28 +31,6 @@ def team_ancestor_roles(team):
     """
     permission_kwargs = dict(codename=permission_registry.team_permission, object_id=team.id, content_type_id=permission_registry.team_ct_id)
     return set(ObjectRole.objects.filter(permission_partials__in=RoleEvaluation.objects.filter(**permission_kwargs)))
-
-
-def validate_assignment_enabled(actor, content_type, has_team_perm=False):
-    team_team_allowed = settings.ANSIBLE_BASE_TEAM_TEAM_ALLOWED
-    team_org_allowed = settings.ANSIBLE_BASE_TEAM_ORG_ALLOWED
-    team_org_team_allowed = settings.ANSIBLE_BASE_TEAM_ORG_TEAM_ALLOWED
-
-    if all([team_team_allowed, team_org_allowed, team_org_team_allowed]):
-        return  # Everything is allowed
-    team_model_name = permission_registry.team_model._meta.model_name
-    if actor._meta.model_name != team_model_name:
-        return  # Current prohibition settings only apply to team actors
-
-    if not team_team_allowed and content_type.model == team_model_name:
-        raise ValidationError('Assigning team permissions to other teams is not allowed')
-
-    team_parent_model_name = permission_registry.get_parent_model(permission_registry.team_model)._meta.model_name
-    if not team_org_allowed and content_type.model == team_parent_model_name:
-        raise ValidationError(f'Assigning {team_parent_model_name} permissions to teams is not allowed')
-
-    if not team_org_team_allowed and content_type.model == team_parent_model_name and has_team_perm:
-        raise ValidationError(f'Assigning {team_parent_model_name} permissions to teams is not allowed')
 
 
 def needed_updates_on_assignment(role_definition, actor, object_role, created=False, giving=True):
