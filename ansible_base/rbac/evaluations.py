@@ -1,7 +1,7 @@
 from django.conf import settings
 
 from ansible_base.rbac import permission_registry
-from ansible_base.rbac.models import ObjectRole, RoleDefinition, get_evaluation_model
+from ansible_base.rbac.models import RoleDefinition, get_evaluation_model
 from ansible_base.rbac.validators import validate_codename_for_model
 
 """
@@ -37,21 +37,17 @@ def has_super_permission(user, full_codename=None) -> bool:
     return False
 
 
-def bound_singleton_permissions(self) -> set[str]:
+def bound_singleton_permissions(self):
     "Method attached to User model as singleton_permissions"
-    if hasattr(self, '_singleton_permissions'):
-        return self._singleton_permissions
-    perm_set = set()
-    if settings.ANSIBLE_BASE_ALLOW_SINGLETON_USER_ROLES:
-        rd_qs = RoleDefinition.objects.filter(user_assignments__user=self, content_type=None)
-        perm_qs = permission_registry.permission_model.objects.filter(role_definitions__in=rd_qs)
-        perm_set.update(perm_qs.values_list('codename', flat=True))
-    if settings.ANSIBLE_BASE_ALLOW_SINGLETON_TEAM_ROLES:
-        user_teams_qs = permission_registry.team_model.objects.filter(member_roles__in=ObjectRole.objects.filter(users=self))
-        rd_qs = RoleDefinition.objects.filter(team_assignments__team__in=user_teams_qs, content_type=None)
-        perm_qs = permission_registry.permission_model.objects.filter(role_definitions__in=rd_qs)
-        perm_set.update(perm_qs.values_list('codename', flat=True))
-    return perm_set
+    if not hasattr(self, '_singleton_permissions') or bound_singleton_permissions._team_clear_signal:
+        # values_list will make the return type set[str]
+        permission_qs = permission_registry.permission_model.objects.values_list('codename', flat=True)
+        self._singleton_permissions = RoleDefinition.user_global_permissions(self, permission_qs=permission_qs)
+        bound_singleton_permissions._team_clear_signal = False
+    return self._singleton_permissions
+
+
+bound_singleton_permissions._team_clear_signal = False
 
 
 class BaseEvaluationDescriptor:

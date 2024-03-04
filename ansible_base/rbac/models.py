@@ -144,9 +144,16 @@ class RoleDefinition(CommonModel):
             if assignment:
                 assignment.delete()
 
-        # Clear any cached permissions, if applicable
-        if hasattr(actor, '_singleton_permissions'):
-            delattr(actor, '_singleton_permissions')
+        # Clear any cached permissions
+        if actor._meta.model_name == 'user':
+            if hasattr(actor, '_singleton_permissions'):
+                delattr(actor, '_singleton_permissions')
+        else:
+            # when team permissions change, users in memory may be affected by this
+            # but there is no way to know what users, so we use a global flag
+            from ansible_base.rbac.evaluations import bound_singleton_permissions
+
+            bound_singleton_permissions._team_clear_signal = True
 
         return assignment
 
@@ -203,6 +210,28 @@ class RoleDefinition(CommonModel):
 
         return assignment
 
+    @classmethod
+    def user_global_permissions(cls, user, permission_qs=None):
+        if permission_qs is None:
+            # Allowing caller to replace the base permission set allows changing the type of thing returned
+            # this is used in the assignment querysets, but these cases must call the method directly
+            permission_qs = permission_registry.permission_model.objects.all()
+
+        perm_set = set()
+        if settings.ANSIBLE_BASE_ALLOW_SINGLETON_USER_ROLES:
+            rd_qs = cls.objects.filter(user_assignments__user=user, content_type=None)
+            perm_qs = permission_qs.filter(role_definitions__in=rd_qs)
+            perm_set.update(perm_qs)
+        if settings.ANSIBLE_BASE_ALLOW_SINGLETON_TEAM_ROLES:
+            # Users gain team membership via object roles that grant the teams member permission
+            user_obj_roles = ObjectRole.objects.filter(users=user)
+            user_teams_qs = permission_registry.team_model.objects.filter(member_roles__in=user_obj_roles)
+            # Those teams (the user is in) then have a set of global roles they have been assigned
+            rd_qs = cls.objects.filter(team_assignments__team__in=user_teams_qs, content_type=None)
+            perm_qs = permission_qs.filter(role_definitions__in=rd_qs)
+            perm_set.update(perm_qs)
+        return perm_set
+
     def summary_fields(self):
         return {'id': self.id, 'name': self.name, 'description': self.description, 'managed': self.managed}
 
@@ -226,7 +255,15 @@ class ObjectRoleFields(models.Model):
         )
         # NOTE: type casting is necessary in postgres but not sqlite3
         object_id_field = cls._meta.get_field('object_id')
-        return cls.objects.filter(object_id__in=permission_qs.values_list(Cast('object_id', output_field=object_id_field)))
+        obj_filter = models.Q(object_id__in=permission_qs.values_list(Cast('object_id', output_field=object_id_field)))
+
+        singleton_permissions = RoleDefinition.user_global_permissions(user)
+
+        if singleton_permissions:
+            super_ct_ids = set(perm.content_type_id for perm in singleton_permissions)
+            # content_type=None condition: A good-enough rule - you can see other global assignments if you have any yourself
+            return cls.objects.filter(obj_filter | models.Q(content_type__in=super_ct_ids) | models.Q(content_type=None))
+        return cls.objects.filter(obj_filter)
 
     @classmethod
     def visible_items(cls, user):

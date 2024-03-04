@@ -49,15 +49,25 @@ def test_visible_items():
     u2 = permission_registry.user_model.objects.create(username='u2')
     u3 = permission_registry.user_model.objects.create(username='u3')
 
-    rd, _ = RoleDefinition.objects.get_or_create(permissions=['change_organization', 'view_organization'], name='change-org')
+    rd, _ = RoleDefinition.objects.get_or_create(
+        permissions=['change_organization', 'view_organization'],
+        name='change-org',
+        content_type=permission_registry.content_type_model.objects.get_for_model(Organization),
+    )
     change_1 = rd.give_permission(u1, org1)
     change_2 = rd.give_permission(u2, org2)
 
-    view_rd, _ = RoleDefinition.objects.get_or_create(permissions=['view_organization', 'view_inventory'], name='view-inv-org')
+    view_rd, _ = RoleDefinition.objects.get_or_create(
+        permissions=['view_organization', 'view_inventory'],
+        name='view-inv-org',
+        content_type=permission_registry.content_type_model.objects.get_for_model(Organization),
+    )
     view_1 = view_rd.give_permission(u2, org1)
     assert u2.has_obj_perm(inv, 'view')
 
-    inv_view, _ = RoleDefinition.objects.get_or_create(permissions=['view_inventory'], name='view-inv')
+    inv_view, _ = RoleDefinition.objects.get_or_create(
+        permissions=['view_inventory'], name='view-inv', content_type=permission_registry.content_type_model.objects.get_for_model(Organization)
+    )
     inv_1 = inv_view.give_permission(u3, inv)
 
     # u1 can see org1
