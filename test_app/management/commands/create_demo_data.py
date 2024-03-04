@@ -1,12 +1,12 @@
 from os import environ
 
 from crum import impersonate
-from django.contrib.auth.models import Permission
 from django.contrib.contenttypes.models import ContentType
 from django.core.management.base import BaseCommand
 
 from ansible_base.authentication.models import Authenticator, AuthenticatorUser
 from ansible_base.rbac.models import RoleDefinition
+from ansible_base.rbac.validators import combine_values, permissions_allowed_for_role
 from test_app.models import EncryptionModel, InstanceGroup, Inventory, Organization, Team, User
 
 
@@ -64,9 +64,9 @@ class Command(BaseCommand):
             Team.objects.get_or_create(name='community.general maintainers', defaults={'organization': galaxy})
 
         # NOTE: managed role definitions are turned off, you could turn them on and get rid of these
-        awx_perms = list(Permission.objects.filter(content_type__model__in=['organization', 'inventory']).values_list('codename', flat=True))
+        org_perms = combine_values(permissions_allowed_for_role(Organization))
         org_admin, _ = RoleDefinition.objects.get_or_create(
-            name='AWX Organization admin permissions', permissions=awx_perms, defaults={'content_type': ContentType.objects.get_for_model(Organization)}
+            name='Organization admin permissions', permissions=org_perms, defaults={'content_type': ContentType.objects.get_for_model(Organization)}
         )
         ig_admin, _ = RoleDefinition.objects.get_or_create(
             name='AWX InstanceGroup admin',

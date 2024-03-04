@@ -20,7 +20,16 @@ def test_reuse_by_permission_list():
 
 
 @pytest.mark.django_db
-def test_missing_use_permission():
+def test_root_resource_add_invalid():
+    with pytest.raises(ValidationError) as exc:
+        org_admin, created = RoleDefinition.objects.get_or_create(
+            name='org-view', permissions=['add_organization'], defaults={'content_type': ContentType.objects.get_for_model(Organization)}
+        )
+    assert 'Permissions "add_organization" are not valid for organization roles' in str(exc)
+
+
+@pytest.mark.django_db
+def test_missing_view_permission():
     with pytest.raises(ValidationError) as exc:
         RoleDefinition.objects.create_from_permissions(
             permissions=['change_organization'], name='only-change-org', content_type=ContentType.objects.get_for_model(Organization)
@@ -30,11 +39,12 @@ def test_missing_use_permission():
 
 @pytest.mark.django_db
 def test_permission_for_unregistered_model():
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValidationError) as exc:
         validate_permissions_for_model(
             permissions=[permission_registry.permission_model.objects.get(codename='view_exampleevent')],
             content_type=ContentType.objects.get_for_model(ExampleEvent),
         )
+    assert 'RBAC does not track permissions for model exampleevent' in str(exc)
 
 
 @pytest.mark.django_db

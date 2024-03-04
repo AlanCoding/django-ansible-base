@@ -2,6 +2,7 @@ import re
 from collections import defaultdict
 
 from django.conf import settings
+from django.db.models import Model
 from rest_framework.exceptions import ValidationError
 
 from ansible_base.lib.utils.models import is_add_perm
@@ -12,6 +13,49 @@ def system_roles_enabled():
     return bool(settings.ANSIBLE_BASE_ALLOW_SINGLETON_USER_ROLES or settings.ANSIBLE_BASE_ALLOW_SINGLETON_TEAM_ROLES)
 
 
+def codenames_for_cls(cls) -> set[str]:
+    "Helper method that gives the Django permission codenames for a given class"
+    return set([t[0] for t in cls._meta.permissions]) | set(f'{act}_{cls._meta.model_name}' for act in cls._meta.default_permissions)
+
+
+def permissions_allowed_for_system_role() -> dict[Model, set[str]]:
+    "Permission codenames useable in system-wide roles, which have content_type set to None"
+    permissions_by_model = defaultdict(set)
+    for cls in permission_registry.all_registered_models:
+        if cls._meta.model_name == 'team':
+            continue  # special exclusion of team object permissions from system-wide roles
+        for codename in codenames_for_cls(cls):
+            permissions_by_model[cls].add(codename)
+    return permissions_by_model
+
+
+def permissions_allowed_for_role(cls) -> dict[Model, set[str]]:
+    "Permission codenames valid for a RoleDefinition of given class, organized by permission class"
+    if cls is None:
+        return permissions_allowed_for_system_role()
+
+    if cls not in permission_registry._registry:
+        raise ValidationError(f'Django-ansible-base RBAC does not track permissions for model {cls._meta.model_name}')
+
+    # Include direct model permissions (except for add permission)
+    permissions_by_model = defaultdict(set)
+    permissions_by_model[cls] = set(codename for codename in codenames_for_cls(cls) if not is_add_perm(codename))
+
+    # Include model permissions for all child models, including the add permission
+    for rel, child_cls in permission_registry.get_child_models(cls):
+        permissions_by_model[child_cls] |= codenames_for_cls(child_cls)
+
+    return permissions_by_model
+
+
+def combine_values(data: dict[Model, str]) -> set[str]:
+    "Utility method to merge everything in .values() into a single set"
+    ret = set()
+    for this_set in data.values():
+        ret |= this_set
+    return ret
+
+
 def validate_permissions_for_model(permissions, content_type) -> None:
     """Validation for creating a RoleDefinition
 
@@ -19,53 +63,31 @@ def validate_permissions_for_model(permissions, content_type) -> None:
     It is also called by manager helper methods like RoleDefinition.objects.create_from_permissions
     which is done as an aid to tests and other apps integrating this library.
     """
+    codename_list = set(perm.codename for perm in permissions)
     if content_type is None:
         if not system_roles_enabled():
-            raise ValidationError('System-wide roles are not enabled')
-        if permission_registry.team_permission in [perm.codename for perm in permissions]:
-            raise ValidationError(f'The {permission_registry.team_permission} permission can not be used in global roles')
+            raise ValidationError({'content_type': 'System-wide roles are not enabled'})
+        if permission_registry.team_permission in codename_list:
+            raise ValidationError({'permissions': f'The {permission_registry.team_permission} permission can not be used in global roles'})
 
-    # organize permissions by what model they should apply to
-    # the "add" permission applies to the parent model of a permission
-    # NOTE: issue for grandparent models https://github.com/ansible/django-ansible-base/issues/93
-    permissions_by_model = defaultdict(list)
-    for perm in permissions:
-        cls = perm.content_type.model_class()
-        if is_add_perm(perm.codename):
-            role_model = permission_registry.get_parent_model(cls)
-            if role_model is None and not system_roles_enabled():
-                raise ValidationError(f'{perm.codename} permission requires system-wide roles, which are not enabled')
-        else:
-            role_model = cls
-        if content_type and role_model._meta.model_name != content_type.model:
-            # it is also valid to attach permissions to a role for the parent model
-            child_model_names = [child_cls._meta.model_name for rel, child_cls in permission_registry.get_child_models(content_type.model_class())]
-            if cls._meta.model_name not in child_model_names:
-                raise ValidationError(f'{perm.codename} is not valid for content type {content_type.model}')
-        permissions_by_model[role_model].append(perm)
+    role_model = None
+    if content_type:
+        role_model = content_type.model_class()
+    permissions_by_model = permissions_allowed_for_role(role_model)
 
-    # check that all provided permissions are for registered models, or are system-wide
-    unregistered_models = set(permissions_by_model.keys()) - set(permission_registry.all_registered_models) - set([None])
-    if unregistered_models:
-        display_models = ', '.join(str(cls._meta.verbose_name) for cls in unregistered_models)
-        raise ValidationError(f'Permissions for unregistered models were given: {display_models}')
+    invalid_codenames = set(codename_list) - combine_values(permissions_by_model)
+    if invalid_codenames:
+        print_codenames = ', '.join(f'"{codename}"' for codename in invalid_codenames)
+        print_model = role_model._meta.model_name if role_model else 'global roles'
+        raise ValidationError({'permissions': f'Permissions {print_codenames} are not valid for {print_model} roles'})
 
-    # check that view permission is given for every model that has any permission listed
-    for cls, model_permissions in permissions_by_model.items():
-        for perm in model_permissions:
-            if 'view' in perm.codename:
-                break
-            if cls is None and is_add_perm(perm.codename):
-                # special case for system add permissions, because there is no associated parent object
-                break
-        else:
-            display_perms = ', '.join([perm.codename for perm in model_permissions])
-            raise ValidationError(f'Permissions for model {cls._meta.verbose_name} needs to include view, got: {display_perms}')
-
-
-def codenames_for_cls(cls) -> list[str]:
-    "Helper method that gives the Django permission codenames for a given class"
-    return set([t[0] for t in cls._meta.permissions]) | set(f'{act}_{cls._meta.model_name}' for act in cls._meta.default_permissions)
+    # Check that view permission is given for every model that has update/delete/special actions listed
+    for cls, valid_model_permissions in permissions_by_model.items():
+        model_permissions = valid_model_permissions & codename_list
+        non_add_model_permissions = set(codename for codename in model_permissions if not is_add_perm(codename))
+        if non_add_model_permissions and not any('view' in codename for codename in non_add_model_permissions):
+            display_perms = ', '.join(non_add_model_permissions)
+            raise ValidationError({'permissions': f'Permissions for model {role_model._meta.verbose_name} needs to include view, got: {display_perms}'})
 
 
 def validate_codename_for_model(codename: str, model) -> str:
