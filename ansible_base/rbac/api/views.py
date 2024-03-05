@@ -26,7 +26,7 @@ class RoleDefinitionViewSet(ModelViewSet, AnsibleBaseDjangoAppApiView):
     but can be assigned to users.
     """
 
-    queryset = RoleDefinition.objects.all()
+    queryset = RoleDefinition.objects.prefetch_related('created_by', 'modified_by', 'content_type', 'permissions')
     serializer_class = RoleDefinitionSerializer
     permission_classes = [AuthenticatedReadAdminChange]
 
@@ -48,16 +48,20 @@ class RoleDefinitionViewSet(ModelViewSet, AnsibleBaseDjangoAppApiView):
         return super().perform_destroy(instance)
 
 
+assignment_prefetch_base = ('content_object', 'content_type', 'role_definition', 'created_by', 'object_role')
+
+
 class BaseAssignmentViewSet(ModelViewSet, AnsibleBaseDjangoAppApiView):
     permission_classes = [permissions.IsAuthenticated]
     # PUT and PATCH are not allowed because these are immutable
     http_method_names = ['get', 'post', 'head', 'options', 'delete']
+    prefetch_related = ()
 
     def get_queryset(self):
         model = self.serializer_class.Meta.model
         if has_super_permission(self.request.user, 'view'):
             return model.objects.all()
-        return model.visible_items(self.request.user).prefetch_related('content_object')
+        return model.visible_items(self.request.user).prefetch_related(*self.prefetch_related, *assignment_prefetch_base)
 
     def perform_destroy(self, instance):
         if not self.request.user.has_obj_perm(instance, 'change'):
@@ -82,6 +86,7 @@ class RoleTeamAssignmentViewSet(BaseAssignmentViewSet):
     """
 
     serializer_class = RoleTeamAssignmentSerializer
+    prefetch_related = ('team',)
 
 
 class RoleUserAssignmentViewSet(BaseAssignmentViewSet):
@@ -97,3 +102,4 @@ class RoleUserAssignmentViewSet(BaseAssignmentViewSet):
     """
 
     serializer_class = RoleUserAssignmentSerializer
+    prefetch_related = ('user',)

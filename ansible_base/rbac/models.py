@@ -211,6 +211,12 @@ class RoleDefinition(CommonModel):
 
     @classmethod
     def user_global_permissions(cls, user, permission_qs=None):
+        """Evaluation method only for global permissions from global roles
+
+        This is special, in that it bypasses the RoleEvaluation table and methods.
+        That is because global roles do not enumerate role permissions there,
+        so global permissions are computed separately, here.
+        """
         if permission_qs is None:
             # Allowing caller to replace the base permission set allows changing the type of thing returned
             # this is used in the assignment querysets, but these cases must call the method directly
@@ -256,10 +262,11 @@ class ObjectRoleFields(models.Model):
         object_id_field = cls._meta.get_field('object_id')
         obj_filter = models.Q(object_id__in=permission_qs.values_list(Cast('object_id', output_field=object_id_field)))
 
-        singleton_permissions = RoleDefinition.user_global_permissions(user)
+        if not hasattr(user, '_singleton_permission_objs'):
+            user._singleton_permission_objs = RoleDefinition.user_global_permissions(user)
 
-        if singleton_permissions:
-            super_ct_ids = set(perm.content_type_id for perm in singleton_permissions)
+        if user._singleton_permission_objs:
+            super_ct_ids = set(perm.content_type_id for perm in user._singleton_permission_objs)
             # content_type=None condition: A good-enough rule - you can see other global assignments if you have any yourself
             return cls.objects.filter(obj_filter | models.Q(content_type__in=super_ct_ids) | models.Q(content_type=None))
         return cls.objects.filter(obj_filter)
