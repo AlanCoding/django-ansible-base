@@ -9,7 +9,7 @@ from django.db.utils import ProgrammingError
 
 from ansible_base.rbac.caching import compute_object_role_permissions, compute_team_member_roles
 from ansible_base.rbac.migrations._managed_definitions import setup_managed_role_definitions
-from ansible_base.rbac.models import ObjectRole, RoleDefinition, RoleEvaluation
+from ansible_base.rbac.models import ObjectRole, RoleDefinition, RoleEvaluation, get_evaluation_model
 from ansible_base.rbac.permission_registry import permission_registry
 from ansible_base.rbac.validators import validate_assignment_enabled
 
@@ -225,6 +225,11 @@ def rbac_post_delete_remove_object_roles(instance, *args, **kwargs):
 
     ct = ContentType.objects.get_for_model(instance)
     ObjectRole.objects.filter(content_type=ct, object_id=instance.id).delete()
+
+    parent_field_name = permission_registry.get_parent_fd_name(instance)
+    if parent_field_name:
+        # Delete all evaluations from inherited permissions
+        get_evaluation_model(instance).objects.filter(content_type_id=ct.id, object_id=instance.id).delete()
 
 
 def rbac_post_user_delete(instance, *args, **kwargs):
