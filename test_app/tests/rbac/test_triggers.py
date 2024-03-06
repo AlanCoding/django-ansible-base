@@ -1,5 +1,4 @@
 import pytest
-from django.contrib.contenttypes.models import ContentType
 from django.test.utils import override_settings
 
 from ansible_base.rbac.models import ObjectRole, RoleEvaluation, RoleTeamAssignment, RoleUserAssignment
