@@ -106,6 +106,8 @@ class ContentTypeField(ChoiceLikeMixin):
         return permission_registry.content_type_model.objects.get(model=model)
 
     def to_representation(self, value):
+        if isinstance(value, str):
+            return value  # slight hack to work to AWX schema tests
         return self.get_resource_type_name(value.model_class())
 
 
