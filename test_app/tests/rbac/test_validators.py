@@ -101,7 +101,7 @@ class TestProhibitedRoleDefinitions:
             )
         assert 'Creating custom roles that include team permissions is disabled' in str(exc)
 
-    @override_settings(ANSIBLE_BASE_ALLOW_SINGLETON_USER_ROLES=False, ANSIBLE_BASE_ALLOW_SINGLETON_TEAM_ROLES=False)
+    @override_settings(ANSIBLE_BASE_ALLOW_SINGLETON_ROLES_API=False)
     def test_system_roles_disabled(self):
         with pytest.raises(ValidationError) as exc:
             RoleDefinition.objects.create_from_permissions(name='system-inventory-viewer', permissions=['view_inventory'], content_type=None)

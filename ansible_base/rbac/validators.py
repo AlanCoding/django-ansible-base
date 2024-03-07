@@ -10,7 +10,10 @@ from ansible_base.rbac.permission_registry import permission_registry
 
 
 def system_roles_enabled():
-    return bool(settings.ANSIBLE_BASE_ALLOW_SINGLETON_USER_ROLES or settings.ANSIBLE_BASE_ALLOW_SINGLETON_TEAM_ROLES)
+    return bool(
+        settings.ANSIBLE_BASE_ALLOW_SINGLETON_ROLES_API
+        and (settings.ANSIBLE_BASE_ALLOW_SINGLETON_USER_ROLES or settings.ANSIBLE_BASE_ALLOW_SINGLETON_TEAM_ROLES)
+    )
 
 
 def codenames_for_cls(cls) -> set[str]:
