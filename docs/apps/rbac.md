@@ -343,12 +343,13 @@ These will enable or disable a certain thing. Suffixes are listed below:
  - TEAM_ORG_ADMIN - whether to allow giving teams Organization-wide permissions which include memberships to other teams
  - CUSTOM_ROLES - whether to allow creation of custom roles at all
  - CUSTOM_TEAM_ROLES - whether to allow creation of custom roles that apply to teams (which could be confusing)
- - SINGLETON_USER_ROLES - whether to allow giving system-wide roles to users
- - SINGLETON_TEAM_ROLES - whether to allow giving system-wide roles to teams
+ - SINGLETON_USER_ROLES - whether to allow giving system-wide roles to users, incurs 1 additional query for evaluations
+ - SINGLETON_TEAM_ROLES - whether to allow giving system-wide roles to teams, incurs 1 additional query for evaluations
+ - SINGLETON_ROLES_API - whether to allow creating system-wide roles via the API
 
 If you create (in code) a role definition that sets `managed` to True, then these
 rules will be disregarded for that particular role definition. Managed role
-definitions can not be created through the API.
+definitions can not be created through the API, but can be created in code like migration scripts.
 
 ### Tracked Relationships
 

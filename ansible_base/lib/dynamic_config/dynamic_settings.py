@@ -135,6 +135,7 @@ if 'ansible_base.rbac' in INSTALLED_APPS:
     # Allows managing singleton permissions
     ANSIBLE_BASE_ALLOW_SINGLETON_USER_ROLES = False
     ANSIBLE_BASE_ALLOW_SINGLETON_TEAM_ROLES = False
+    ANSIBLE_BASE_ALLOW_SINGLETON_ROLES_API = True
 
     # User flags that can grant permission before consulting roles
     ANSIBLE_BASE_BYPASS_SUPERUSER_FLAGS = ['is_superuser']
