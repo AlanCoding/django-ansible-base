@@ -7,6 +7,65 @@ from ansible_base.rbac.models import RoleDefinition, RoleUserAssignment
 from test_app.models import Cow, Inventory, Organization
 
 
+@pytest.fixture
+def view_inv_rd():
+    view_inv, _ = RoleDefinition.objects.get_or_create(
+        name='view-inv', permissions=['view_inventory', 'view_organization'], defaults={'content_type': ContentType.objects.get_for_model(Organization)}
+    )
+    return view_inv
+
+
+@pytest.fixture
+def org_inv_add():
+    return RoleDefinition.objects.create_from_permissions(
+        permissions=['view_organization', 'add_inventory'],
+        name='org-inv-add',
+        content_type=permission_registry.content_type_model.objects.get_for_model(Organization),
+    )
+
+
+@pytest.fixture
+def unauthenticated_url_check(unauthenticated_api_client):
+    def _rf(url):
+        for action in ('get', 'delete'):
+            response = getattr(unauthenticated_api_client, action)(url)
+            assert response.status_code == 401
+
+        for action in ('patch', 'put'):
+            response = getattr(unauthenticated_api_client, action)(url, data={})
+            assert response.status_code == 401
+
+    return _rf
+
+
+@pytest.mark.django_db
+def test_unauthenticated_resource_requests(unauthenticated_url_check, inventory, organization):
+    cow = Cow.objects.create(organization=organization)
+    urls = [
+        reverse('inventory-list'),
+        reverse('inventory-detail', kwargs={'pk': inventory.id}),
+        reverse('inventory-detail', kwargs={'pk': 9000}),
+        reverse('cow-cowsay', kwargs={'pk': cow.id}),  # test action endpoint
+    ]
+    for url in urls:
+        unauthenticated_url_check(url)
+
+
+@pytest.mark.django_db
+def test_unauthenticated_role_management_requests(unauthenticated_url_check, inventory, inv_rd, user):
+    assignment = inv_rd.give_permission(user, inventory)
+    urls = [
+        reverse('roledefinition-list'),
+        reverse('roledefinition-detail', kwargs={'pk': inv_rd.id}),
+        reverse('roledefinition-detail', kwargs={'pk': 9000}),
+        reverse('roleuserassignment-list'),
+        reverse('roleuserassignment-detail', kwargs={'pk': assignment.id}),
+        reverse('roleuserassignment-detail', kwargs={'pk': 9000}),
+    ]
+    for url in urls:
+        unauthenticated_url_check(url)
+
+
 @pytest.mark.django_db
 def test_gain_organization_inventory_view(user_api_client, user, org_inv_rd):
     org = Organization.objects.create(name='foo')
@@ -29,14 +88,6 @@ def test_gain_organization_inventory_view(user_api_client, user, org_inv_rd):
     r = user_api_client.get(reverse('inventory-list'))
     assert r.status_code == 200, r.data
     assert len(r.data['results']) == 1
-
-
-@pytest.fixture
-def view_inv_rd():
-    view_inv, _ = RoleDefinition.objects.get_or_create(
-        name='view-inv', permissions=['view_inventory', 'view_organization'], defaults={'content_type': ContentType.objects.get_for_model(Organization)}
-    )
-    return view_inv
 
 
 @pytest.mark.django_db
@@ -62,15 +113,6 @@ def test_revoke_a_permission(admin_api_client, user, org_inv_rd, view_inv_rd, or
     assert r.status_code == 204, r.data
 
     assert not RoleUserAssignment.objects.filter(id=assignment.id).exists()
-
-
-@pytest.fixture
-def org_inv_add():
-    return RoleDefinition.objects.create_from_permissions(
-        permissions=['view_organization', 'add_inventory'],
-        name='org-inv-add',
-        content_type=permission_registry.content_type_model.objects.get_for_model(Organization),
-    )
 
 
 @pytest.mark.django_db
