@@ -64,23 +64,63 @@ def test_revoke_a_permission(admin_api_client, user, org_inv_rd, view_inv_rd, or
     assert not RoleUserAssignment.objects.filter(id=assignment.id).exists()
 
 
-@pytest.mark.django_db
-def test_add_permission(user_api_client, user, view_inv_rd, organization):
-    view_inv_rd.give_permission(user, organization)
-
-    r = user_api_client.post(reverse('inventory-list'), {'name': 'test', 'organization': organization.id})
-    assert r.status_code == 403, r.data
-
-    org_inv_add = RoleDefinition.objects.create_from_permissions(
+@pytest.fixture
+def org_inv_add():
+    return RoleDefinition.objects.create_from_permissions(
         permissions=['view_organization', 'add_inventory'],
         name='org-inv-add',
         content_type=permission_registry.content_type_model.objects.get_for_model(Organization),
     )
 
-    org_inv_add.give_permission(user, organization)
 
+@pytest.mark.django_db
+def test_add_permission(user_api_client, user, view_inv_rd, org_inv_add, organization):
+    view_inv_rd.give_permission(user, organization)
+    r = user_api_client.post(reverse('inventory-list'), {'name': 'test', 'organization': organization.id})
+    assert r.status_code == 403, r.data
+
+    org_inv_add.give_permission(user, organization)
     r = user_api_client.post(reverse('inventory-list'), {'name': 'test', 'organization': organization.id})
     assert r.status_code == 201, r.data
+
+    inventory = Inventory.objects.get(id=r.data['id'])
+    assert user.has_obj_perm(inventory, 'change')
+
+
+@pytest.mark.django_db
+def test_change_organization(user_api_client, user, inv_rd, org_inv_add, inventory):
+    org2 = Organization.objects.create(name='another-org')
+    url = reverse('inventory-detail', kwargs={'pk': inventory.pk})
+    inv_rd.give_permission(user, inventory)
+
+    # Inventory object admin can change superficial things like the name
+    r = user_api_client.patch(url, {'name': 'new inventory name', 'organization': inventory.organization_id})
+    assert r.status_code == 200, r.data
+
+    # Inventory object admin can not move to organization they do not own
+    r = user_api_client.patch(url, {'organization': org2.pk})
+    assert r.status_code == 403, r.data
+
+    org_inv_add.give_permission(user, org2)
+    r = user_api_client.patch(url, {'organization': org2.pk})
+    assert r.status_code == 200, r.data
+
+
+@pytest.mark.django_db
+def test_remove_organization(user_api_client, user, inv_rd, inventory):
+    """You should not be able to null out an organization field unless you have global role"""
+    url = reverse('inventory-detail', kwargs={'pk': inventory.pk})
+    inv_rd.give_permission(user, inventory)
+
+    # Inventory object admin can not null its organization
+    r = user_api_client.patch(url, {'organization': None}, format='json')
+    assert r.status_code == 403, r.data
+
+    global_add_inv_rd = RoleDefinition.objects.create_from_permissions(name='system-inventory-add', permissions=['add_inventory'], content_type=None)
+
+    global_add_inv_rd.give_global_permission(user)
+    r = user_api_client.patch(url, {'organization': None}, format='json')
+    assert r.status_code == 200, r.data
 
 
 @pytest.mark.django_db
