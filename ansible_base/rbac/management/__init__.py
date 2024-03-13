@@ -1,9 +1,8 @@
 import logging
 
 from django.apps import apps as global_apps
-from django.conf import settings
 from django.contrib.contenttypes.management import create_contenttypes
-from django.db import DEFAULT_DB_ALIAS, models, router
+from django.db import DEFAULT_DB_ALIAS, router
 
 from ansible_base.rbac import permission_registry
 
@@ -20,7 +19,7 @@ def create_dab_permissions(app_config, verbosity=2, interactive=True, using=DEFA
         return
 
     # Ensure that contenttypes are created for this app. Needed if
-    # 'django.contrib.auth' is in INSTALLED_APPS before
+    # 'ansible_base.rbac' is in INSTALLED_APPS before
     # 'django.contrib.contenttypes'.
     create_contenttypes(
         app_config,
@@ -51,7 +50,9 @@ def create_dab_permissions(app_config, verbosity=2, interactive=True, using=DEFA
             continue
         # Force looking up the content types in the current database
         # before creating foreign keys to them.
-        ctype = ContentType.objects.db_manager(using).get_for_model(klass, for_concrete_model=False)
+        ctype = ContentType.objects.db_manager(using).get_for_model(
+            klass, for_concrete_model=False
+        )
 
         ctypes.add(ctype)
 
@@ -71,7 +72,11 @@ def create_dab_permissions(app_config, verbosity=2, interactive=True, using=DEFA
     # Find all the Permissions that have a content_type for a model we're
     # looking for.  We don't need to check for codenames since we already have
     # a list of the ones we're going to create.
-    all_perms = set(Permission.objects.using(using).filter(content_type__in=ctypes).values_list("content_type", "codename"))
+    all_perms = set(
+        Permission.objects.using(using)
+        .filter(content_type__in=ctypes)
+        .values_list("content_type", "codename")
+    )
 
     perms = []
     for ct, (codename, name) in searched_perms:

@@ -1,5 +1,3 @@
-import logging
-
 from django.db import models
 
 # This method has moved, and this is put here temporarily to make branch management easier

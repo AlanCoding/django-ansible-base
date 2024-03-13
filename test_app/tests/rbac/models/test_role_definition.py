@@ -39,7 +39,7 @@ def test_missing_view_permission():
 
 @pytest.mark.django_db
 def test_permission_for_unregistered_model():
-    with pytest.raises(DABPermission.DoesNotExist) as exc:
+    with pytest.raises(DABPermission.DoesNotExist):
         validate_permissions_for_model(
             permissions=[DABPermission.objects.get(codename='view_exampleevent')],
             content_type=ContentType.objects.get_for_model(ExampleEvent),
