@@ -50,9 +50,7 @@ def create_dab_permissions(app_config, verbosity=2, interactive=True, using=DEFA
             continue
         # Force looking up the content types in the current database
         # before creating foreign keys to them.
-        ctype = ContentType.objects.db_manager(using).get_for_model(
-            klass, for_concrete_model=False
-        )
+        ctype = ContentType.objects.db_manager(using).get_for_model(klass, for_concrete_model=False)
 
         ctypes.add(ctype)
 
@@ -72,11 +70,7 @@ def create_dab_permissions(app_config, verbosity=2, interactive=True, using=DEFA
     # Find all the Permissions that have a content_type for a model we're
     # looking for.  We don't need to check for codenames since we already have
     # a list of the ones we're going to create.
-    all_perms = set(
-        Permission.objects.using(using)
-        .filter(content_type__in=ctypes)
-        .values_list("content_type", "codename")
-    )
+    all_perms = set(Permission.objects.using(using).filter(content_type__in=ctypes).values_list("content_type", "codename"))
 
     perms = []
     for ct, (codename, name) in searched_perms:
