@@ -134,17 +134,6 @@ class WeirdPerm(models.Model):
         permissions = [("I'm a lovely coconut", "You can be a lovely coconut with this object"), ("crack", "Can crack open this coconut")]
 
 
-class CustomPermission(models.Model):
-    "Used for testing using a custom permission, only used in special cases"
-    name = models.CharField("name", max_length=255)
-    content_type = models.ForeignKey(ContentType, models.CASCADE, verbose_name="content type")
-    codename = models.CharField("codename", max_length=100)
-
-    class Meta:
-        app_label = 'test_app'
-        unique_together = [["content_type", "codename"]]
-
-
 class ProxyInventory(Inventory):
     "This is not a registered permissions model. It exposes issues with duplicate permission codenames."
 

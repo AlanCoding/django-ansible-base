@@ -11,7 +11,6 @@ class Migration(migrations.Migration):
         ('contenttypes', '0002_remove_content_type_name'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
         migrations.swappable_dependency(settings.ANSIBLE_BASE_TEAM_MODEL),
-        migrations.swappable_dependency(settings.ANSIBLE_BASE_PERMISSION_MODEL),
         ('auth', '0012_alter_user_first_name_max_length'),
     ]
 
@@ -38,7 +37,7 @@ class Migration(migrations.Migration):
                 ('name', models.TextField(db_index=True, unique=True)),
                 ('description', models.TextField(blank=True)),
                 ('managed', models.BooleanField(default=False, editable=False)),
-                ('permissions', models.ManyToManyField(related_name='role_definitions', to=settings.ANSIBLE_BASE_PERMISSION_MODEL)),
+                ('permissions', models.ManyToManyField(related_name='role_definitions', to='dab_rbac.DABPermission')),
                 ('content_type', models.ForeignKey(
                     default=None,
                     help_text='Type of resource this can apply to, only used for validation and user assistance',
