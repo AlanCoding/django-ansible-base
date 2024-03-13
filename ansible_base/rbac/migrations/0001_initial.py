@@ -17,6 +17,21 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.CreateModel(
+            name='DABPermission',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('name', models.CharField(max_length=255, verbose_name='name')),
+                ('codename', models.CharField(max_length=100, verbose_name='codename')),
+                ('content_type', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='contenttypes.contenttype', verbose_name='content type')),
+            ],
+            options={
+                'verbose_name': 'permission',
+                'verbose_name_plural': 'permissions',
+                'ordering': ['content_type__model', 'codename'],
+                'unique_together': {('content_type', 'codename')},
+            },
+        ),
+        migrations.CreateModel(
             name='RoleDefinition',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
