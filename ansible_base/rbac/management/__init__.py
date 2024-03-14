@@ -15,7 +15,12 @@ def create_dab_permissions(app_config, verbosity=2, interactive=True, using=DEFA
     This will create DABPermission entries
     this will only create permissions for registered models
     """
-    if not app_config.models_module:
+    if not getattr(app_config, 'models_module', None):
+        return
+
+    # exit early if nothing is registered for this app
+    app_label = app_config.label
+    if not any(cls._meta.app_label == app_label for cls in permission_registry._registry):
         return
 
     # Ensure that contenttypes are created for this app. Needed if
@@ -30,7 +35,6 @@ def create_dab_permissions(app_config, verbosity=2, interactive=True, using=DEFA
         **kwargs,
     )
 
-    app_label = app_config.label
     try:
         app_config = apps.get_app_config(app_label)
         ContentType = apps.get_model("contenttypes", "ContentType")
