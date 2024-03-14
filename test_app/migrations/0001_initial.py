@@ -240,4 +240,5 @@ class Migration(migrations.Migration):
                 'default_permissions': ('add', 'view', 'delete'),
             },
         ),
+        migrations.RunPython(create_system_user),
     ]
