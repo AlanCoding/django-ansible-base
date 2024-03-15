@@ -81,7 +81,7 @@ class PermissionRegistry:
 
     def call_when_apps_ready(self, apps, app_config):
         from ansible_base.rbac import triggers
-        from ansible_base.rbac.evaluations import bound_has_obj_perm, bound_singleton_permissions, connect_rbac_methods
+        from ansible_base.rbac.access_methods import bound_has_obj_perm, bound_singleton_permissions, connect_rbac_methods
         from ansible_base.rbac.management import create_dab_permissions
 
         self.apps = apps

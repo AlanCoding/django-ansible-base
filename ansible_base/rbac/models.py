@@ -175,7 +175,7 @@ class RoleDefinition(CommonModel):
         else:
             # when team permissions change, users in memory may be affected by this
             # but there is no way to know what users, so we use a global flag
-            from ansible_base.rbac.evaluations import bound_singleton_permissions
+            from ansible_base.rbac.access_methods import bound_singleton_permissions
 
             bound_singleton_permissions._team_clear_signal = True
 

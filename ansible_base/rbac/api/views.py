@@ -11,7 +11,7 @@ from ansible_base.rbac.api.serializers import (
     RoleTeamAssignmentSerializer,
     RoleUserAssignmentSerializer,
 )
-from ansible_base.rbac.evaluations import has_super_permission
+from ansible_base.rbac.access_methods import has_super_permission
 from ansible_base.rbac.models import RoleDefinition
 from ansible_base.rbac.validators import check_content_obj_permission
 

@@ -6,7 +6,7 @@ from rest_framework.permissions import SAFE_METHODS, BasePermission, DjangoObjec
 
 from ansible_base.lib.utils.models import is_add_perm
 from ansible_base.rbac import permission_registry
-from ansible_base.rbac.evaluations import has_super_permission
+from ansible_base.rbac.access_methods import has_super_permission
 
 logger = logging.getLogger('ansible_base.rbac.api.permissions')
 
