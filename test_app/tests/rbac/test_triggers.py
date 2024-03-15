@@ -1,7 +1,9 @@
 import pytest
 from django.test.utils import override_settings
 
-from ansible_base.rbac.models import ObjectRole, RoleEvaluation, RoleTeamAssignment, RoleUserAssignment
+from ansible_base.rbac.models.object_role import ObjectRole
+from ansible_base.rbac.models.evaluation import RoleEvaluation
+from ansible_base.rbac.models.assignment import RoleTeamAssignment, RoleUserAssignment
 from ansible_base.rbac.permission_registry import permission_registry
 from test_app.models import Inventory, Organization
 

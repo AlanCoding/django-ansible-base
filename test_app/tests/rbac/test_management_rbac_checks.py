@@ -4,7 +4,8 @@ import pytest
 from django.contrib.contenttypes.models import ContentType
 
 from ansible_base.rbac.management.commands.RBAC_checks import Command
-from ansible_base.rbac.models import ObjectRole, RoleDefinition
+from ansible_base.rbac.models.object_role import ObjectRole
+from ansible_base.rbac.models.role_definition import RoleDefinition
 from test_app.models import Inventory
 
 

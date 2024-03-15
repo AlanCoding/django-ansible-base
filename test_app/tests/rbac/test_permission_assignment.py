@@ -2,7 +2,9 @@ import pytest
 from crum import impersonate
 from rest_framework.exceptions import ValidationError
 
-from ansible_base.rbac.models import RoleDefinition, RoleEvaluation, RoleUserAssignment
+from ansible_base.rbac.models.role_definition import RoleDefinition
+from ansible_base.rbac.models.evaluation import RoleEvaluation
+from ansible_base.rbac.models.assignment import RoleUserAssignment
 from ansible_base.rbac.permission_registry import permission_registry
 from test_app.models import Inventory, Organization
 

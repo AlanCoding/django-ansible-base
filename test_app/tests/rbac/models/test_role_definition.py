@@ -3,7 +3,10 @@ from django.contrib.contenttypes.models import ContentType
 from rest_framework.exceptions import ValidationError
 
 from ansible_base.rbac import permission_registry
-from ansible_base.rbac.models import DABPermission, ObjectRole, RoleDefinition, RoleEvaluation
+from ansible_base.rbac.models.permission import DABPermission
+from ansible_base.rbac.models.object_role import ObjectRole
+from ansible_base.rbac.models.role_definition import RoleDefinition
+from ansible_base.rbac.models.evaluation import RoleEvaluation
 from ansible_base.rbac.validators import validate_permissions_for_model
 from test_app.models import ExampleEvent, Organization
 

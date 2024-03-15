@@ -2,7 +2,8 @@ import pytest
 from django.contrib.contenttypes.models import ContentType
 from django.test.utils import override_settings
 
-from ansible_base.rbac.models import RoleDefinition, RoleEvaluation
+from ansible_base.rbac.models import RoleDefinition
+from ansible_base.rbac.models.evaluation import RoleEvaluation
 from test_app.models import User
 
 INVENTORY_OBJ_PERMS = ('change_inventory', 'update_inventory', 'view_inventory', 'delete_inventory')
