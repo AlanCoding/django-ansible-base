@@ -1,6 +1,8 @@
 from django.contrib import admin
 
-from ansible_base.rbac.models import ObjectRole, RoleDefinition, RoleEvaluation, RoleTeamAssignment, RoleUserAssignment
+from ansible_base.rbac.models import RoleDefinition, RoleTeamAssignment, RoleUserAssignment
+from ansible_base.rbac.models.object_role import ObjectRole
+from ansible_base.rbac.models.evaluation import RoleEvaluation, RoleEvaluationUUID
 
 
 class ReadOnlyAdmin(admin.ModelAdmin):
@@ -19,3 +21,4 @@ admin.site.register(RoleUserAssignment)
 admin.site.register(RoleTeamAssignment)
 admin.site.register(ObjectRole, ReadOnlyAdmin)
 admin.site.register(RoleEvaluation, ReadOnlyAdmin)
+admin.site.register(RoleEvaluationUUID, ReadOnlyAdmin)

@@ -3,7 +3,9 @@ from collections import defaultdict
 from typing import Optional
 from uuid import UUID
 
-from ansible_base.rbac.models import ObjectRole, RoleDefinition, RoleEvaluation, RoleEvaluationUUID
+from ansible_base.rbac.models.object_role import ObjectRole
+from ansible_base.rbac.models.role_definition import RoleDefinition
+from ansible_base.rbac.models.evaluation import RoleEvaluation, RoleEvaluationUUID
 from ansible_base.rbac.permission_registry import permission_registry
 from ansible_base.rbac.prefetch import TypesPrefetch
 
