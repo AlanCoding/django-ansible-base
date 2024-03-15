@@ -9,9 +9,7 @@ from django.utils.translation import gettext_lazy as _
 
 # ansible_base lib functions
 from ansible_base.lib.abstract_models.common import CommonModel
-
 from ansible_base.rbac.models.object_role import ObjectRoleFields
-
 
 
 class AssignmentBase(CommonModel, ObjectRoleFields):

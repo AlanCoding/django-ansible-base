@@ -1,7 +1,6 @@
-from django.db import models
-
-from django.utils.translation import gettext_lazy as _
 from django.contrib.contenttypes.models import ContentType
+from django.db import models
+from django.utils.translation import gettext_lazy as _
 
 
 class RoleEvaluationMeta:
@@ -106,7 +105,11 @@ class RoleEvaluation(RoleEvaluationFields):
         pass
 
     role = models.ForeignKey(
-        "dab_rbac.ObjectRole", null=False, on_delete=models.CASCADE, related_name='permission_partials', help_text=_("The object role that grants this form of permission")
+        "dab_rbac.ObjectRole",
+        null=False,
+        on_delete=models.CASCADE,
+        related_name='permission_partials',
+        help_text=_("The object role that grants this form of permission"),
     )
     object_id = models.PositiveIntegerField(null=False)
 

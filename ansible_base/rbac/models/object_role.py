@@ -10,11 +10,10 @@ from django.utils.translation import gettext_lazy as _
 
 # ansible_base RBAC logic imports
 from ansible_base.lib.utils.models import is_add_perm
+from ansible_base.rbac.models.evaluation import RoleEvaluation, RoleEvaluationUUID
+from ansible_base.rbac.models.role_definition import RoleDefinition
 from ansible_base.rbac.permission_registry import permission_registry
 from ansible_base.rbac.prefetch import TypesPrefetch
-
-from ansible_base.rbac.models.role_definition import RoleDefinition
-from ansible_base.rbac.models.evaluation import RoleEvaluation, RoleEvaluationUUID
 
 logger = logging.getLogger('ansible_base.rbac.models')
 

@@ -4,6 +4,7 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.viewsets import ModelViewSet
 
 from ansible_base.lib.utils.views.django_app_api import AnsibleBaseDjangoAppApiView
+from ansible_base.rbac.access_methods import has_super_permission
 from ansible_base.rbac.api.permissions import AuthenticatedReadAdminChange
 from ansible_base.rbac.api.serializers import (
     RoleDefinitionDetailSeraizler,
@@ -11,7 +12,6 @@ from ansible_base.rbac.api.serializers import (
     RoleTeamAssignmentSerializer,
     RoleUserAssignmentSerializer,
 )
-from ansible_base.rbac.access_methods import has_super_permission
 from ansible_base.rbac.models import RoleDefinition
 from ansible_base.rbac.validators import check_content_obj_permission
 

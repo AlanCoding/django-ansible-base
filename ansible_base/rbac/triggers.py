@@ -8,10 +8,9 @@ from django.db.utils import ProgrammingError
 
 from ansible_base.rbac.evaluations import compute_object_role_permissions, compute_team_member_roles
 from ansible_base.rbac.migrations._managed_definitions import setup_managed_role_definitions
+from ansible_base.rbac.models.evaluation import RoleEvaluation, get_evaluation_model
 from ansible_base.rbac.models.object_role import ObjectRole
 from ansible_base.rbac.models.role_definition import RoleDefinition
-from ansible_base.rbac.models.evaluation import RoleEvaluation, get_evaluation_model
-
 from ansible_base.rbac.permission_registry import permission_registry
 from ansible_base.rbac.validators import validate_assignment_enabled
 

@@ -11,13 +11,12 @@ from rest_framework.exceptions import ValidationError
 
 # ansible_base lib functions
 from ansible_base.lib.abstract_models.common import CommonModel
+from ansible_base.rbac.models.managers import RoleDefinitionManager
+from ansible_base.rbac.models.permission import DABPermission
 
 # ansible_base RBAC logic imports
 from ansible_base.rbac.permission_registry import permission_registry
 from ansible_base.rbac.validators import validate_assignment
-
-from ansible_base.rbac.models.managers import RoleDefinitionManager
-from ansible_base.rbac.models.permission import DABPermission
 
 logger = logging.getLogger('ansible_base.rbac.models')
 
@@ -77,12 +76,12 @@ class RoleDefinition(CommonModel):
             if not settings.ANSIBLE_BASE_ALLOW_SINGLETON_USER_ROLES:
                 raise ValidationError('Global roles are not enabled for users')
             kwargs = dict(object_role=None, user=actor, role_definition=self)
-            cls = self.user_assignment_model
+            cls = self.user_assignment_model()
         elif isinstance(actor, permission_registry.team_model):
             if not settings.ANSIBLE_BASE_ALLOW_SINGLETON_TEAM_ROLES:
                 raise ValidationError('Global roles are not enabled for teams')
             kwargs = dict(object_role=None, team=actor, role_definition=self)
-            cls = self.team_assignment_model
+            cls = self.team_assignment_model()
         else:
             raise RuntimeError(f'Cannot give permission to {actor}, must be a user or team')
 
@@ -121,11 +120,11 @@ class RoleDefinition(CommonModel):
         kwargs = dict(role_definition=self, content_type=obj_ct, object_id=object_id)
 
         created = False
-        object_role = self.object_role_model.objects.filter(**kwargs).first()
+        object_role = self.object_role_model().objects.filter(**kwargs).first()
         if object_role is None:
             if not giving:
                 return  # nothing to do
-            object_role = self.object_role_model.objects.create(**kwargs)
+            object_role = self.object_role_model().objects.create(**kwargs)
             created = True
 
         from ansible_base.rbac.triggers import needed_updates_on_assignment, update_after_assignment
@@ -135,12 +134,12 @@ class RoleDefinition(CommonModel):
         assignment = None
         if actor._meta.model_name == 'user':
             if giving:
-                assignment, created = self.user_assignment_model.objects.get_or_create(user=actor, object_role=object_role)
+                assignment, created = self.user_assignment_model().objects.get_or_create(user=actor, object_role=object_role)
             else:
                 object_role.users.remove(actor)
         elif isinstance(actor, permission_registry.team_model):
             if giving:
-                assignment, created = self.team_assignment_model.objects.get_or_create(team=actor, object_role=object_role)
+                assignment, created = self.team_assignment_model().objects.get_or_create(team=actor, object_role=object_role)
             else:
                 object_role.teams.remove(actor)
 
@@ -178,7 +177,7 @@ class RoleDefinition(CommonModel):
             perm_set.update(perm_qs)
         if settings.ANSIBLE_BASE_ALLOW_SINGLETON_TEAM_ROLES:
             # Users gain team membership via object roles that grant the teams member permission
-            user_obj_roles = cls.object_role_model.objects.filter(users=user)
+            user_obj_roles = cls.object_role_model().objects.filter(users=user)
             user_teams_qs = permission_registry.team_model.objects.filter(member_roles__in=user_obj_roles)
             # Those teams (the user is in) then have a set of global roles they have been assigned
             rd_qs = cls.objects.filter(team_assignments__team__in=user_teams_qs, content_type=None)

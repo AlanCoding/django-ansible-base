@@ -10,10 +10,10 @@ from rest_framework.exceptions import ValidationError
 
 # ansible_base RBAC logic imports
 from ansible_base.lib.utils.models import is_add_perm
+from ansible_base.rbac.models.evaluation import get_evaluation_model
+from ansible_base.rbac.models.permission import DABPermission
 from ansible_base.rbac.permission_registry import permission_registry
 from ansible_base.rbac.validators import validate_permissions_for_model
-from ansible_base.rbac.models.permission import DABPermission
-from ansible_base.rbac.models.evaluation import get_evaluation_model
 
 logger = logging.getLogger('ansible_base.rbac.models')
 

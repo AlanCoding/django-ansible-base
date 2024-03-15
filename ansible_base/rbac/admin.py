@@ -1,8 +1,8 @@
 from django.contrib import admin
 
 from ansible_base.rbac.models import RoleDefinition, RoleTeamAssignment, RoleUserAssignment
-from ansible_base.rbac.models.object_role import ObjectRole
 from ansible_base.rbac.models.evaluation import RoleEvaluation, RoleEvaluationUUID
+from ansible_base.rbac.models.object_role import ObjectRole
 
 
 class ReadOnlyAdmin(admin.ModelAdmin):
