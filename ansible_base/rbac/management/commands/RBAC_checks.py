@@ -3,8 +3,8 @@ from collections import defaultdict
 from django.core.management.base import BaseCommand, CommandError
 
 from ansible_base.rbac import permission_registry
-from ansible_base.rbac.models.object_role import ObjectRole
 from ansible_base.rbac.models import RoleDefinition
+from ansible_base.rbac.models.object_role import ObjectRole
 
 
 class Command(BaseCommand):

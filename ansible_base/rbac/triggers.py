@@ -18,9 +18,9 @@ logger = logging.getLogger('ansible_base.rbac.triggers')
 
 
 """
-As the caching module will fill in cached data,
-this module shall manage the calling of the caching methods.
-Sounds simple, but is actually more complicated that the caching logic itself.
+As the evaluation module will fill in role-evaluation data,
+this module shall manage the calling of the evaluation methods.
+Sounds simple, but is actually more complicated that the evaluation logic itself.
 """
 
 
