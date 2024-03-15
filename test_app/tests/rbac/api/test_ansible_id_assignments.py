@@ -4,8 +4,8 @@ import pytest
 from django.contrib.contenttypes.models import ContentType
 from django.urls import reverse
 
-from ansible_base.rbac.models.object_role import ObjectRole
 from ansible_base.rbac.models.evaluation import RoleEvaluation
+from ansible_base.rbac.models.object_role import ObjectRole
 from ansible_base.resource_registry.models import Resource
 
 
