@@ -40,6 +40,9 @@ class DABPermission(models.Model):
         verbose_name_plural = "permissions"
         unique_together = [["content_type", "codename"]]
         ordering = ["content_type__model", "codename"]
+        # All users are allowed to view all permissions, you could find it in the source code
+        # No users are allowed to edit permissions through the API, they are purely system managed
+        default_permissions = ()
 
     def __str__(self):
         return f"<{self.__class__.__name__}: {self.codename}>"
@@ -154,6 +157,8 @@ class RoleDefinition(CommonModel):
         app_label = 'dab_rbac'
         ordering = ['id']
         verbose_name_plural = _('role_definition')
+        # All users are allowed to view all role definitions, it is a public model
+        default_permissions = ('add', 'change', 'delete')
 
     name = models.TextField(db_index=True, unique=True)
     description = models.TextField(blank=True)
@@ -410,6 +415,8 @@ class RoleUserAssignment(AssignmentBase):
         app_label = 'dab_rbac'
         ordering = ['id']
         unique_together = ('user', 'object_role')
+        # Assignments can not be modified, so no point in tracking change permission
+        default_permissions = ('add', 'delete', 'view')
 
     def __repr__(self):
         return f'RoleUserAssignment(pk={self.id})'
@@ -434,6 +441,8 @@ class RoleTeamAssignment(AssignmentBase):
         app_label = 'dab_rbac'
         ordering = ['id']
         unique_together = ('team', 'object_role')
+        # Assignments can not be modified, so no point in tracking change permission
+        default_permissions = ('add', 'delete', 'view')
 
     def __repr__(self):
         return f'RoleTeamAssignment(pk={self.id})'

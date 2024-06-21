@@ -162,6 +162,9 @@ if 'ansible_base.rbac' in INSTALLED_APPS:
     # If a role does not already exist that can give those object permissions
     # then the system must create one, this is used for naming the auto-created role
     ANSIBLE_BASE_ROLE_CREATOR_NAME = '{obj._meta.model_name}-creator-permission'
+    # If True, register permissions for the DAB RBAC models themselves
+    # this will configure model permissions according to a standard setup
+    ANSIBLE_BASE_REGISTER_RBAC_MODELS = False
 
     # Specific feature enablement bits
     # For assignments

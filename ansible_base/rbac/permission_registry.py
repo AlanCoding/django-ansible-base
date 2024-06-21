@@ -142,12 +142,20 @@ class PermissionRegistry:
             ret.append((rd, created))
         return ret
 
+    def register_internal_models(self, apps) -> None:
+        for model_name in ('RoleDefinition', 'RoleUserAssignment', 'RoleTeamAssignment'):
+            self.register(apps.get_model('dab_rbac', model_name), parent_field_name=None, allow_object_roles=False)
+
     def call_when_apps_ready(self, apps, app_config):
         from ansible_base.rbac import triggers
         from ansible_base.rbac.evaluations import bound_has_obj_perm, bound_singleton_permissions, connect_rbac_methods
         from ansible_base.rbac.management import create_dab_permissions
 
         self.apps = apps
+
+        if settings.ANSIBLE_BASE_REGISTER_RBAC_MODELS:
+            self.register_internal_models(apps)
+
         self.apps_ready = True
 
         if self.team_model not in self._registry:
