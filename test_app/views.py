@@ -174,7 +174,7 @@ def api_root(request, format=None):
                 pass
 
     list_endpoints['service-index'] = reverse('service-index-root', request=request, format=format)
-    list_endpoints['role-metadata'] = reverse('role-metadata', request=request, format=format)
+    list_endpoints['role_data'] = reverse('role-data-index', request=request, format=format)
 
     return Response(list_endpoints)
 

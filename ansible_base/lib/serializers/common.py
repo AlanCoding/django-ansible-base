@@ -73,9 +73,10 @@ class AbstractCommonModelSerializer(ValidationSerializerMixin, serializers.Model
     def to_representation(self, obj):
         ret = super().to_representation(obj)
 
-        for key in obj.encrypted_fields:
-            if key in ret:
-                ret[key] = ENCRYPTED_STRING
+        if hasattr(obj, 'encrypted_fields'):
+            for key in obj.encrypted_fields:
+                if key in ret:
+                    ret[key] = ENCRYPTED_STRING
 
         return ret
 

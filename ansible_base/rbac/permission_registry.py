@@ -169,9 +169,12 @@ class PermissionRegistry:
         self.user_model.add_to_class('singleton_permissions', bound_singleton_permissions)
         post_delete.connect(triggers.rbac_post_user_delete, sender=self.user_model, dispatch_uid='permission-registry-user-delete')
 
+        from django.contrib.contenttypes.fields import GenericRelation
+        reverse_relation = GenericRelation(apps.get_model('dab_rbac', 'ObjectRole'))
         for cls in self._registry:
             triggers.connect_rbac_signals(cls)
             connect_rbac_methods(cls)
+            reverse_relation.contribute_to_class(cls, 'object_roles')
 
         for cls, relationship, role_name in self._tracked_relationships:
             if role_name in self._trackers:

@@ -72,9 +72,16 @@ class Command(BaseCommand):
             )
 
             # Inventory objects exist inside of an organization
-            Inventory.objects.create(name='K8S clusters', organization=operator_stuff)
+            k8s_cluster = Inventory.objects.create(name='K8S clusters', organization=operator_stuff)
             Inventory.objects.create(name='Galaxy Host', organization=galaxy)
-            Inventory.objects.create(name='AWX deployment', organization=awx)
+            awx_cluster = Inventory.objects.create(name='AWX deployment', organization=awx)
+            inv_rd = RoleDefinition.objects.create_from_permissions(
+                name='Inventory object admin role',
+                permissions=['change_inventory', 'delete_inventory', 'view_inventory'],
+                content_type=ContentType.objects.get_for_model(Inventory)
+            )
+            inv_rd.give_permission(awx_devs, awx_cluster)  # Create team assignment
+            inv_rd.give_permission(spud, k8s_cluster)
             # Objects that have no associated organization
             InstanceGroup.objects.create(name='Default')
             isolated_group = InstanceGroup.objects.create(name='Isolated Network')

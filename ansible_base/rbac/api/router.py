@@ -1,6 +1,7 @@
 from ansible_base.lib.routers import AssociationResourceRouter
 from ansible_base.rbac.api import views
 
+
 router = AssociationResourceRouter()
 
 router.register(
