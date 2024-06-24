@@ -1,7 +1,6 @@
 from ansible_base.lib.routers import AssociationResourceRouter
 from ansible_base.rbac.data_api import views
 
-
 data_router = AssociationResourceRouter()
 
 data_router.register(r'types', views.TypeViewSet, basename='rbactype')

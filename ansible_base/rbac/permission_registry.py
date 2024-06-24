@@ -170,6 +170,7 @@ class PermissionRegistry:
         post_delete.connect(triggers.rbac_post_user_delete, sender=self.user_model, dispatch_uid='permission-registry-user-delete')
 
         from django.contrib.contenttypes.fields import GenericRelation
+
         reverse_relation = GenericRelation(apps.get_model('dab_rbac', 'ObjectRole'))
         for cls in self._registry:
             triggers.connect_rbac_signals(cls)

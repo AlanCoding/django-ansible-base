@@ -9,11 +9,11 @@ from rest_framework.serializers import ValidationError
 
 from ansible_base.lib.abstract_models.common import get_url_for_object
 from ansible_base.lib.serializers.common import CommonModelSerializer, ImmutableCommonModelSerializer
+from ansible_base.rbac.api.fields import ContentTypeField, ManyRelatedListField, PermissionField
 from ansible_base.rbac.models import RoleDefinition, RoleTeamAssignment, RoleUserAssignment
 from ansible_base.rbac.permission_registry import permission_registry  # careful for circular imports
 from ansible_base.rbac.policies import check_content_obj_permission, visible_users
 from ansible_base.rbac.validators import check_locally_managed, validate_permissions_for_model
-from ansible_base.rbac.api.fields import ManyRelatedListField, ContentTypeField, PermissionField
 
 
 class RoleDefinitionSerializer(CommonModelSerializer):

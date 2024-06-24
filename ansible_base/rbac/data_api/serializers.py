@@ -1,13 +1,12 @@
 from collections import OrderedDict
 
-from django.utils.translation import gettext_lazy as _
-from django.contrib.contenttypes.models import ContentType
 from django.contrib.auth import get_user_model
-
+from django.contrib.contenttypes.models import ContentType
+from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
 from rest_framework.reverse import reverse
 
-from ansible_base.lib.serializers.common import CommonModelSerializer, AbstractCommonModelSerializer
+from ansible_base.lib.serializers.common import AbstractCommonModelSerializer, CommonModelSerializer
 from ansible_base.lib.utils.auth import get_team_model
 from ansible_base.rbac.models import ObjectRole, RoleDefinition, RoleEvaluation, RoleEvaluationUUID
 from ansible_base.rbac.validators import permissions_allowed_for_role
@@ -43,16 +42,18 @@ class UserInfoSerializer(serializers.ModelSerializer):
     def get_object_permissions(self, user):
         codename_set = set()
         for evaluation_cls in (RoleEvaluation, RoleEvaluationUUID):
-            codename_set |= set(
-                evaluation_cls.objects.filter(role__users=user).values_list('codename', flat=True).distinct()
-            )
+            codename_set |= set(evaluation_cls.objects.filter(role__users=user).values_list('codename', flat=True).distinct())
         return list(codename_set)
 
 
 class UserRefSerializer(serializers.ModelSerializer):
     class Meta:
         model = get_user_model()
-        fields = ('id', 'username', 'is_superuser',)
+        fields = (
+            'id',
+            'username',
+            'is_superuser',
+        )
 
 
 class UserAssignmentSerializer(serializers.ModelSerializer):
@@ -68,6 +69,7 @@ class DontCallItObjectRoleSerializer(CommonModelSerializer):
     """Object roles are not formally surfaced or supported through the API
 
     The model here is object role, but details of the direct object are hidden"""
+
     role_definition = RoleDefinitionRefSerializer(read_only=True)
     users = UserRefSerializer(many=True, read_only=True)
     teams = TeamRefSerializer(many=True, read_only=True)

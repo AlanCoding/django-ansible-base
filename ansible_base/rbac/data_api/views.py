@@ -1,24 +1,21 @@
 from collections import OrderedDict
 from typing import Type
 
-from django.db.models import Model, Exists, OuterRef, Q
 from django.contrib.contenttypes.models import ContentType
-from rest_framework.reverse import reverse
-
-from rest_framework import permissions
+from django.db.models import Exists, Model, OuterRef, Q
+from rest_framework import mixins, permissions, viewsets
 from rest_framework.generics import GenericAPIView
-from rest_framework.response import Response
-from rest_framework import viewsets
-from rest_framework import mixins
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.reverse import reverse
 
 from ansible_base.lib.utils.views.django_app_api import AnsibleBaseDjangoAppApiView
 from ansible_base.rbac.data_api import serializers
-from ansible_base.rbac.permission_registry import permission_registry
-from ansible_base.rbac.models import RoleUserAssignment, RoleTeamAssignment
-from ansible_base.rbac.validators import permissions_allowed_for_role, system_roles_enabled
 from ansible_base.rbac.evaluations import get_evaluation_model
+from ansible_base.rbac.models import RoleTeamAssignment, RoleUserAssignment
+from ansible_base.rbac.permission_registry import permission_registry
 from ansible_base.rbac.policies import visible_users
+from ansible_base.rbac.validators import permissions_allowed_for_role, system_roles_enabled
 
 
 class RoleDataIndexView(AnsibleBaseDjangoAppApiView, GenericAPIView):
@@ -110,12 +107,12 @@ class TypeViewSet(ModelTypeMixin, AbstractReadOnlyViewSet):
     lookup_field = 'model'
 
     serializer_class = serializers.ContentTypeSerializer
-    permission_classes = [IsAuthenticated,]
+    permission_classes = [
+        IsAuthenticated,
+    ]
 
     def get_queryset(self):
-        return permission_registry.content_type_model.objects.filter(
-            model__in=[cls._meta.model_name for cls in permission_registry.all_registered_models]
-        )
+        return permission_registry.content_type_model.objects.filter(model__in=[cls._meta.model_name for cls in permission_registry.all_registered_models])
 
 
 class ObjectViewSet(ModelTypeMixin, AbstractReadOnlyViewSet):
@@ -140,9 +137,7 @@ class ObjectViewSet(ModelTypeMixin, AbstractReadOnlyViewSet):
 
         # Annotate user permissions, analog to AWX user_capabilities
         for codename in self._object_codenames(model_cls):
-            evaluation_qs = evaluation_cls.objects.filter(
-                content_type_id=ct.id, object_id=OuterRef('id'), role__users=u, codename=codename
-            )
+            evaluation_qs = evaluation_cls.objects.filter(content_type_id=ct.id, object_id=OuterRef('id'), role__users=u, codename=codename)
             qs = qs.annotate(**{f'can_{codename}': Exists(evaluation_qs)})
 
         return qs.prefetch_related('object_roles__users', 'object_roles__teams', 'object_roles__role_definition')
@@ -150,7 +145,9 @@ class ObjectViewSet(ModelTypeMixin, AbstractReadOnlyViewSet):
 
 class RoleUserAssignmentViewSet(ModelTypeMixin, AbstractReadOnlyViewSet):
     serializer_class = serializers.UserAssignmentSerializer
-    permission_classes = [IsAuthenticated,]
+    permission_classes = [
+        IsAuthenticated,
+    ]
 
     def _get_obj(self):
         if not hasattr(self, '_saved_obj'):
@@ -179,22 +176,22 @@ class RoleUserAssignmentViewSet(ModelTypeMixin, AbstractReadOnlyViewSet):
             working_obj = parent_obj
             object_role_Q |= Q(content_type=parent_ct, object_id=parent_obj.pk, role_definition__permissions__codename__in=codenames)
 
-        return RoleUserAssignment.objects.filter(
-            object_role_Q | Q(content_type=None, role_definition__permissions__codename__in=codenames)
-        ).distinct()
+        return RoleUserAssignment.objects.filter(object_role_Q | Q(content_type=None, role_definition__permissions__codename__in=codenames)).distinct()
 
 
 class UserInfoViewSet(AbstractReadOnlyViewSet):
     serializer_class = serializers.UserInfoSerializer
-    permission_classes = [IsAuthenticated,]
+    permission_classes = [
+        IsAuthenticated,
+    ]
 
     def get_queryset(self):
         qs = visible_users(self.request.user)
         return qs
+
 
 # Plan
 # object list (object role based list)
 #  - object access list (user-based sublist)
 # user list
 # team list
-

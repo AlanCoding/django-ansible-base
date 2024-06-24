@@ -78,7 +78,7 @@ class Command(BaseCommand):
             inv_rd = RoleDefinition.objects.create_from_permissions(
                 name='Inventory object admin role',
                 permissions=['change_inventory', 'delete_inventory', 'view_inventory'],
-                content_type=ContentType.objects.get_for_model(Inventory)
+                content_type=ContentType.objects.get_for_model(Inventory),
             )
             inv_rd.give_permission(awx_devs, awx_cluster)  # Create team assignment
             inv_rd.give_permission(spud, k8s_cluster)
