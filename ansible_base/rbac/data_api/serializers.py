@@ -8,7 +8,7 @@ from rest_framework.reverse import reverse
 
 from ansible_base.lib.serializers.common import AbstractCommonModelSerializer, CommonModelSerializer
 from ansible_base.lib.utils.auth import get_team_model
-from ansible_base.rbac.models import ObjectRole, RoleDefinition, RoleEvaluation, RoleEvaluationUUID
+from ansible_base.rbac.models import ObjectRole, RoleDefinition, RoleEvaluation, RoleEvaluationUUID, RoleUserAssignment, RoleTeamAssignment
 from ansible_base.rbac.validators import permissions_allowed_for_role
 
 
@@ -61,8 +61,17 @@ class UserAssignmentSerializer(serializers.ModelSerializer):
     user = UserRefSerializer(read_only=True)
 
     class Meta:
-        model = get_user_model()
+        model = RoleUserAssignment
         fields = ('id', 'role_definition', 'user')
+
+
+class TeamAssignmentSerializer(serializers.ModelSerializer):
+    role_definition = RoleDefinitionRefSerializer(read_only=True)
+    team = TeamRefSerializer(read_only=True)
+
+    class Meta:
+        model = RoleTeamAssignment
+        fields = ('id', 'role_definition', 'team')
 
 
 class DontCallItObjectRoleSerializer(CommonModelSerializer):

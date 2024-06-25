@@ -117,6 +117,7 @@ class TypeViewSet(ModelTypeMixin, AbstractReadOnlyViewSet):
 
 class ObjectViewSet(ModelTypeMixin, AbstractReadOnlyViewSet):
     lookup_url_kwarg = 'object_id'
+    actor_field = None  # set in subclass
 
     def get_serializer_class(self):
         model_cls = self._get_model_cls()
@@ -143,8 +144,7 @@ class ObjectViewSet(ModelTypeMixin, AbstractReadOnlyViewSet):
         return qs.prefetch_related('object_roles__users', 'object_roles__teams', 'object_roles__role_definition')
 
 
-class RoleUserAssignmentViewSet(ModelTypeMixin, AbstractReadOnlyViewSet):
-    serializer_class = serializers.UserAssignmentSerializer
+class AssignmentMixin:
     permission_classes = [
         IsAuthenticated,
     ]
@@ -174,9 +174,21 @@ class RoleUserAssignmentViewSet(ModelTypeMixin, AbstractReadOnlyViewSet):
             parent_ct = ContentType.objects.get_for_model(parent_model)
             parent_obj = getattr(working_obj, parent_field_name)
             working_obj = parent_obj
+            # OR the object role filter with parent object role filter
             object_role_Q |= Q(content_type=parent_ct, object_id=parent_obj.pk, role_definition__permissions__codename__in=codenames)
 
-        return RoleUserAssignment.objects.filter(object_role_Q | Q(content_type=None, role_definition__permissions__codename__in=codenames)).distinct()
+        # OR the object role filter with the system-wide role filter
+        return self.serializer_class.Meta.model.objects.filter(
+            object_role_Q | Q(content_type=None, role_definition__permissions__codename__in=codenames)
+        ).distinct()
+
+
+class RoleUserAssignmentViewSet(AssignmentMixin, ModelTypeMixin, AbstractReadOnlyViewSet):
+    serializer_class = serializers.UserAssignmentSerializer
+
+
+class RoleTeamAssignmentViewSet(AssignmentMixin, ModelTypeMixin, AbstractReadOnlyViewSet):
+    serializer_class = serializers.TeamAssignmentSerializer
 
 
 class UserInfoViewSet(AbstractReadOnlyViewSet):
