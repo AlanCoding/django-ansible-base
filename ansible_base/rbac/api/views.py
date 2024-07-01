@@ -22,7 +22,7 @@ from ansible_base.rbac.api.serializers import (
 from ansible_base.rbac.evaluations import has_super_permission
 from ansible_base.rbac.models import RoleDefinition
 from ansible_base.rbac.permission_registry import permission_registry
-from ansible_base.rbac.policies import check_can_remove_assignment, check_content_obj_permission
+from ansible_base.rbac.policies import check_can_remove_assignment
 from ansible_base.rbac.validators import check_locally_managed, permissions_allowed_for_role, system_roles_enabled
 
 
