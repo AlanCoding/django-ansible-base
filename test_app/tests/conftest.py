@@ -5,6 +5,9 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 from unittest import mock
 
+from django.conf import settings
+from django.test.utils import override_settings
+
 import jwt
 import pytest
 from cryptography.hazmat.backends import default_backend
@@ -23,6 +26,7 @@ from ansible_base.lib.testing.fixtures import *  # noqa: F403, F401
 from ansible_base.lib.testing.util import copy_fixture, delete_authenticator
 from ansible_base.oauth2_provider.fixtures import *  # noqa: F403, F401
 from ansible_base.rbac.models import RoleDefinition
+from ansible_base.rbac import permission_registry
 from test_app import models
 
 
@@ -651,3 +655,14 @@ def admin_rd():
     RoleDefinition.objects.managed.clear()
     yield RoleDefinition.objects.managed.team_admin
     RoleDefinition.objects.managed.clear()
+
+
+@pytest.fixture
+def external_auditor_constructor():
+    data = settings.ANSIBLE_BASE_MANAGED_ROLE_REGISTRY.copy()
+    data['ext_aud'] = {'shortname': 'sys_auditor', 'name': 'Ext Auditor'}
+    with override_settings(ANSIBLE_BASE_MANAGED_ROLE_REGISTRY=data):
+        # Extra setup needed for external auditor
+        permission_registry.register_managed_role_constructors()
+        yield permission_registry.get_managed_role_constructor('ext_aud')
+        permission_registry._managed_roles.pop('ext_aud')

@@ -40,17 +40,6 @@ def organization_admin_role():
     return role
 
 
-@pytest.fixture
-def external_auditor_constructor():
-    data = settings.ANSIBLE_BASE_MANAGED_ROLE_REGISTRY.copy()
-    data['ext_aud'] = {'shortname': 'sys_auditor', 'name': 'Ext Auditor'}
-    with override_settings(ANSIBLE_BASE_MANAGED_ROLE_REGISTRY=data):
-        # Extra setup needed for external auditor
-        permission_registry.register_managed_role_constructors()
-        yield permission_registry.get_managed_role_constructor('ext_aud')
-        permission_registry._managed_roles.pop('ext_aud')
-
-
 class TestJWTCommonAuth:
     @pytest.mark.django_db
     def test_init(self):
