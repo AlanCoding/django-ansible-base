@@ -6,7 +6,6 @@ from unittest import mock
 from uuid import uuid4
 
 import pytest
-from django.conf import settings
 from django.test.utils import override_settings
 from jwt.exceptions import DecodeError
 from rest_framework.exceptions import AuthenticationFailed

@@ -1,8 +1,8 @@
 import pytest
+from django.apps import apps
 from django.contrib.auth import get_user_model
 from django.test.utils import override_settings
 from django.urls import reverse
-from django.apps import apps
 
 from ansible_base.lib.utils.auth import get_team_model
 from ansible_base.rbac.models import RoleDefinition

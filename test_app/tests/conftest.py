@@ -5,19 +5,18 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 from unittest import mock
 
-from django.conf import settings
-from django.test.utils import override_settings
-
 import jwt
 import pytest
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from django.apps import apps
+from django.conf import settings
 from django.contrib.contenttypes.models import ContentType
 from django.db.migrations.recorder import MigrationRecorder
 from django.db.models.signals import post_migrate
 from django.test.client import RequestFactory
+from django.test.utils import override_settings
 from drf_spectacular.generators import SchemaGenerator
 from rest_framework.request import Request
 from rest_framework.test import force_authenticate
@@ -25,8 +24,8 @@ from rest_framework.test import force_authenticate
 from ansible_base.lib.testing.fixtures import *  # noqa: F403, F401
 from ansible_base.lib.testing.util import copy_fixture, delete_authenticator
 from ansible_base.oauth2_provider.fixtures import *  # noqa: F403, F401
-from ansible_base.rbac.models import RoleDefinition
 from ansible_base.rbac import permission_registry
+from ansible_base.rbac.models import RoleDefinition
 from test_app import models
 
 
