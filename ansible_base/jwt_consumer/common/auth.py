@@ -101,9 +101,7 @@ class JWTCommonAuth:
             # Either the user wasn't cached or the requested user was not in the DB so we need to make a new one
             try:
                 resource = Resource.create_resource(
-                    ResourceType.objects.get(name="shared.user"),
-                    resource_data=self.token["user_data"],
-                    ansible_id=self.token["sub"]
+                    ResourceType.objects.get(name="shared.user"), resource_data=self.token["user_data"], ansible_id=self.token["sub"]
                 )
                 self.user = resource.content_object
                 logger.warn(f"New user {self.user.username} created from JWT auth")
