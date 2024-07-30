@@ -353,7 +353,12 @@ class PublicData(NamedCommonModel):
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='public_data')
 
 
-permission_registry.register(Organization, Inventory, Credential, Namespace, Team, Cow, UUIDModel, PositionModel, WeirdPerm, PublicData)
+# Intentionally, for testing purposes, we register these models in settings
+# - Inventory
+# - Credential
+# - ImmutableTask, parent_field_name=None
+
+permission_registry.register(Organization, Namespace, Team, Cow, UUIDModel, PositionModel, WeirdPerm, PublicData)
 permission_registry.register(ParentName, parent_field_name='my_organization')
 permission_registry.register(CollectionImport, parent_field_name='namespace')
 permission_registry.register(InstanceGroup, ImmutableTask, LogEntry, parent_field_name=None)
