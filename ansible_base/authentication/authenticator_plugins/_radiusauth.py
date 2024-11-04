@@ -39,6 +39,9 @@ from django.conf import settings as global_settings
 #Handle custom user models
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
+
+logger = logging.getLogger('ansible_base.authentication.authenticator_plugins._radiusauth')
+
 User = get_user_model()
 
 DICTIONARY = u"""
@@ -149,23 +152,23 @@ class RADIUSBackend(object):
         try:
             reply = client.SendPacket(packet)
         except Timeout as e:
-            logging.error("RADIUS timeout occurred contacting %s:%s" % (
+            logger.error("RADIUS timeout occurred contacting %s:%s" % (
                 client.server, client.authport))
             return None
         except Exception as e:
-            logging.error("RADIUS error: %s" % e)
+            logger.error("RADIUS error: %s" % e)
             return None
 
         if reply.code == AccessReject:
-            logging.warning("RADIUS access rejected for user '%s'" % (
+            logger.warning("RADIUS access rejected for user '%s'" % (
                 packet['User-Name']))
             return None
         elif reply.code != AccessAccept:
-            logging.error("RADIUS access error for user '%s' (code %s)" % (
+            logger.error("RADIUS access error for user '%s' (code %s)" % (
                 packet['User-Name'], reply.code))
             return None
 
-        logging.info("RADIUS access granted for user '%s'" % (
+        logger.info("RADIUS access granted for user '%s'" % (
             packet['User-Name']))
 
         if "Class" not in reply.keys():
@@ -190,7 +193,7 @@ class RADIUSBackend(object):
                 elif role == "superuser":
                     is_superuser = True
                 else:
-                    logging.warning("RADIUS Attribute Class contains unknown role '%s'. Only roles 'staff' and 'superuser' are allowed" % cl)
+                    logger.warning("RADIUS Attribute Class contains unknown role '%s'. Only roles 'staff' and 'superuser' are allowed" % cl)
         return groups, is_staff, is_superuser
 
     def _radius_auth(self, server, username, password):
@@ -232,7 +235,7 @@ class RADIUSBackend(object):
         groups = Group.objects.filter(name__in=group_names)
         if len(groups) != len(group_names):
             local_group_names = [g.name for g in groups]
-            logging.warning("RADIUS reply contains %d user groups (%s), but only %d (%s) found" % (
+            logger.warning("RADIUS reply contains %d user groups (%s), but only %d (%s) found" % (
                 len(group_names), ", ".join(group_names), len(groups), ", ".join(local_group_names)))
         return groups
 
