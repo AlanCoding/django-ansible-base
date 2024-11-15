@@ -3,5 +3,4 @@
 asgiref
 pyjwt
 requests
-social-auth-app-django
 urllib3
