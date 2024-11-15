@@ -17,18 +17,23 @@ jobs:
           - env: check
             python-version: "3.11"
             sonar: false
+            junit-xml-upload: false
           - env: py39
             python-version: "3.9"
             sonar: false
+            junit-xml-upload: false
           - env: py310
             python-version: "3.10"
             sonar: false
+            junit-xml-upload: false
           - env: py311
             python-version: "3.11"
             sonar: true
+            junit-xml-upload: true
           - env: py311sqlite
             python-version: "3.11"
             sonar: false
+            junit-xml-upload: false
     steps:
       - uses: actions/checkout@v4
         with:
@@ -43,7 +48,7 @@ jobs:
           python-version: ${{ matrix.tests.python-version }}
 
       - name: Install tox
-        run: pip${{ matrix.tests.python-version }} install tox
+        run: pip${{ matrix.tests.python-version }} install tox tox-docker
 
       - name: Run tox
         run: |
@@ -55,7 +60,7 @@ jobs:
         run: sed -i '2i <!-- PR ${{ github.event.number }} -->' coverage.xml
 
       - name: Upload coverage as artifact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         if: matrix.tests.sonar
         with:
           name: coverage
@@ -67,3 +72,14 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+      - name: Upload jUnit XML test results
+        if: matrix.tests.junit-xml-upload && github.event_name == 'push' && github.repository == 'ansible/django-ansible-base' && github.ref_name == 'devel'
+        continue-on-error: true
+        run: >-
+          curl -v --user "${{ vars.PDE_ORG_RESULTS_AGGREGATOR_UPLOAD_USER }}:${{ secrets.PDE_ORG_RESULTS_UPLOAD_PASSWORD }}"
+          --form "xunit_xml=@django-ansible-base-test-results.xml"
+          --form "component_name=django-ansible-base"
+          --form "git_commit_sha=${{ github.sha }}"
+          --form "git_repository_url=https://github.com/${{ github.repository }}"
+          "${{ vars.PDE_ORG_RESULTS_AGGREGATOR_UPLOAD_URL }}/api/results/upload/"

@@ -182,7 +182,7 @@ class Inventory(models.Model):
     def summary_fields(self):
         return {"id": self.id, "name": self.name}
 
-    def validate_role_assignment(self, actor, role_definition):
+    def validate_role_assignment(self, actor, role_definition, **kwargs):
         if isinstance(actor, User):
             name = actor.username
         if isinstance(actor, Team):
@@ -428,3 +428,19 @@ class SecretColor(AuditableModel):
     encrypted_fields = ['color']
 
     color = models.CharField(max_length=20, null=True, default='blue')
+
+
+class ThingSomeoneOwns(models.Model):
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, null=False, related_name="things_i_own")
+    thing = models.CharField(max_length=256, null=False)
+
+    class Meta:
+        unique_together = (
+            'owner',
+            'thing',
+        )
+
+
+class ThingSomeoneShares(models.Model):
+    owner = models.ManyToManyField(User, related_name="things_i_share")
+    thing = models.CharField(max_length=256, null=False)

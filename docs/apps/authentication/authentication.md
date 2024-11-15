@@ -176,6 +176,10 @@ Doing this will cause your custom module to run in place of the default module i
 
 In this function the user claims will be a dictionary defined by the authentication_maps. You need to update the users permissions in your application based on this.
 
+When defining authenticator maps, you will need to be mindful of the case-sensitivity of the authenticator backend's output in order to get the expected output. For example,
+LDAPs authenticator plugin accepts input in a case-insensitive manner, but returns a user's group membership in a case sensitive manner
+(ie. cn=John Smith,dc=example,dc=org vs CN=John Smith,DC=example,DC=org); In most cases "cn=John Smith,dc=example,dc=org" would be considered a valid group name during user claims
+reconciliation, but this may depend on the specific LDAP implementation being used.
 
 ## Optional RBAC dependency
 

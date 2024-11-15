@@ -1,12 +1,13 @@
 ansible  # Used in build process to generate some configs
 build
-Django>=4.2.5,<4.3.0
+Django==4.2.16
 django-debug-toolbar
 django-extensions
 djangorestframework
 django-split-settings
 ipython
 tox
+tox-docker
 typeguard
 pytest
 pytest-asyncio
@@ -14,5 +15,6 @@ pytest-xdist
 pytest-cov
 pytest-django
 setuptools-scm
+sqlparse==0.5.0
 psycopg[binary]
 sdb
