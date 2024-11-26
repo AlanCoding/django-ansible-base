@@ -117,6 +117,7 @@ class JWTCommonAuth:
             for resource_key, token_key in (('resource_data', 'user_data'), ('ansible_id', 'sub'), ('service_id', 'service_id')):
                 if token_key not in self.token:
                     logger.warning(f'Missing {token_key} in JWT data, omitting {resource_key} from local resource entry')
+                else:
                     resource_kwargs[resource_key] = self.token[token_key]
             try:
                 resource = Resource.create_resource(ResourceType.objects.get(name="shared.user"), **resource_kwargs)
