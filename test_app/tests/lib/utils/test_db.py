@@ -3,6 +3,8 @@ import time
 
 import pytest
 
+from django.db import connection
+
 from ansible_base.lib.utils.db import advisory_lock, migrations_are_complete
 
 
@@ -27,6 +29,8 @@ def background_task(django_db_blocker):
 
 @pytest.mark.django_db
 def test_determine_lock_is_held(django_db_blocker):
+    if connection.vendor == 'sqlite':
+        pytest.skip('Advisory lock is not written for sqlite')
     thread = threading.Thread(target=background_task, args=(django_db_blocker,))
     thread.start()
     for _ in range(5):
