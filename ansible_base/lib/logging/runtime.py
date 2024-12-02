@@ -3,7 +3,6 @@ import time
 from collections.abc import Callable
 from logging import Logger, getLogger
 
-
 __all__ = ['log_excess_runtime']
 
 
@@ -15,12 +14,14 @@ dab_logger = getLogger('dab_runtime_logger')
 DEFAULT_MSG = 'Running {name} took {delta:.2f}s'
 
 
-def log_excess_runtime(ext_logger: Logger, cutoff: float = 5.0, debug_cutoff: float =2.0, msg: str = DEFAULT_MSG, add_log_data: bool=False):
+def log_excess_runtime(ext_logger: Logger, cutoff: float = 5.0, debug_cutoff: float = 2.0, msg: str = DEFAULT_MSG, add_log_data: bool = False):
     """Utility to write logs to the passed-in logger if the function it decorates takes too long.
 
     Call this with the configuration options to return a decorator."""
+
     def log_excess_runtime_decorator(func: Callable):
         """Instantiated decorator for the DAB excess runtime logger utility"""
+
         @functools.wraps(func)
         def _new_func(*args, **kwargs):
             log_data = {'name': repr(func.__name__)}
