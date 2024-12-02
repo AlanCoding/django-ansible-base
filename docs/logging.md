@@ -78,6 +78,7 @@ such as processing Ansible facts in AWX.
 
 ```python
 import logging
+from ansible_base.lib.logging.runtime import log_excess_runtime
 
 logger = logging.getLogger('my_app.tasks.cleanup')
 
@@ -106,6 +107,7 @@ The number of deleted fields could be added to the log message with this.
 
 ```python
 import logging
+from ansible_base.lib.logging.runtime import log_excess_runtime
 
 logger = logging.getLogger('my_app.tasks.cleanup')
 
