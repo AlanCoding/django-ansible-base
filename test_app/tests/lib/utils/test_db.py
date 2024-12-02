@@ -14,17 +14,16 @@ def test_migrations_are_complete():
     assert migrations_are_complete()
 
 
-@pytest.mark.django_db
-def test_get_unclaimed_lock():
-    with advisory_lock('test_get_unclaimed_lock'):
-        pass
-
-
 class TestAdvisoryLock:
     @pytest.fixture(autouse=True)
     def skip_if_sqlite(self):
         if connection.vendor == 'sqlite':
             pytest.skip('Advisory lock is not written for sqlite')
+
+    @pytest.mark.django_db
+    def test_get_unclaimed_lock(self):
+        with advisory_lock('test_get_unclaimed_lock'):
+            pass
 
     @staticmethod
     def background_task(django_db_blocker):
