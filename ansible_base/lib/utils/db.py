@@ -127,13 +127,13 @@ def advisory_lock(*args, lock_session_timeout_milliseconds=0, **kwargs):
             with connection.cursor() as cur:
                 idle_in_transaction_session_timeout = cur.execute("SHOW idle_in_transaction_session_timeout").fetchone()[0]
                 idle_session_timeout = cur.execute("SHOW idle_session_timeout").fetchone()[0]
-                cur.execute(f"SET idle_in_transaction_session_timeout = %s", (lock_session_timeout_milliseconds,))
-                cur.execute(f"SET idle_session_timeout = %s", (lock_session_timeout_milliseconds,))
+                cur.execute("SET idle_in_transaction_session_timeout = %s", (lock_session_timeout_milliseconds,))
+                cur.execute("SET idle_session_timeout = %s", (lock_session_timeout_milliseconds,))
         with django_pglocks_advisory_lock(*args, **kwargs) as internal_lock:
             yield internal_lock
             if lock_session_timeout_milliseconds > 0:
                 with connection.cursor() as cur:
-                    cur.execute(f"SET idle_in_transaction_session_timeout = %s", (idle_in_transaction_session_timeout,))
-                    cur.execute(f"SET idle_session_timeout = %s", (idle_session_timeout,))
+                    cur.execute("SET idle_in_transaction_session_timeout = %s", (idle_in_transaction_session_timeout,))
+                    cur.execute("SET idle_session_timeout = %s", (idle_session_timeout,))
     else:
         yield True
