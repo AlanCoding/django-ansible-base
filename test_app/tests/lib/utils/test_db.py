@@ -2,7 +2,6 @@ import threading
 import time
 
 import pytest
-
 from django.db import connection
 
 from ansible_base.lib.utils.db import advisory_lock, migrations_are_complete
