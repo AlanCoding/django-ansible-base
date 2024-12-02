@@ -3,6 +3,7 @@ import time
 
 import pytest
 from django.db import connection
+from django.db.utils import OperationalError
 
 from ansible_base.lib.utils.db import advisory_lock, migrations_are_complete
 
@@ -40,3 +41,25 @@ def test_determine_lock_is_held(django_db_blocker):
     else:
         raise RuntimeError('Other thread never obtained lock')
     thread.join()
+
+
+@pytest.mark.django_db
+def test_tuple_lock():
+    with advisory_lock([1234, 4321]):
+        pass
+
+
+@pytest.mark.django_db
+def test_invalid_tuple_name():
+    with pytest.raises(ValueError):
+        with advisory_lock(['test_invalid_tuple_name', 'foo']):
+            pass
+
+
+@pytest.mark.django_db
+def test_lock_session_timeout_milliseconds():
+    with pytest.raises(OperationalError) as exc:
+        # uses miliseconds units
+        with advisory_lock('test_lock_session_timeout_milliseconds', lock_session_timeout_milliseconds=2):
+            time.sleep(3)
+    assert 'the connection is lost' in str(exc)
