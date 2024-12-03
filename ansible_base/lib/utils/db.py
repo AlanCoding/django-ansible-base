@@ -135,5 +135,7 @@ def advisory_lock(*args, lock_session_timeout_milliseconds=0, **kwargs):
                 with connection.cursor() as cur:
                     cur.execute("SET idle_in_transaction_session_timeout = %s", (idle_in_transaction_session_timeout,))
                     cur.execute("SET idle_session_timeout = %s", (idle_session_timeout,))
-    else:
+    elif connection.vendor == "sqlite":
         yield True
+    else:
+        raise RuntimeError(f'Advisory lock not implemented for database type {connection.vendor}')
