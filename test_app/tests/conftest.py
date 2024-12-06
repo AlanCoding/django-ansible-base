@@ -1,4 +1,5 @@
 import random
+import re
 from collections import defaultdict
 from datetime import datetime, timedelta
 from unittest import mock
@@ -55,7 +56,7 @@ def test_migrations_okay(*args, **kwargs):
 
         migration_module = app_config.module.migrations
         for step in dir(migration_module):
-            if not step.startswith('00'):
+            if not re.match(r'\d\d\d\d_', step):
                 continue
             step_module = getattr(migration_module, step)
             migration_name = step_module.__name__.rsplit('.')[-1]
