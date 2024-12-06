@@ -56,7 +56,7 @@ def test_migrations_okay(*args, **kwargs):
 
         migration_module = app_config.module.migrations
         for step in dir(migration_module):
-            if not re.match(r'\d{4}', step):
+            if not re.match(r'\d{4}_', step):
                 continue
             step_module = getattr(migration_module, step)
             migration_name = step_module.__name__.rsplit('.')[-1]
