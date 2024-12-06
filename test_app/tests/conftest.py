@@ -1,6 +1,5 @@
 import random
 import re
-from collections import defaultdict
 from datetime import datetime, timedelta
 from unittest import mock
 
@@ -38,43 +37,33 @@ def openapi_schema():
     return generator.get_schema(request=drf_request)
 
 
-def test_migrations_okay(*args, **kwargs):
+def test_migrations_okay(apps, app_config, **kwargs):
     """This test is not about the code, but for verifying your own state.
 
     If you are not migrated to the correct state, this may hopefully alert you.
     This is targeted toward situations like switching branches.
     """
-    disk_steps = defaultdict(set)
+    disk_steps = set()
     app_exceptions = {'default': 'auth', 'social_auth': 'social_django'}
-    for app in MigrationRecorder.Migration.objects.values_list('app', flat=True).distinct():
-        if app in app_exceptions:
+
+    if app_config.label in app_exceptions or (not hasattr(app_config, 'module')) or (not hasattr(app_config.module, 'migrations')):
+        return
+
+    migration_module = app_config.module.migrations
+    for step in dir(migration_module):
+        if not re.match(r'\d{4}_', step):
             continue
-        try:
-            app_config = apps.get_app_config(app)
-        except LookupError:
-            raise RuntimeError(f'App {app} is present in the recorded migrations but not installed, perhaps you need --create-db?')
+        step_module = getattr(migration_module, step)
+        migration_name = step_module.__name__.rsplit('.')[-1]
+        disk_steps.add(migration_name)
 
-        migration_module = app_config.module.migrations
-        for step in dir(migration_module):
-            if not re.match(r'\d{4}_', step):
-                continue
-            step_module = getattr(migration_module, step)
-            migration_name = step_module.__name__.rsplit('.')[-1]
-            disk_steps[app].add(migration_name)
+        migration_cls = step_module.Migration
+        for replaces_app_name, replaces_migration_name in getattr(migration_cls, 'replaces', []):
+            disk_steps.add(replaces_migration_name)
 
-            migration_cls = step_module.Migration
-            for replaces_app_name, replaces_migration_name in getattr(migration_cls, 'replaces', []):
-                disk_steps[app].add(replaces_migration_name)
+    db_steps = set(MigrationRecorder.Migration.objects.filter(app=app_config.label).values_list('name', flat=True))
 
-    db_steps = defaultdict(set)
-    for record in MigrationRecorder.Migration.objects.only('app', 'name'):
-        if record.app in app_exceptions:
-            continue
-        app_name = app_exceptions.get(record.app, record.app)
-        db_steps[app_name].add(record.name)
-
-    for app in disk_steps:
-        assert disk_steps[app] == db_steps[app], f'Migrations not expected for app {app}, perhaps you need --create-db?'
+    assert disk_steps == db_steps, f'Migrations not expected for app {app_config.label}, perhaps you need --create-db?'
 
 
 post_migrate.connect(test_migrations_okay)
