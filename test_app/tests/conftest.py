@@ -43,13 +43,13 @@ def openapi_schema():
     return generator.get_schema(request=drf_request)
 
 
-def test_migrations_okay(apps, app_config, **kwargs):
+def test_migrations_okay(apps=None, app_config=None, **kwargs):
     """This test is not about the code, but for verifying your own state.
 
     If you are not migrated to the correct state, this may hopefully alert you.
     This is targeted toward situations like switching branches.
     """
-    if app_config.label != 'test_app':
+    if (not apps) or (not app_config) or app_config.label != 'test_app':
         return  # so that it is only ran once
     disk_steps = defaultdict(set)
     app_exceptions = {'default': 'auth', 'social_auth': 'social_django'}
