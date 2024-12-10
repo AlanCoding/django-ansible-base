@@ -43,6 +43,7 @@ class HasResourceRegistryPermissions(permissions.BasePermission):
                 else:
                     logger.warning(f'View {view} denied request because view action can not be identified')
 
+        logger.warning(f'User {request.user.username} with {allowed_actions} actions allowed denied {getattr(view, "action", "unknown")} request')
         return False
 
 
