@@ -119,6 +119,16 @@ def django_pglocks_advisory_lock(lock_id, shared=False, wait=True, using=None):
 
 @contextmanager
 def advisory_lock(*args, lock_session_timeout_milliseconds=0, **kwargs):
+    """Context manager that wraps the pglocks advisory lock
+
+    This obtains a named lock in postgres, idenfied by the args passed in
+    usually the lock identifier is a simple string.
+
+    @param: wait If True, block until the lock is obtained
+    @param: shared Whether or not the lock is shared
+    @param: lock_session_timeout_milliseconds Postgres-level timeout
+    @param: using django database identifier
+    """
     if connection.vendor == "postgresql":
         cur = None
         idle_in_transaction_session_timeout = None
