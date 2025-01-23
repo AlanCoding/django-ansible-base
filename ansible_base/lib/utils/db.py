@@ -155,10 +155,11 @@ def advisory_lock(*args, lock_session_timeout_milliseconds=0, **kwargs):
         raise RuntimeError(f'Advisory lock not implemented for database type {connection.vendor}')
 
 
-settings_dict_type = dict[str, Union[str, int]]
+# Django settings.DATABASES['alias'] dictionary type
+dj_db_dict = dict[str, Union[str, int]]
 
 
-def psycopg_kwargs_from_settings_dict(settings_dict: settings_dict_type) -> dict:
+def psycopg_kwargs_from_settings_dict(settings_dict: dj_db_dict) -> dict:
     """Return psycopg connection creation kwargs given Django db settings info
 
     :param dict setting_dict: DATABASES in Django settings
@@ -166,9 +167,7 @@ def psycopg_kwargs_from_settings_dict(settings_dict: settings_dict_type) -> dict
     return PsycopgDatabaseWrapper(settings_dict).get_connection_params()
 
 
-def combine_settings_dict(
-    settings_dict1: dict[str, Union[str, int]], settings_dict2: dict[str, Union[str, int]], **extra_options
-) -> dict[str, Union[str, int]]:
+def combine_settings_dict(settings_dict1: dj_db_dict, settings_dict2: dj_db_dict, **extra_options) -> dj_db_dict:
     """Given two Django settings dictionaries, combine them and return a new settings_dict"""
     settings_dict = deepcopy(settings_dict1)
     settings_dict['OPTIONS'] = deepcopy(settings_dict.get('OPTIONS', {}))
