@@ -4,14 +4,82 @@ import time
 import pytest
 from django.db import connection
 from django.db.utils import OperationalError
+from django.test import override_settings
 
-from ansible_base.lib.utils.db import advisory_lock, migrations_are_complete
+from ansible_base.lib.utils.db import advisory_lock, get_pg_notify_params, migrations_are_complete, psycopg_kwargs_from_settings_dict
 
 
 @pytest.mark.django_db
 def test_migrations_are_complete():
     "If you are running tests, migrations (test database) should be complete"
     assert migrations_are_complete()
+
+
+class TestPGNotifyConnection:
+    TEST_DATABASE_DICT = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "HOST": "https://foo.invalid",
+            "PORT": 55434,
+            "USER": "dab_user",
+            "PASSWORD": "dabbing",
+            "NAME": "dab_db",
+        }
+    }
+    PSYCOPG_KWARGS = {
+        'dbname': 'dab_db',
+        'client_encoding': 'UTF8',
+        # kwargs containing objects can not be compared so they will be ignored
+        # 'cursor_factory': <class 'django.db.backends.postgresql.base.Cursor'>,
+        'user': 'dab_user',
+        'password': 'dabbing',
+        'host': 'https://foo.invalid',
+        'port': 55434,
+        # 'context': <psycopg.adapt.AdaptersMap object at 0x7f537f2d9f70>,
+        'prepare_threshold': None,
+        'autocommit': True,
+    }
+
+    @pytest.fixture
+    def mock_settings(self):
+        with override_settings(DATABASES=self.TEST_DATABASE_DICT, USE_TZ=False):
+            yield
+
+    def _trim_python_objects(self, psycopg_params):
+        # These remove those commented-out kwargs in PSYCOPG_KWARGS
+        psycopg_params.pop('cursor_factory')
+        psycopg_params.pop('context')
+        return psycopg_params
+
+    def test_default_behavior(self, mock_settings):
+        params = self._trim_python_objects(get_pg_notify_params())
+        assert params == self.PSYCOPG_KWARGS
+
+    def test_pg_notify_extra_options(self, mock_settings):
+        params = self._trim_python_objects(get_pg_notify_params(application_name='joe_connection'))
+        expected = self.PSYCOPG_KWARGS.copy()
+        expected['application_name'] = 'joe_connection'
+        assert params == expected
+
+    def test_lister_databases(self, mock_settings):
+        LISTENER_DATABASES = {"default": {"HOST": "https://foo.anotherhost.invalid"}}
+        with override_settings(LISTENER_DATABASES=LISTENER_DATABASES):
+            params = self._trim_python_objects(get_pg_notify_params())
+            assert params['host'] == "https://foo.anotherhost.invalid"
+
+    def test_pg_notify_databases(self, mock_settings):
+        PG_NOTIFY_DATABASES = {"default": {"HOST": "https://foo.anotherhost2.invalid"}}
+        with override_settings(PG_NOTIFY_DATABASES=PG_NOTIFY_DATABASES):
+            params = self._trim_python_objects(get_pg_notify_params())
+            assert params['host'] == "https://foo.anotherhost2.invalid"
+
+    def test_psycopg_kwargs_from_settings_dict(self):
+        "More of a unit test, doing the same thing"
+        test_dict = self.TEST_DATABASE_DICT["default"].copy()
+        test_dict['OPTIONS'] = {'autocommit': True}
+        with override_settings(USE_TZ=False):
+            psycopg_params = self._trim_python_objects(psycopg_kwargs_from_settings_dict(test_dict))
+            assert psycopg_params == self.PSYCOPG_KWARGS
 
 
 class TestAdvisoryLock:
