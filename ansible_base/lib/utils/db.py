@@ -3,9 +3,12 @@ from copy import deepcopy
 from typing import Union
 from zlib import crc32
 
+import psycopg
+
 from django.conf import settings
 from django.db import DEFAULT_DB_ALIAS, connection, connections, transaction
 from django.db.backends.postgresql.base import DatabaseWrapper as PsycopgDatabaseWrapper
+from django.db.backends.postgresql.client import DatabaseClient as PsycopgDatabaseClient
 from django.db.migrations.executor import MigrationExecutor
 
 
@@ -165,6 +168,13 @@ def psycopg_kwargs_from_settings_dict(settings_dict: dj_db_dict) -> dict:
     :param dict setting_dict: DATABASES in Django settings
     :return: kwargs that can be passed to psycopg.connect, or connection classes"""
     return PsycopgDatabaseWrapper(settings_dict).get_connection_params()
+
+
+def psycopg_conn_string_from_settings_dict(settings_dict: dj_db_dict) -> str:
+    conn_params = psycopg_kwargs_from_settings_dict(settings_dict)
+    conn_params.pop('cursor_factory')
+    conn_params.pop('context')
+    return psycopg.conninfo.make_conninfo(**conn_params)
 
 
 def combine_settings_dict(settings_dict1: dj_db_dict, settings_dict2: dj_db_dict, **extra_options) -> dj_db_dict:
