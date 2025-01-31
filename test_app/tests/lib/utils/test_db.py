@@ -14,7 +14,7 @@ from ansible_base.lib.utils.db import (
     get_pg_notify_params,
     migrations_are_complete,
     psycopg_kwargs_from_settings_dict,
-    psycopg_conn_string_from_settings_dict
+    psycopg_conn_string_from_settings_dict,
 )
 
 
@@ -92,22 +92,26 @@ class TestPGNotifyConnection:
 
     def test_listener_string_production(self):
         "This is a test to correspond to PG_NOTIFY_DSN_SERVER type settings in eda-server"
-        args = psycopg_conn_string_from_settings_dict({
-            "ENGINE": "django.db.backends.postgresql",
-            "HOST": "127.0.0.1",
-            "PORT": 5432,
-            "USER": "postgres",
-            "PASSWORD": "DB_PASSWORD",
-            "NAME": "eda",
-            "TIME_ZONE": settings.DATABASES['default']['TIME_ZONE'],
-            "OPTIONS": {
-                "sslmode": "allow",
-                "sslcert": "",
-                "sslkey": "",
-                "sslrootcert": "",
-            },
-        })
-        assert args == "dbname=eda sslmode=allow sslcert='' sslkey='' sslrootcert='' client_encoding=UTF8 user=postgres password=DB_PASSWORD host=127.0.0.1 port=5432"
+        args = psycopg_conn_string_from_settings_dict(
+            {
+                "ENGINE": "django.db.backends.postgresql",
+                "HOST": "127.0.0.1",
+                "PORT": 5432,
+                "USER": "postgres",
+                "PASSWORD": "DB_PASSWORD",
+                "NAME": "eda",
+                "TIME_ZONE": settings.DATABASES['default']['TIME_ZONE'],
+                "OPTIONS": {
+                    "sslmode": "allow",
+                    "sslcert": "",
+                    "sslkey": "",
+                    "sslrootcert": "",
+                },
+            }
+        )
+        assert args == (
+            "dbname=eda sslmode=allow sslcert='' sslkey='' sslrootcert='' client_encoding=UTF8 user=postgres password=DB_PASSWORD host=127.0.0.1 port=5432"
+        )
 
     def test_listener_string_production_use(self):
         "This assures that the data we get for the connection string is usable, and demos how to use"
