@@ -4,7 +4,6 @@ from typing import Union
 from zlib import crc32
 
 import psycopg
-
 from django.conf import settings
 from django.db import DEFAULT_DB_ALIAS, connection, connections, transaction
 from django.db.backends.postgresql.base import DatabaseWrapper as PsycopgDatabaseWrapper

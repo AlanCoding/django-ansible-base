@@ -2,19 +2,18 @@ import threading
 import time
 
 import psycopg
-
 import pytest
+from django.conf import settings
 from django.db import connection
 from django.db.utils import OperationalError
 from django.test import override_settings
-from django.conf import settings
 
 from ansible_base.lib.utils.db import (
     advisory_lock,
     get_pg_notify_params,
     migrations_are_complete,
-    psycopg_kwargs_from_settings_dict,
     psycopg_conn_string_from_settings_dict,
+    psycopg_kwargs_from_settings_dict,
 )
 
 
@@ -90,31 +89,45 @@ class TestPGNotifyConnection:
             psycopg_params = self._trim_python_objects(psycopg_kwargs_from_settings_dict(test_dict))
             assert psycopg_params == self.PSYCOPG_KWARGS
 
+    def test_psycopg_kwargs_use(self):
+        "This assures that the data we get for the kwargs are usable, and demos how to use"
+        if connection.vendor == 'sqlite':
+            pytest.skip('Test needs to connect to postgres which is not running')
+
+        test_dict = settings.DATABASES['default'].copy()
+        test_dict['OPTIONS'] = {'autocommit': True}
+        with override_settings(USE_TZ=False):
+            psycopg_params = self._trim_python_objects(psycopg_kwargs_from_settings_dict(test_dict))
+
+        psycopg.connect(**psycopg_params)
+
     def test_listener_string_production(self):
         "This is a test to correspond to PG_NOTIFY_DSN_SERVER type settings in eda-server"
-        args = psycopg_conn_string_from_settings_dict(
-            {
-                "ENGINE": "django.db.backends.postgresql",
-                "HOST": "127.0.0.1",
-                "PORT": 5432,
-                "USER": "postgres",
-                "PASSWORD": "DB_PASSWORD",
-                "NAME": "eda",
-                "TIME_ZONE": settings.DATABASES['default']['TIME_ZONE'],
-                "OPTIONS": {
-                    "sslmode": "allow",
-                    "sslcert": "",
-                    "sslkey": "",
-                    "sslrootcert": "",
-                },
-            }
-        )
+        with override_settings(USE_TZ=False):
+            args = psycopg_conn_string_from_settings_dict(
+                {
+                    "ENGINE": "django.db.backends.postgresql",
+                    "HOST": "127.0.0.1",
+                    "PORT": 5432,
+                    "USER": "postgres",
+                    "PASSWORD": "DB_PASSWORD",
+                    "NAME": "eda",
+                    "OPTIONS": {
+                        "sslmode": "allow",
+                        "sslcert": "",
+                        "sslkey": "",
+                        "sslrootcert": "",
+                    },
+                }
+            )
         assert args == (
             "dbname=eda sslmode=allow sslcert='' sslkey='' sslrootcert='' client_encoding=UTF8 user=postgres password=DB_PASSWORD host=127.0.0.1 port=5432"
         )
 
     def test_listener_string_production_use(self):
         "This assures that the data we get for the connection string is usable, and demos how to use"
+        if connection.vendor == 'sqlite':
+            pytest.skip('Test needs to connect to postgres which is not running')
         args = psycopg_conn_string_from_settings_dict(settings.DATABASES['default'])
         psycopg.connect(conninfo=args)
 
