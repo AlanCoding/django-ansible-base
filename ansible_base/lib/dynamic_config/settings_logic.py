@@ -329,20 +329,17 @@ def get_mergeable_dab_settings(settings: dict) -> dict:  # NOSONAR
                 }
             )
 
-    # Set back only changed base keys so the inspect history is accurate
-    if installed_apps != settings["INSTALLED_APPS"]:
-        dab_data["INSTALLED_APPS"] = installed_apps
-    if middleware != settings["MIDDLEWARE"]:
-        dab_data["MIDDLEWARE"] = middleware
-    if rest_framework != settings["REST_FRAMEWORK"]:
-        dab_data["REST_FRAMEWORK"] = rest_framework
-    if oauth2_provider != settings.get("OAUTH2_PROVIDER", {}):
-        dab_data["OAUTH2_PROVIDER"] = oauth2_provider
-    if templates != settings.get("TEMPLATES", []):
-        dab_data["TEMPLATES"] = templates
-    if authentication_backends != settings.get("AUTHENTICATION_BACKENDS", []):
-        dab_data["AUTHENTICATION_BACKENDS"] = authentication_backends
-    if spectacular_settings != settings.get('SPECTACULAR_SETTINGS', {}):
-        dab_data['SPECTACULAR_SETTINGS'] = spectacular_settings
+    if 'ansible_base.task' in installed_apps:
+        # Queue used for dab_task tasks to re-schedule themselves if there is more work to do
+        # if you want to use a local queue instead, that would be more performant
+        dab_data['DAB_TASK_ADMIN_QUEUE'] = 'dab_broadcast'
+
+        # Queues that the local node will listen to
+        # useful to manage different pools of work and types of nodes
+        # this should probably include the admin queue
+        dab_data['DAB_TASK_LISTEN_QUEUES'] = ['dab_broadcast']
+
+        # Dispatcher spawns python subprocesses, so you can control the number of them here
+        dab_data['DAB_TASK_MAX_WORKERS'] = 4
 
     return dab_data

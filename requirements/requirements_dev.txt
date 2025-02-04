@@ -20,4 +20,5 @@ pytest-django
 setuptools-scm
 sqlparse==0.5.2
 psycopg[binary]
+honcho
 sdb

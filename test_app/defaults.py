@@ -60,6 +60,7 @@ INSTALLED_APPS = [
     'ansible_base.rest_pagination',
     'ansible_base.rbac',
     'ansible_base.oauth2_provider',
+    'ansible_base.task',
     'test_app',
     'django_extensions',
     'debug_toolbar',
@@ -186,6 +187,8 @@ ANSIBLE_BASE_RBAC_MODEL_REGISTRY = {
 ANSIBLE_BASE_OAUTH2_PROVIDER_PERMISSIONS_CHECK_IGNORED_VIEWS = ["drf_spectacular.views.SpectacularSwaggerView"]
 ALLOW_SHARED_RESOURCE_CUSTOM_ROLES = True  # Allow making custom roles with org change permission, for example
 ALLOW_LOCAL_ASSIGNING_JWT_ROLES = False
+
+DAB_TASK_LISTEN_QUEUES = ['dab_broadcast', 'dab_task_tasks']
 
 ANSIBLE_BASE_USER_VIEWSET = 'test_app.views.UserViewSet'
 

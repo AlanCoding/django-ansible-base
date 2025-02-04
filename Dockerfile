@@ -13,7 +13,8 @@ RUN dnf -y install \
     libtool-ltdl-devel \
     libpq-devel \
     libpq \
-    postgresql
+    postgresql \
+    git
 
 # Create /etc/ansible-automation-platform/testapp folder
 RUN mkdir -p /etc/ansible-automation-platform/testapp

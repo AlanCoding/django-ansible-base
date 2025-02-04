@@ -9,7 +9,7 @@ services:
       - "55432:5432"
 
   test_app:
-    build:
+    build: &build_info
       context: .
     working_dir: /src
     command: './test_app/scripts/container_startup_uwsgi.sh'
@@ -17,10 +17,10 @@ services:
       - '.:/src:z'
     ports:
       - '8000:8000'
-    depends_on:
+    depends_on: &depends_info
       postgres:
         condition: service_healthy
-    environment:
+    environment: &env_info
       DJANGO_SETTINGS_MODULE: test_app.settings
       DB_HOST: postgres
       DB_PORT: 5432
@@ -33,6 +33,13 @@ services:
     # and the code can be debugged interactively 
     stdin_open: true
     tty: true
+
+  test_app_task:
+    build: *build_info
+    working_dir: /src
+    command: 'python manage.py run_dispatcher'
+    depends_on: *depends_info
+    environment: *env_info
 
   # This is the intermediate application reverse proxy without ssl
   nginx:
