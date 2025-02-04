@@ -1,6 +1,7 @@
 import logging
 
 from dispatcher.utils import resolve_callable
+from dispatcher.publish import task
 from django.db import transaction
 
 from ansible_base.task.models import TASK_STATES, Task
@@ -8,6 +9,7 @@ from ansible_base.task.models import TASK_STATES, Task
 logger = logging.getLogger(__name__)
 
 
+@task(queue='dab_broadcast')
 def run_task_from_queue():
     with transaction.atomic():
         task = Task.objects.filter(state=TASK_STATES.WAITING).select_for_update().first()
