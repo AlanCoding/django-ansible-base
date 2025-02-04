@@ -1,5 +1,4 @@
 from dispatcher.main import DispatcherMain
-
 from django.core.management.base import BaseCommand
 
 
@@ -12,9 +11,7 @@ class Command(BaseCommand):
                 "brokers": {
                     "pg_notify": {"conninfo": settings.PG_NOTIFY_DSN_SERVER},
                     # TODO: sanitize or escape channel names on dispatcher side
-                    "channels": [
-                        "dab_broadcast"
-                    ],
+                    "channels": ["dab_broadcast"],
                 },
                 # NOTE: I would prefer to move the activation monitoring
                 # from worker to activation, but that is more work

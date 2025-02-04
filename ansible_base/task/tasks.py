@@ -1,10 +1,9 @@
 import logging
 
-from ansible_base.task.models import Task, TASK_STATES
-
 from dispatcher.utils import resolve_callable
-
 from django.db import transaction
+
+from ansible_base.task.models import TASK_STATES, Task
 
 logger = logging.getLogger(__name__)
 

@@ -1,11 +1,11 @@
+from dispatcher.utils import serialize_task
 from django.db import transaction
 
-from dispatcher.utils import serialize_task
-
-from ansible_base.task.tasks import run_task_from_queue
 from ansible_base.task.models import Task
+from ansible_base.task.tasks import run_task_from_queue
 
 # decorator structure is taken from dispatcher.publish
+
 
 class TaskPublisher:
     def __init__(self, fn):
