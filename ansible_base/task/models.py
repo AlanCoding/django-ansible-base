@@ -28,6 +28,7 @@ class Task(models.Model):
     state = models.CharField(
         choices=[(s, s.title()) for s in sorted(vars(TASK_STATES).values())],
         default=TASK_STATES.WAITING,
+        max_length=15,
         help_text=_('Choices of this field track with acknowledgement and completion of a task'),
     )
     name = models.TextField(help_text=_('Importable path for class or method'))
