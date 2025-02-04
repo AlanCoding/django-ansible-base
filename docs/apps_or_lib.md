@@ -95,6 +95,16 @@ from ansible_base.<app_name>.apps import <app class>
 app_name = <app class>.label
 ```
 
+### Requirements
+
+If you app has requirements, add a file like `requirements/requirements_<app name>.txt`.
+After that, run this to update the overall requirements:
+
+```
+cd requirements/
+updater.sh run
+```
+
 ## Views in apps
 
 All views in a django app should inherit by default, from `ansible_base.lib.utils.views.AnsibleBaseDjangoAppApiView`. 

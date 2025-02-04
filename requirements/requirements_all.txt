@@ -25,6 +25,8 @@ defusedxml==0.8.0rc2
     # via
     #   python3-openid
     #   social-auth-core
+dispatcher @ git+https://github.com/ansible/dispatcher
+    # via -r requirements/requirements_task.in
 django==4.2.17
     # via
     #   -r requirements/requirements.in
@@ -116,7 +118,9 @@ python3-openid==3.2.0
 python3-saml==1.16.0
     # via -r requirements/requirements_authentication.in
 pyyaml==6.0.2
-    # via drf-spectacular
+    # via
+    #   dispatcher
+    #   drf-spectacular
 redis==5.2.0
     # via
     #   -r requirements/requirements_redis_client.in
