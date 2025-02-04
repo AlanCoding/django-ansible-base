@@ -17,6 +17,9 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         psycopg_params = get_pg_notify_params()
+        psycopg_params.pop('autocommit')  # dispatcher automatically adds this, causes error, TODO: need pre-check
+        psycopg_params.pop('cursor_factory')
+        psycopg_params.pop('context')  # TODO: remove in inner method, makes non-async, not good
 
         dispatcher_config = {
             "producers": {
