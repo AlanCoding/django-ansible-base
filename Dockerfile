@@ -13,7 +13,8 @@ RUN dnf -y install \
     libtool-ltdl-devel \
     libpq-devel \
     libpq \
-    postgresql
+    postgresql \
+    git
 
 RUN python3.11 -m venv /venv
 
