@@ -5,9 +5,12 @@ from itertools import chain
 from django.shortcuts import render
 from django.urls.exceptions import NoReverseMatch
 from django.urls.resolvers import URLPattern
-from rest_framework.decorators import action, api_view
+from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.permissions import IsAuthenticatedOrReadOnly
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
+
+from dispatcher.utils import resolve_callable
 
 from ansible_base.lib.utils.response import get_fully_qualified_url
 from ansible_base.lib.utils.views.ansible_base import AnsibleBaseView
@@ -177,6 +180,7 @@ def api_root(request, format=None):
     list_endpoints['service-index'] = get_fully_qualified_url('service-index-root')
     list_endpoints['role-metadata'] = get_fully_qualified_url('role-metadata')
     list_endpoints['timeout-view'] = get_fully_qualified_url('test-timeout-view')
+    list_endpoints['trigger-task'] = get_fully_qualified_url('test-trigger-task')
 
     return Response(list_endpoints)
 
@@ -184,6 +188,20 @@ def api_root(request, format=None):
 @api_view(['GET'])
 def timeout_view(request, format=None):
     time.sleep(60 * 10)  # 10 minutes
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticatedOrReadOnly])
+def trigger_task(request, format=None):
+    if request.method == 'GET':
+        return Response({})
+    elif request.method == 'POST':
+        try:
+            fn = resolve_callable(request.data)
+        except Exception as exc:
+            return Response({'error': f'Could not locate task {request.data}, error: {str(exc)}'})
+        fn.delay()
+        return Response({'task': request.data})
 
 
 class MultipleFieldsViewSet(TestAppViewSet):

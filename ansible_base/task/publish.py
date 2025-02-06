@@ -37,3 +37,7 @@ class TaskDecorator:
         setattr(fn, 'delay', publisher.delay)
 
         return fn
+
+
+def task():
+    return TaskDecorator()
