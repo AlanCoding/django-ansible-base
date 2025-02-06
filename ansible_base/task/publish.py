@@ -27,6 +27,7 @@ class TaskPublisher:
 
 class TaskDecorator:
     def __init__(self, *args, **kwargs):
+        # TODO: this will process a task timeout, just not yet set up
         self.args = args
         self.kwargs = kwargs
 
@@ -39,5 +40,5 @@ class TaskDecorator:
         return fn
 
 
-def task():
+def durable_task():
     return TaskDecorator()
