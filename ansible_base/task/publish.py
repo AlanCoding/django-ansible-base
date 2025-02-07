@@ -19,6 +19,7 @@ class TaskPublisher:
         # this function may allow additional arguments in the future, but not now
         Task.objects.create(name=self.task_name)
 
+        # pg_notify message (probably) to wake up
         transaction.on_commit(run_task_from_queue.delay)
 
     def delay(self, *args, **kwargs):
