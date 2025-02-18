@@ -1,4 +1,7 @@
 import time
+from uuid import UUID
+
+from test_app.models import UUIDModel
 
 from ansible_base.task.publish import durable_task
 
@@ -6,6 +9,11 @@ from ansible_base.task.publish import durable_task
 @durable_task()
 def hello_world():
     print('hello world')
+
+
+@durable_task()
+def create_uuid_entry(uuid: UUID):
+    UUIDModel.objects.create(id=uuid)
 
 
 @durable_task()
