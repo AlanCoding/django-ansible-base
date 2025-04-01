@@ -4,6 +4,8 @@ Variables defined in this file will be loaded by Dynaconf and populated into the
 
 import os
 
+from ansible_base.lib.dynamic_config.constants import api_documentation, rest_filters
+
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEBUG = True
 ALLOWED_HOSTS = ["*"]
@@ -52,6 +54,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'social_django',
+    'drf_spectacular',
     'ansible_base.api_documentation',
     'ansible_base.authentication',
     'ansible_base.rest_filters',
@@ -98,6 +101,9 @@ REST_FRAMEWORK = {
         'ansible_base.oauth2_provider.permissions.OAuth2ScopePermission',
         'ansible_base.rbac.api.permissions.AnsibleBaseObjectPermissions',
     ],
+    'SPECTACULAR_SETTINGS': api_documentation.dab_spectacular_settings,
+    'DEFAULT_SCHEMA_CLASS': api_documentation.auto_schema,
+    'DEFAULT_FILTER_BACKENDS': rest_filters.dab_rest_filters,
 }
 
 DATABASES = {

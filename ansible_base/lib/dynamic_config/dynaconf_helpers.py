@@ -16,7 +16,8 @@ from dynaconf.loaders.yaml_loader import yaml
 from dynaconf.utils.files import glob
 from dynaconf.utils.functional import empty
 
-from ansible_base.lib.dynamic_config.settings_logic import get_mergeable_dab_settings
+from .settings_logic import get_mergeable_dab_settings
+from .validators import dab_validators
 
 
 def factory(
@@ -24,6 +25,7 @@ def factory(
     app_name: str,  # main app name to be used to name env_switcher and envvar_prefix
     *,
     add_dab_settings: bool = True,  # add DAB settings to the settings object
+    add_dab_validators: bool = True,  # add DAB validators
     validators: list[Validator] | None = None,  # custom validators to be used in Dynaconf
     extra_envvar_prefixes: list[str] | None = None,  # extra prefixes to be used in envvar loader
     **options,  # options to be passed to Dynaconf
@@ -125,7 +127,11 @@ def factory(
     if validators:
         settings.validators.register(*validators)
 
-    add_dab_settings and load_dab_settings(settings)
+    if add_dab_settings:
+        load_dab_settings(settings)
+
+    if add_dab_validators:
+        load_dab_validators(settings)
 
     # Dynaconf allows composed modes
     # so current_env can be a comma separated string of modes (e.g. "development,quiet")
@@ -174,6 +180,14 @@ def load_dab_settings(settings: Dynaconf):
         loader_identifier="load_dab_settings",
     )
     settings.update(dab_settings, loader_identifier="load_dab_settings")
+
+
+def load_dab_validators(settings: Dynaconf):
+    """Add DAB settings validators to the dynaconf settings object."""
+    installed_apps = settings.get("INSTALLED_APPS")
+    for app_path, app_validators in dab_validators.items():
+        if app_path in installed_apps:
+            settings.validators.register(*app_validators)
 
 
 def load_standard_settings_files(settings: Dynaconf):

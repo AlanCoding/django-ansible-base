@@ -3,6 +3,8 @@ from typing import Optional
 
 from ansible_base.lib.cache.fallback_cache import FALLBACK_CACHE, PRIMARY_CACHE
 
+from .constants import api_documentation, rest_filters
+
 #
 # If you are adding a new dynamic setting:
 #     Please be sure to modify pyproject.toml with your new settings in tool.setuptools.dynamic
@@ -11,13 +13,6 @@ from ansible_base.lib.cache.fallback_cache import FALLBACK_CACHE, PRIMARY_CACHE
 
 
 DEFAULT_AUTH_GROUP = 'auth.Group'
-DEFAULT_SPECTACULAR_SETTINGS = {
-    'TITLE': 'Open API',
-    'DESCRIPTION': 'Open API',
-    'VERSION': 'v1',
-    'SCHEMA_PATH_PREFIX': '/api/v1/',
-    'COMPONENT_NO_READ_ONLY_REQUIRED': True,
-}
 DEFAULT_ANSIBLE_BASE_AUTH = "ansible_base.authentication.backend.AnsibleBaseAuth"
 DEFAULT_ANSIBLE_BASE_JWT_CONSUMER_APP_NAME = "ansible_base.jwt_consumer"
 DEFAULT_ANSIBLE_BASE_RBAC_APP_NAME = "ansible_base.rbac"
@@ -92,42 +87,14 @@ def get_mergeable_dab_settings(settings: dict) -> dict:  # NOSONAR
     # without enabling the ansible_base.rest_filters app explicitly
     # we also apply this to views from other apps so we should always define it
     if settings.get('ANSIBLE_BASE_REST_FILTERS_RESERVED_NAMES') is None:
-        dab_data['ANSIBLE_BASE_REST_FILTERS_RESERVED_NAMES'] = (
-            'page',
-            'page_size',
-            'format',
-            'order',
-            'order_by',
-            'search',
-            'type',
-            'host_filter',
-            'count_disabled',
-            'no_truncate',
-            'limit',
-            'validate',
-        )
+        dab_data['ANSIBLE_BASE_REST_FILTERS_RESERVED_NAMES'] = rest_filters.reserved_names
 
     # SPECTACULAR SETTINGS
-    if 'ansible_base.api_documentation' in installed_apps:
-        rest_framework.setdefault('DEFAULT_SCHEMA_CLASS', 'drf_spectacular.openapi.AutoSchema')
-
-        if 'drf_spectacular' not in installed_apps:
-            installed_apps.append('drf_spectacular')
-
-        for key, value in DEFAULT_SPECTACULAR_SETTINGS.items():
-            if key not in spectacular_settings:
-                spectacular_settings[key] = value
+    # NOTE: validators check default schema class and that drf_spectacular is installed
 
     # General, factual, constant of all filters that ansible_base.rest_filters ships
-    dab_data['ANSIBLE_BASE_ALL_REST_FILTERS'] = (
-        'ansible_base.rest_filters.rest_framework.type_filter_backend.TypeFilterBackend',
-        'ansible_base.rest_filters.rest_framework.field_lookup_backend.FieldLookupBackend',
-        'rest_framework.filters.SearchFilter',
-        'ansible_base.rest_filters.rest_framework.order_backend.OrderByBackend',
-    )
-    if 'ansible_base.rest_filters' in installed_apps:
-        rest_framework['DEFAULT_FILTER_BACKENDS'] = dab_data['ANSIBLE_BASE_ALL_REST_FILTERS']
-    else:
+    dab_data['ANSIBLE_BASE_ALL_REST_FILTERS'] = rest_filters.dab_rest_filters
+    if 'ansible_base.rest_filters' not in installed_apps:
         # Explanation - these are the filters for views provided by DAB like /authenticators/
         # we want them to be enabled by default _even if_ the rest_filters app is not used
         # so that clients have consistency, but if an app wants to turn them off, they can.
@@ -135,8 +102,7 @@ def get_mergeable_dab_settings(settings: dict) -> dict:  # NOSONAR
         dab_data['ANSIBLE_BASE_CUSTOM_VIEW_FILTERS'] = dab_data['ANSIBLE_BASE_ALL_REST_FILTERS']
 
     if 'ansible_base.authentication' in installed_apps:
-        if 'social_django' not in installed_apps:
-            installed_apps.append('social_django')
+        # TODO: stop point for migrating modifications to validations
         if DEFAULT_ANSIBLE_BASE_AUTH not in authentication_backends:
             authentication_backends.append(DEFAULT_ANSIBLE_BASE_AUTH)
 

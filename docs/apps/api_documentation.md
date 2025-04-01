@@ -4,46 +4,30 @@ django-ansible-base uses django-spectacular to auto-generate both Open API and S
 
 ## Settings
 
-Add `ansible_base.api_documentation` to your installed apps:
+Add `ansible_base.api_documentation` to your installed apps.
+Plus do what we tell you here.
 
 ```
+from ansible_base.lib.dynamic_config.constants import api_documentation
+
+
 INSTALLED_APPS = [
     ...
     'ansible_base.api_documentation',
-]
-```
-
-### Additional Settings
-Additional settings are required to enable api_documentation.
-This will happen automatically if using [dynamic_settings](../Installation.md)
-
-First, you need to add `drf_spectacular` to your `INSTALLED_APPS`:
-```
-INSTALLED_APPS = [
-    ...
     'drf_spectacular',
-    ...
 ]
-```
 
-Additionally, we create a `SPECTACULAR_SETTINGS` entry if its not already present:
-```
-SPECTACULAR_SETTINGS = {
-    'TITLE': 'Open API',
-    'DESCRIPTION': 'Open API',
-    'VERSION': 'v1',
-    'SCHEMA_PATH_PREFIX': '/api/v1/',
-}
-```
-
-Finally, add a `DEFAULT_SCHEMA_CLASS` to your `REST_FRAMEWORK` setting:
-```
 REST_FRAMEWORK = {
     ...
-    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    'SPECTACULAR_SETTINGS': api_documentation.dab_spectacular_settings,
+    'DEFAULT_SCHEMA_CLASS': api_documentation.auto_schema,
     ...
 }
 ```
+
+If you do not set these, our validators will let you know by throwing an error.
+See [dynamic_settings](../Installation.md) for more information.
+
 
 ## URLS
 

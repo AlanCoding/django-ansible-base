@@ -7,29 +7,23 @@ django-ansible-base has a built in mechanism for filtering and sorting query set
 Add `ansible_base.rest_filters` to your installed apps:
 
 ```
+from ansible_base.lib.dynamic_config.constants import rest_filters
+
+
 INSTALLED_APPS = [
     ...
     'ansible_base.rest_filters',
 ]
-```
 
-### Additional Settings
-Additional settings are required to enable filtering on your rest endpoints.
-This will happen automatically if using [dynamic_settings](../Installation.md)
-
-To manually enable filtering without dynamic settings the following items need to be included in your settings:
-```
 REST_FRAMEWORK = {
     ...
-    'DEFAULT_FILTER_BACKENDS': (
-        'ansible_base.rest_filters.rest_framework.type_filter_backend.TypeFilterBackend',
-        'ansible_base.rest_filters.rest_framework.field_lookup_backend.FieldLookupBackend',
-        'rest_framework.filters.SearchFilter',
-        'ansible_base.rest_filters.rest_framework.order_backend.OrderByBackend',
-    ),
+    'DEFAULT_FILTER_BACKENDS': rest_filters.dab_rest_filters,
     ...
 }
 ```
+
+If you do not follow these instructions, the system will throw a validation error.
+Read more in [dynamic_settings](../Installation.md).
 
 ## Letting Extra Query Params Through
 
