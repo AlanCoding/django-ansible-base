@@ -5,8 +5,7 @@ import pytest
 from django.db import connection
 from django.db.utils import OperationalError
 
-from ansible_base.lib.utils.db import advisory_lock, migrations_are_complete, transaction
-from django.db import connection
+from ansible_base.lib.utils.db import advisory_lock, migrations_are_complete
 
 
 @pytest.mark.django_db
