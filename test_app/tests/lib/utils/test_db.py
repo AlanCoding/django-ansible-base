@@ -14,13 +14,15 @@ def test_migrations_are_complete():
     assert migrations_are_complete()
 
 
-class TestAdvisoryLock:
-    THREAD_WAIT_TIME = 0.1
-
+class SkipIfSqlite:
     @pytest.fixture(autouse=True)
     def skip_if_sqlite(self):
         if connection.vendor == 'sqlite':
             pytest.skip('Advisory lock is not written for sqlite')
+
+
+class TestAdvisoryLock(SkipIfSqlite):
+    THREAD_WAIT_TIME = 0.1
 
     @pytest.mark.django_db
     def test_get_unclaimed_lock(self):
@@ -62,7 +64,7 @@ class TestAdvisoryLock:
 # Special transaction=True parameter is used, because we do not want in normal test transactions
 # because dropping the connection would break the transaction context, erroring at end of test
 @pytest.mark.django_db(transaction=True)
-class TestAdvisoryLockPostgresErrors:
+class TestAdvisoryLockPostgresErrors(SkipIfSqlite):
     """Tests related to connection management and the advisory_lock"""
 
     def kick_connection(self):
