@@ -1,10 +1,9 @@
+import logging
 from contextlib import contextmanager
 from zlib import crc32
-import logging
 
-from django.db import DEFAULT_DB_ALIAS, connection, connections, transaction, OperationalError
+from django.db import DEFAULT_DB_ALIAS, OperationalError, connection, connections, transaction
 from django.db.migrations.executor import MigrationExecutor
-
 
 logger = logging.getLogger(__name__)
 
