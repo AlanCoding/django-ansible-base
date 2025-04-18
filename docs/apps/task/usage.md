@@ -1,9 +1,9 @@
 ## DAB Task
 
 This app "dab_task" provides a tasking system (it can run tasks in the background).
-This is an overlay on top of the dispatcher library:
+This is an overlay on top of the dispatcherd library:
 
-https://github.com/ansible/dispatcher
+https://github.com/ansible/dispatcherd
 
 The key differences of using dab_task as opposed to the dispatcher directly are:
 
