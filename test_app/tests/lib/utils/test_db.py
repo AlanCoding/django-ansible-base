@@ -148,13 +148,6 @@ class TestPGNotifyConnection(SkipIfSqlite):
         assert isinstance(psycopg_connection_from_django(), psycopg.Connection)
 
 
-class TestAdvisoryLock:
-    @pytest.fixture(autouse=True)
-    def skip_if_sqlite(self):
-        if connection.vendor == 'sqlite':
-            pytest.skip('Advisory lock is not written for sqlite')
-
-
 class TestAdvisoryLock(SkipIfSqlite):
     THREAD_WAIT_TIME = 0.1
 
