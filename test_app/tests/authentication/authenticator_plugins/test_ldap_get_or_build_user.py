@@ -6,7 +6,6 @@ import pytest
 
 from ansible_base.authentication.authenticator_plugins import ldap
 
-
 """
 This module is separated from the rest of test_ldap.py because it reloads the module
 which will replace the auth utils module with newly loaded classes.
