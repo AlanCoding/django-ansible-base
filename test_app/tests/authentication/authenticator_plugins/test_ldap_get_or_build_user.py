@@ -7,6 +7,14 @@ import pytest
 from ansible_base.authentication.authenticator_plugins import ldap
 
 
+"""
+This module is separated from the rest of test_ldap.py because it reloads the module
+which will replace the auth utils module with newly loaded classes.
+So it gives best isolation to keep this in a module that does not have
+other imports from the same module, which can leave stale references.
+"""
+
+
 @pytest.mark.django_db
 @pytest.mark.parametrize(
     "username",
