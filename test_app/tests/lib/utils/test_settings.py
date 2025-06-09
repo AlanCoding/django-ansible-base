@@ -1,5 +1,5 @@
-from unittest import mock
 from types import SimpleNamespace
+from unittest import mock
 
 import pytest
 from django.test import override_settings
