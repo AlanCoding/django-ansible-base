@@ -2,6 +2,7 @@ import logging
 from typing import Optional
 
 from crum import get_current_request
+from django.conf import LazySettings, settings
 from django.http import HttpRequest
 
 from ansible_base.jwt_consumer.common.util import validate_x_trusted_proxy_header
@@ -24,7 +25,7 @@ def split_header(value: str) -> list[str]:
     return values
 
 
-def get_remote_hosts(request: HttpRequest, get_first_only: bool = False) -> list[str]:
+def get_remote_hosts(request: HttpRequest, get_first_only: bool = False, settings_module: LazySettings = settings) -> list[str]:
     '''
     Get all IPs from the allowed headers
     NOTE: this function does not unique the hosts to preserve the order of hosts found in the variables
@@ -34,7 +35,7 @@ def get_remote_hosts(request: HttpRequest, get_first_only: bool = False) -> list
     if not request or not hasattr(request, 'META'):
         return remote_hosts
 
-    headers = get_setting('REMOTE_HOST_HEADERS', ['REMOTE_ADDR', 'REMOTE_HOST'])
+    headers = get_setting('REMOTE_HOST_HEADERS', ['REMOTE_ADDR', 'REMOTE_HOST'], settings_module=settings_module)
 
     for header in headers:
         for value in split_header(request.META.get(header, '')):

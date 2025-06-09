@@ -1,5 +1,5 @@
 from django.apps import apps
-from django.conf import settings
+from django.conf import LazySettings, settings
 from django.db.models import Model
 from django.db.models.query import QuerySet
 from django.utils.translation import gettext_lazy as _
@@ -12,12 +12,12 @@ from ansible_base.rbac.permission_registry import permission_registry
 from ansible_base.rbac.validators import permissions_allowed_for_role
 
 
-def visible_users(request_user, queryset=None, always_show_superusers=True, always_show_self=True) -> QuerySet:
+def visible_users(request_user, queryset=None, always_show_superusers=True, always_show_self=True, settings_module: LazySettings = settings) -> QuerySet:
     """Gives a queryset of users that another user should be able to view"""
     user_cls = permission_registry.user_model
     org_cls = apps.get_model(settings.ANSIBLE_BASE_ORGANIZATION_MODEL)
 
-    if can_view_all_users(request_user):
+    if can_view_all_users(request_user, settings_module=settings_module):
         if queryset is not None:
             return queryset
         else:
@@ -38,22 +38,22 @@ def visible_users(request_user, queryset=None, always_show_superusers=True, alwa
     return queryset.distinct()
 
 
-def can_view_all_users(request_user):
+def can_view_all_users(request_user, settings_module: LazySettings = settings):
     org_cls = apps.get_model(settings.ANSIBLE_BASE_ORGANIZATION_MODEL)
 
     return has_super_permission(request_user, 'view') or (
-        get_setting('ORG_ADMINS_CAN_SEE_ALL_USERS', False) and org_cls.access_ids_qs(request_user, 'change').exists()
+        get_setting('ORG_ADMINS_CAN_SEE_ALL_USERS', False, settings_module=settings_module) and org_cls.access_ids_qs(request_user, 'change').exists()
     )
 
 
-def can_change_user(request_user, target_user) -> bool:
+def can_change_user(request_user, target_user, settings_module: LazySettings = settings) -> bool:
     """Tells if the request user can modify details of the target user"""
     if request_user.is_superuser:
         return True
     elif target_user.is_superuser:
         return False  # target is a superuser and request user is not
 
-    if not get_setting('MANAGE_ORGANIZATION_AUTH', False):
+    if not get_setting('MANAGE_ORGANIZATION_AUTH', False, settings_module=settings_module):
         return False
 
     # All users can change their own password and other details

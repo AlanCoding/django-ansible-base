@@ -2,7 +2,7 @@ import importlib
 import logging
 from typing import Any
 
-from django.conf import settings
+from django.conf import LazySettings, settings
 from django.utils.translation import gettext_lazy as _
 
 from ansible_base.lib.utils.validation import to_python_boolean
@@ -14,9 +14,9 @@ class SettingNotSetException(Exception):
     pass
 
 
-def get_setting(name: str, default: Any = None, log_exception: bool = True) -> Any:
+def get_setting(name: str, default: Any = None, log_exception: bool = True, settings_module: LazySettings = settings) -> Any:
     try:
-        the_function = get_function_from_setting('ANSIBLE_BASE_SETTINGS_FUNCTION')
+        the_function = get_function_from_setting('ANSIBLE_BASE_SETTINGS_FUNCTION', settings_module=settings_module)
         if the_function:
             setting = the_function(name)
             return setting
@@ -32,11 +32,11 @@ def get_setting(name: str, default: Any = None, log_exception: bool = True) -> A
                 )
             )
 
-    return getattr(settings, name, default)
+    return getattr(settings_module, name, default)
 
 
-def get_function_from_setting(setting_name: str) -> Any:
-    setting = getattr(settings, setting_name, None)
+def get_function_from_setting(setting_name: str, settings_module: LazySettings = settings) -> Any:
+    setting = getattr(settings_module, setting_name, None)
     if not setting:
         return None
 

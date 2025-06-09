@@ -1,4 +1,5 @@
 from unittest import mock
+from types import SimpleNamespace
 
 import pytest
 from django.test import override_settings
@@ -48,6 +49,11 @@ def setting_getter_function(setting_name):
 def test_settings_from_function(setting_name, default, expected_value):
     value = get_setting(setting_name, default)
     assert value == expected_value
+
+
+def test_get_setting_custom_module():
+    fake_settings = SimpleNamespace(FOO_SETTING_TEST='fooz')
+    assert get_setting('FOO_SETTING_TEST', settings_module=fake_settings) == 'fooz'
 
 
 @pytest.mark.parametrize(
