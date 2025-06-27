@@ -20,6 +20,17 @@ def test_user_assignment_ansible_id(admin_api_client, inv_rd, rando, inventory):
 
 
 @pytest.mark.django_db
+def test_user_assignment_ansible_id_get(admin_api_client, inv_rd, rando, inventory):
+    resource = Resource.objects.get(object_id=rando.pk, content_type=ContentType.objects.get_for_model(rando).pk)
+    assignment = inv_rd.give_permission(rando, inventory)
+
+    url = get_relative_url('roleuserassignment-detail', kwargs={'pk': assignment.pk})
+    response = admin_api_client.get(url, format="json")
+    assert response.status_code == 200, response.data
+    assert response.data['user_ansible_id'] == str(resource.ansible_id)
+
+
+@pytest.mark.django_db
 def test_team_assignment_ansible_id(admin_api_client, inv_rd, team, inventory, member_rd, rando):
     member_rd.give_permission(rando, team)
     team_ct = ContentType.objects.get_for_model(team)
