@@ -15,6 +15,7 @@ from ansible_base.rbac.models import RoleDefinition, RoleTeamAssignment, RoleUse
 from ansible_base.rbac.permission_registry import permission_registry  # careful for circular imports
 from ansible_base.rbac.policies import check_content_obj_permission, visible_users
 from ansible_base.rbac.validators import check_locally_managed, validate_permissions_for_model
+from ..remote import get_resource_prefix
 
 
 class ChoiceLikeMixin(serializers.ChoiceField):
@@ -73,7 +74,7 @@ class ContentTypeField(ChoiceLikeMixin):
         super().__init__(**kwargs)
 
     def get_resource_type_name(self, cls) -> str:
-        return f"{permission_registry.get_resource_prefix(cls)}.{cls._meta.model_name}"
+        return f"{get_resource_prefix(cls)}.{cls._meta.model_name}"
 
     def get_dynamic_choices(self):
         return list(sorted((self.get_resource_type_name(cls), cls._meta.verbose_name.title()) for cls in permission_registry.all_registered_models))
@@ -92,20 +93,14 @@ class ContentTypeField(ChoiceLikeMixin):
 
 
 class PermissionField(ChoiceLikeMixin):
-    @property
-    def service_prefix(self):
-        if registry := permission_registry.get_resource_registry():
-            return registry.api_config.service_type
-        return 'local'
-
     def get_dynamic_choices(self):
         perms = []
         for cls in permission_registry.all_registered_models:
             cls_name = cls._meta.model_name
             for action in cls._meta.default_permissions:
-                perms.append(f'{permission_registry.get_resource_prefix(cls)}.{action}_{cls_name}')
+                perms.append(f'{get_resource_prefix(cls)}.{action}_{cls_name}')
             for perm_name, description in cls._meta.permissions:
-                perms.append(f'{permission_registry.get_resource_prefix(cls)}.{perm_name}')
+                perms.append(f'{get_resource_prefix(cls)}.{perm_name}')
         return list(sorted(perms))
 
     def get_dynamic_object(self, data):
@@ -116,7 +111,7 @@ class PermissionField(ChoiceLikeMixin):
         if isinstance(value, str):
             return value  # slight hack to work to AWX schema tests
         ct = permission_registry.content_type_model.objects.get_for_id(value.content_type_id)  # optimization
-        return f'{permission_registry.get_resource_prefix(ct.model_class())}.{value.codename}'
+        return f'{get_resource_prefix(ct.model_class())}.{value.codename}'
 
 
 class ManyRelatedListField(serializers.ListField):

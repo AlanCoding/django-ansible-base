@@ -1,8 +1,20 @@
 from django.db import connection
 
-from .role import RoleDefinition, DABPermission, RoleUserAssignment, RoleTeamAssignment, ObjectRole, RoleEvaluation, RoleEvaluationUUID
+from .content_type import DABContentType
+from .permission import DABPermission
+from .role import RoleDefinition, RoleUserAssignment, RoleTeamAssignment, ObjectRole, RoleEvaluation, RoleEvaluationUUID
 
-__all__ = ['RoleDefinition', 'DABPermission', 'RoleUserAssignment', 'RoleTeamAssignment', 'ObjectRole', 'RoleEvaluation', 'RoleEvaluationUUID', 'get_evaluation_model']
+__all__ = [
+    'DABContentType',
+    'RoleDefinition',
+    'DABPermission',
+    'RoleUserAssignment',
+    'RoleTeamAssignment',
+    'ObjectRole',
+    'RoleEvaluation',
+    'RoleEvaluationUUID',
+    'get_evaluation_model',
+]
 
 
 def get_evaluation_model(cls):
