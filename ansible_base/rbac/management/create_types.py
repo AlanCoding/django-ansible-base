@@ -3,22 +3,21 @@ from typing import Type
 from django.apps import apps as global_apps
 from django.db import DEFAULT_DB_ALIAS, models
 
+from ansible_base.rbac import permission_registry
+
 
 def get_local_DAB_contenttypes(using: str, ct_model: Type[models.Model], service: str) -> dict[tuple[str, str], models.Model]:
     # This should work in migration scenarios, but other code checks for existence of it on manager
     ct_model.objects.clear_cache()
 
-    return {
-        (service, ct.model): ct
-        for ct in ct_model.objects.using(using).filter(service=service)
-    }
+    return {(ct.service, ct.model): ct for ct in ct_model.objects.using(using).filter(service=service)}
 
 
 def create_DAB_contenttypes(
-    rbac_models: list[Type[models.Model]],
+    service: str,
     verbosity=2,
     using=DEFAULT_DB_ALIAS,
-    apps=global_apps
+    apps=global_apps,
 ):
     """Create DABContentType for models in the given app.
 
@@ -29,15 +28,7 @@ def create_DAB_contenttypes(
     """
     DABContentType = apps.get_model("dab_rbac", "DABContentType")
 
-    from ansible_base.rbac.remote import get_local_resource_prefix
-
-    service = get_local_resource_prefix()
-
-    content_types = get_local_DAB_contenttypes(
-        using, DABContentType, service
-    )
-    if not rbac_models:
-        return
+    content_types = get_local_DAB_contenttypes(using, DABContentType, service)
 
     cts = [
         DABContentType(
@@ -45,7 +36,7 @@ def create_DAB_contenttypes(
             app_label=model._meta.app_label,
             model=model._meta.model_name,
         )
-        for model in rbac_models
+        for model in permission_registry.all_registered_models
         if (service, model._meta.model_name) not in content_types
     ]
     if not cts:
@@ -53,7 +44,4 @@ def create_DAB_contenttypes(
     DABContentType.objects.using(using).bulk_create(cts)
     if verbosity >= 2:
         for ct in cts:
-            print(
-                "Adding DAB content type "
-                f"'{ct.service}:{ct.app_label} | {ct.model}'"
-            )
+            print("Adding DAB content type " f"'{ct.service}:{ct.app_label} | {ct.model}'")

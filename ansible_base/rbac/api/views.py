@@ -4,7 +4,6 @@ from typing import Type
 from django.db import transaction
 from django.db.models import Model
 from django.utils.translation import gettext_lazy as _
-from django.contrib.contenttypes.models import ContentType
 from rest_framework import permissions
 from rest_framework.exceptions import ValidationError
 from rest_framework.generics import GenericAPIView
@@ -27,6 +26,8 @@ from ansible_base.rbac.permission_registry import permission_registry
 from ansible_base.rbac.policies import check_can_remove_assignment
 from ansible_base.rbac.validators import check_locally_managed, permissions_allowed_for_role, system_roles_enabled
 from ansible_base.rest_filters.rest_framework.ansible_id_backend import TeamAnsibleIdAliasFilterBackend, UserAnsibleIdAliasFilterBackend
+
+from ..models.content_type import DABContentType
 from ..remote import get_resource_prefix
 
 
@@ -53,7 +54,7 @@ class RoleMetadataView(AnsibleBaseDjangoAppApiView, GenericAPIView):
 
     def dispatch(self, request, *args, **kwargs):
         # Warm cache to avoid hits to basically all types from serializer
-        ContentType.objects.get_for_models(*permission_registry.all_registered_models)
+        DABContentType.objects.get_for_models(*permission_registry.all_registered_models)
         return super().dispatch(request, *args, **kwargs)
 
     def get(self, request, format=None):
@@ -118,7 +119,7 @@ class RoleDefinitionViewSet(AnsibleBaseDjangoAppApiView, ModelViewSet):
 
     def dispatch(self, request, *args, **kwargs):
         # Warm cache to avoid hits to basically all types from serializer
-        ContentType.objects.get_for_models(*permission_registry.all_registered_models)
+        DABContentType.objects.get_for_models(*permission_registry.all_registered_models)
         return super().dispatch(request, *args, **kwargs)
 
 

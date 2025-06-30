@@ -4,8 +4,6 @@ from typing import Optional, Type
 
 # Django
 from django.conf import settings
-from django.contrib.contenttypes.fields import GenericForeignKey
-from django.contrib.contenttypes.models import ContentType
 from django.db import connection, models, transaction
 from django.db.models.functions import Cast
 from django.db.models.query import QuerySet
@@ -23,6 +21,9 @@ from ansible_base.lib.utils.models import is_add_perm
 from ansible_base.rbac.permission_registry import permission_registry
 from ansible_base.rbac.prefetch import TypesPrefetch
 from ansible_base.rbac.validators import validate_assignment, validate_permissions_for_model
+
+from .content_type import DABContentType
+from .fields import FederatedForeignKey
 from .permission import DABPermission
 
 logger = logging.getLogger('ansible_base.rbac.models')
@@ -76,7 +77,7 @@ class RoleDefinitionManager(models.Manager):
         # User should get permissions to the object and any child objects under it
         model_and_children = set(cls for rel, cls in permission_registry.get_child_models(obj))
         model_and_children.add(type(obj))
-        cts = ContentType.objects.get_for_models(*model_and_children).values()
+        cts = DABContentType.objects.get_for_models(*model_and_children).values()
 
         needed_perms = set()
         for perm in DABPermission.objects.filter(content_type__in=cts).prefetch_related('content_type'):
@@ -91,7 +92,7 @@ class RoleDefinitionManager(models.Manager):
         has_permissions.update(user.singleton_permissions())
         if set(needed_perms) - set(has_permissions):
             kwargs = {'permissions': needed_perms, 'name': settings.ANSIBLE_BASE_ROLE_CREATOR_NAME.format(obj=obj, cls=type(obj))}
-            defaults = {'content_type': ContentType.objects.get_for_model(obj)}
+            defaults = {'content_type': DABContentType.objects.get_for_model(obj)}
             try:
                 rd, _ = self.get_or_create(defaults=defaults, **kwargs)
             except ValidationError:
@@ -121,7 +122,7 @@ class RoleDefinitionManager(models.Manager):
 
         ct = kwargs.get('content_type', None)
         if kwargs.get('content_type_id', None):
-            ct = ContentType.objects.get(id=kwargs['content_type_id'])
+            ct = DABContentType.objects.get(id=kwargs['content_type_id'])
 
         validate_permissions_for_model(perm_list, ct, managed=kwargs.get('managed', False))
 
@@ -145,8 +146,8 @@ class RoleDefinition(CommonModel):
     )  # pulp definition of Role uses locked
     permissions = models.ManyToManyField('dab_rbac.DABPermission', related_name='role_definitions')
     content_type = models.ForeignKey(
-        ContentType,
-        help_text=_('The type of resource this can apply to; only used for validation and user assistance.'),
+        DABContentType,
+        help_text=_('The type of resource this can apply to; used for validation and user assistance.'),
         null=True,
         default=None,
         on_delete=models.CASCADE,
@@ -234,7 +235,7 @@ class RoleDefinition(CommonModel):
     def give_or_remove_permission(self, actor, content_object, giving=True, sync_action=False):
         "Shortcut method to do whatever needed to give user or team these permissions"
         validate_assignment(self, actor, content_object)
-        obj_ct = ContentType.objects.get_for_model(content_object)
+        obj_ct = DABContentType.objects.get_for_model(content_object)
         # sanitize the object_id to its database version, practically, remove "-" chars from uuids
         object_id = content_object._meta.pk.get_db_prep_value(content_object.pk, connection)
         kwargs = dict(role_definition=self, content_type=obj_ct, object_id=object_id)
@@ -316,10 +317,12 @@ class ObjectRoleFields(models.Model):
 
     # role_definition set on child models to set appropriate help_text and related_name
     content_type = models.ForeignKey(
-        ContentType, on_delete=models.CASCADE, help_text=_("The content type of the subject of permission assignments. Duplicated from related RoleDefinition.")
+        DABContentType,
+        on_delete=models.CASCADE,
+        help_text=_("The content type of the subject of permission assignments. Duplicated from related RoleDefinition."),
     )
     object_id = models.TextField(null=False, help_text=_("The database primary key of the subject of permission assignments."))
-    content_object = GenericForeignKey('content_type', 'object_id')
+    content_object = FederatedForeignKey('content_type', 'object_id')
 
     @classmethod
     def _visible_items(cls, eval_cls, user, qs=None):
@@ -368,7 +371,7 @@ class AssignmentBase(ImmutableCommonModel, ObjectRoleFields):
     object_id = models.TextField(
         null=True, blank=True, help_text=_('The primary key of the object this assignment applies to; null value indicates system-wide assignment.')
     )
-    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE, null=True, help_text=_("The content type this applies to."))
+    content_type = models.ForeignKey(DABContentType, on_delete=models.CASCADE, null=True, help_text=_("The content type this applies to."))
 
     # object_role is internal, and not shown in serializer
     # content_type does not have a link, and ResourceType will be used in lieu sometime
@@ -535,7 +538,7 @@ class ObjectRole(ObjectRoleFields):
                     if '__' in path and model._meta.model_name == permission_content_type.model:
                         path_to_parent, filter_path = path.split('__', 1)
                         child_model = permission_content_type.model_class()._meta.get_field(path_to_parent).related_model
-                        eval_ct = ContentType.objects.get_for_model(child_model).id
+                        eval_ct = DABContentType.objects.get_for_model(child_model).id
                 if not child_model:
                     continue
             else:
@@ -657,7 +660,7 @@ class RoleEvaluationFields(models.Model):
         if content_types:
             filter_kwargs['content_type_id__in'] = content_types
         else:
-            filter_kwargs['content_type_id'] = ContentType.objects.get_for_model(model_cls).id
+            filter_kwargs['content_type_id'] = DABContentType.objects.get_for_model(model_cls).id
         qs = cls.objects.filter(**filter_kwargs)
         if cast_field is None:
             return qs.values_list('object_id').distinct()
@@ -676,7 +679,7 @@ class RoleEvaluationFields(models.Model):
         Returns permissions that a user has to obj from object-roles,
         does not consider permissions from user flags or system-wide roles
         """
-        return cls.objects.filter(role__in=user.has_roles.all(), content_type_id=ContentType.objects.get_for_model(obj).id, object_id=obj.id).values_list(
+        return cls.objects.filter(role__in=user.has_roles.all(), content_type_id=DABContentType.objects.get_for_model(obj).id, object_id=obj.id).values_list(
             'codename', flat=True
         )
 
@@ -687,7 +690,7 @@ class RoleEvaluationFields(models.Model):
         method on permission classes, but it is named differently to avoid unintentionally conflicting
         """
         return cls.objects.filter(
-            role__in=user.has_roles.all(), content_type_id=ContentType.objects.get_for_model(obj).id, object_id=obj.pk, codename=codename
+            role__in=user.has_roles.all(), content_type_id=DABContentType.objects.get_for_model(obj).id, object_id=obj.pk, codename=codename
         ).exists()
 
 

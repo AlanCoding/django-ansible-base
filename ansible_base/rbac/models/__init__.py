@@ -2,7 +2,7 @@ from django.db import connection
 
 from .content_type import DABContentType
 from .permission import DABPermission
-from .role import RoleDefinition, RoleUserAssignment, RoleTeamAssignment, ObjectRole, RoleEvaluation, RoleEvaluationUUID
+from .role import ObjectRole, RoleDefinition, RoleEvaluation, RoleEvaluationUUID, RoleTeamAssignment, RoleUserAssignment
 
 __all__ = [
     'DABContentType',
