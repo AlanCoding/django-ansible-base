@@ -1,7 +1,6 @@
 import logging
 
 from django.apps import apps as global_apps
-from django.contrib.contenttypes.management import create_contenttypes
 from django.db import DEFAULT_DB_ALIAS, router
 
 from ansible_base.rbac import permission_registry
@@ -12,58 +11,57 @@ logger = logging.getLogger(__name__)
 def create_dab_permissions(app_config, verbosity=2, interactive=True, using=DEFAULT_DB_ALIAS, apps=global_apps, **kwargs):
     """
     This is modified from the django auth.
-    This will create DABPermission and DABContentType entries
-    this will only create permissions for registered models
+    This will create DABPermission and DABContentType entries, only for registered models.
+
+    The core logic is mainly in the other method, and this is to adhere to the post_migrate contract
     """
-    if not getattr(app_config, 'models_module', None):
+    if app_config.label != 'dab_rbac':
         return
 
-    # exit early if nothing is registered for this app
-    app_label = app_config.label
-    if not any(cls._meta.app_label == app_label for cls in permission_registry._registry):
-        return
+    # NOTE: similar methods, like for contenttypes checks app models_module
+    # but we know this is for dab_rbac, and we know it has models, so that is irrelevant
 
-    # TODO: remove when migration is finished
-    # Ensure that contenttypes are created for this app. Needed if
-    # 'ansible_base.rbac' is in INSTALLED_APPS before
-    # 'django.contrib.contenttypes'.
-    create_contenttypes(
-        app_config,
-        verbosity=verbosity,
-        interactive=interactive,
-        using=using,
-        apps=apps,
-        **kwargs,
-    )
+    if not permission_registry._registry:
+        logger.warning('DAB RBAC app is installed but no models are registered')
+        return
 
     try:
-        app_config = apps.get_app_config(app_label)
-        ContentType = apps.get_model("contenttypes", "ContentType")
-        Permission = apps.get_model("dab_rbac", "DABPermission")
+        DABContentType = apps.get_model("dab_rbac", "DABContentType")
     except LookupError:
+        logger.debug('Skipping DAB RBAC type and permission creation since models are not available')
         return
 
-    if not router.allow_migrate_model(using, Permission):
+    if not router.allow_migrate_model(using, DABContentType):
+        # Uncommon case, code logic is using a replica database or something, unlikely to be relevant
         return
 
-    rbac_models = [klass for klass in app_config.get_models() if permission_registry.is_registered(klass)]
+    sync_DAB_permissions(verbosity=verbosity, using=using, apps=global_apps)
 
-    if not rbac_models:
-        logger.debug(f'No RBAC models registered for app {app_label}')
-        return
 
+def sync_DAB_permissions(verbosity=2, using=DEFAULT_DB_ALIAS, apps=global_apps):
+    """Idepotent method to set database types and permissions for DAB RBAC
+
+    This should make the database content reflect the model Meta data and
+    registrations in the permission_registry for that app.
+    """
+    DABContentType = apps.get_model("dab_rbac", "DABContentType")
+    Permission = apps.get_model("dab_rbac", "DABPermission")
+
+    from ..remote import get_local_resource_prefix
     from .create_types import create_DAB_contenttypes
 
-    create_DAB_contenttypes(rbac_models, verbosity=verbosity, using=using, apps=apps)
+    service = get_local_resource_prefix()
+
+    create_DAB_contenttypes(service, verbosity=verbosity, using=using, apps=apps)
 
     # This will hold the permissions we're looking for as (content_type, (codename, name))
     searched_perms = []
     # The codenames and ctypes that should exist.
     ctypes = set()
-    for klass in rbac_models:
+    for klass in permission_registry.all_registered_models:
         # Force looking up the content types in the current database
         # before creating foreign keys to them.
-        ctype = ContentType.objects.db_manager(using).get_for_model(klass, for_concrete_model=False)
+        ctype = DABContentType.objects.db_manager(using).get_for_model(klass, service=service, for_concrete_model=False)
 
         ctypes.add(ctype)
 

@@ -1,9 +1,8 @@
 import pytest
-from django.contrib.contenttypes.models import ContentType
 from rest_framework.exceptions import ValidationError
 
 from ansible_base.rbac import permission_registry
-from ansible_base.rbac.models import DABPermission, ObjectRole, RoleDefinition, RoleEvaluation
+from ansible_base.rbac.models import DABContentType, DABPermission, ObjectRole, RoleDefinition, RoleEvaluation
 from ansible_base.rbac.validators import validate_permissions_for_model
 from test_app.models import ExampleEvent, Organization
 
@@ -23,7 +22,7 @@ def test_reuse_by_permission_list():
 def test_root_resource_add_invalid():
     with pytest.raises(ValidationError) as exc:
         org_admin, created = RoleDefinition.objects.get_or_create(
-            name='org-view', permissions=['add_organization'], defaults={'content_type': ContentType.objects.get_for_model(Organization)}
+            name='org-view', permissions=['add_organization'], defaults={'content_type': DABContentType.objects.get_for_model(Organization)}
         )
     assert 'Permissions "add_organization" are not valid for organization roles' in str(exc)
 
@@ -32,7 +31,7 @@ def test_root_resource_add_invalid():
 def test_missing_view_permission():
     with pytest.raises(ValidationError) as exc:
         RoleDefinition.objects.create_from_permissions(
-            permissions=['change_organization'], name='only-change-org', content_type=ContentType.objects.get_for_model(Organization)
+            permissions=['change_organization'], name='only-change-org', content_type=DABContentType.objects.get_for_model(Organization)
         )
     assert 'needs to include view' in str(exc)
 
@@ -42,7 +41,7 @@ def test_permission_for_unregistered_model():
     with pytest.raises(DABPermission.DoesNotExist):
         validate_permissions_for_model(
             permissions=[DABPermission.objects.get(codename='view_exampleevent')],
-            content_type=ContentType.objects.get_for_model(ExampleEvent),
+            content_type=DABContentType.objects.get_for_model(ExampleEvent),
         )
 
 

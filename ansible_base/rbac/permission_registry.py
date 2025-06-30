@@ -24,7 +24,7 @@ logger = logging.getLogger('ansible_base.rbac.permission_registry')
 
 class PermissionRegistry:
     def __init__(self):
-        self._registry = set()  # model registry
+        self._registry: set[Model] = set()  # model registry
         self._name_to_model = dict()
         self._parent_fields = dict()
         self._managed_roles = dict()  # code-defined role definitions, managed=True
@@ -181,7 +181,7 @@ class PermissionRegistry:
 
     @property
     def content_type_model(self):
-        return self.apps.get_model('contenttypes.ContentType')
+        return self.apps.get_model('dab_rbac.DABContentType')
 
     @cached_property
     def org_ct_id(self):
