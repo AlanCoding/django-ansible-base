@@ -4,6 +4,7 @@ from typing import Type
 from django.db import transaction
 from django.db.models import Model
 from django.utils.translation import gettext_lazy as _
+from django.contrib.contenttypes.models import ContentType
 from rest_framework import permissions
 from rest_framework.exceptions import ValidationError
 from rest_framework.generics import GenericAPIView
@@ -48,6 +49,11 @@ class RoleMetadataView(AnsibleBaseDjangoAppApiView, GenericAPIView):
 
     permission_classes = try_add_oauth2_scope_permission([permissions.IsAuthenticated])
     serializer_class = RoleMetadataSerializer
+
+    def dispatch(self, request, *args, **kwargs):
+        # Warm cache to avoid hits to basically all types from serializer
+        ContentType.objects.get_for_models(*permission_registry.all_registered_models)
+        return super().dispatch(request, *args, **kwargs)
 
     def get(self, request, format=None):
         data = OrderedDict()
@@ -108,6 +114,11 @@ class RoleDefinitionViewSet(AnsibleBaseDjangoAppApiView, ModelViewSet):
     def perform_destroy(self, instance):
         self._error_if_managed(instance)
         return super().perform_destroy(instance)
+
+    def dispatch(self, request, *args, **kwargs):
+        # Warm cache to avoid hits to basically all types from serializer
+        ContentType.objects.get_for_models(*permission_registry.all_registered_models)
+        return super().dispatch(request, *args, **kwargs)
 
 
 assignment_prefetch_base = ('content_object', 'content_type', 'role_definition', 'created_by', 'object_role')
