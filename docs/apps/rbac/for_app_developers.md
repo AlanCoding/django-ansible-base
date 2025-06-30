@@ -181,6 +181,30 @@ you can give and remove permissions to all objects of that type "in" the organiz
 - `rd.give_permission(user, organization)` - give execute/view permissions to all job templates in that organization
 - `rd.remove_permission(user, organization)` - revoke permissions obtained from that particular role (other roles will still be in effect)
 
+### Remote Content
+
+You can track permissions of objects in another system.
+
+To do this, you need to load the types and permissions of the other system.
+TODO: export and import utility to accomplish this.
+Once you have done this, the permissions (from the remote system) can be added to a `RoleDefinition`.
+
+The objects do not exist locally, so referencing `assignment.content_object`,
+or any other similar content object, will give an object that does not exist in the local database.
+Because of this, a stand-in object is returned with minimal fields.
+To add more functionality, presuambly methods to make requests to the remote server
+which will then return more details, you need to subclass `RemoteObject`:
+
+```
+from ansible_base.rbac.remote import RemoteObject
+
+class MyRemoteObject(RemoteObject):
+  def fetch(self):
+    ...
+```
+
+Then you would set `settings.RBAC_REMOTE_OBJECT_CLASS` to the import path for `MyRemoteObject`.
+
 ### Evaluating Permissions
 
 The ultimate goal of this system is to evaluate what objects a user

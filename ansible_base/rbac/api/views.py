@@ -27,6 +27,7 @@ from ansible_base.rbac.permission_registry import permission_registry
 from ansible_base.rbac.policies import check_can_remove_assignment
 from ansible_base.rbac.validators import check_locally_managed, permissions_allowed_for_role, system_roles_enabled
 from ansible_base.rest_filters.rest_framework.ansible_id_backend import TeamAnsibleIdAliasFilterBackend, UserAnsibleIdAliasFilterBackend
+from ..remote import get_resource_prefix
 
 
 def list_combine_values(data: dict[Type[Model], list[str]]) -> list[str]:
@@ -68,12 +69,12 @@ class RoleMetadataView(AnsibleBaseDjangoAppApiView, GenericAPIView):
             if cls is None:
                 cls_repr = 'system'
             else:
-                cls_repr = f"{permission_registry.get_resource_prefix(cls)}.{cls._meta.model_name}"
+                cls_repr = f"{get_resource_prefix(cls)}.{cls._meta.model_name}"
             allowed_permissions[cls_repr] = []
             for codename in list_combine_values(permissions_allowed_for_role(cls)):
                 perm = permission_registry.permission_qs.get(codename=codename)
                 ct = permission_registry.content_type_model.objects.get_for_id(perm.content_type_id)
-                perm_repr = f"{permission_registry.get_resource_prefix(ct.model_class())}.{codename}"
+                perm_repr = f"{get_resource_prefix(ct.model_class())}.{codename}"
                 allowed_permissions[cls_repr].append(perm_repr)
 
         data['allowed_permissions'] = allowed_permissions

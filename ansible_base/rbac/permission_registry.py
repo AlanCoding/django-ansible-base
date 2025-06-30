@@ -87,30 +87,6 @@ class PermissionRegistry:
                     child_filters.append((f'{next_parent_filter}__{parent_field_name}', grandchild_model))
         return child_filters
 
-    def get_resource_prefix(self, cls: Type[Model]) -> str:
-        """For a given model class, give the prefix like shared, of API naming like shared.team"""
-        if registry := self.get_resource_registry():
-            # duplicates logic in ansible_base/resource_registry/apps.py
-            try:
-                resource_config = registry.get_config_for_model(cls)
-                if resource_config.managed_serializer:
-                    return "shared"  # shared model
-            except KeyError:
-                pass  # unregistered model
-
-            # Fallback for unregistered and non-shared models
-            return registry.api_config.service_type
-        else:
-            return 'local'
-
-    def get_resource_registry(self):
-        if 'ansible_base.resource_registry' not in settings.INSTALLED_APPS:
-            return None
-
-        from ansible_base.resource_registry.registry import get_registry
-
-        return get_registry()
-
     def get_managed_role_constructor(self, shortname: str) -> Optional[ManagedRoleConstructor]:
         return self._managed_roles.get(shortname)
 
