@@ -17,6 +17,7 @@ def test_post_migrate_creates_contenttype():
 @pytest.mark.django_db
 class DABContentTypeTests(TestCase):
     """These tests originally came from Django contenttypes"""
+
     def setUp(self):
         DABContentType.objects.clear_cache()
         self.addCleanup(DABContentType.objects.clear_cache)

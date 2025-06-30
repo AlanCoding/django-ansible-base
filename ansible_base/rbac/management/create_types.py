@@ -10,10 +10,7 @@ def get_local_DAB_contenttypes(using: str, ct_model: Type[models.Model], service
     # This should work in migration scenarios, but other code checks for existence of it on manager
     ct_model.objects.clear_cache()
 
-    return {
-        (ct.service, ct.model): ct
-        for ct in ct_model.objects.using(using).filter(service=service)
-    }
+    return {(ct.service, ct.model): ct for ct in ct_model.objects.using(using).filter(service=service)}
 
 
 def create_DAB_contenttypes(
@@ -31,9 +28,7 @@ def create_DAB_contenttypes(
     """
     DABContentType = apps.get_model("dab_rbac", "DABContentType")
 
-    content_types = get_local_DAB_contenttypes(
-        using, DABContentType, service
-    )
+    content_types = get_local_DAB_contenttypes(using, DABContentType, service)
 
     cts = [
         DABContentType(
@@ -49,7 +44,4 @@ def create_DAB_contenttypes(
     DABContentType.objects.using(using).bulk_create(cts)
     if verbosity >= 2:
         for ct in cts:
-            print(
-                "Adding DAB content type "
-                f"'{ct.service}:{ct.app_label} | {ct.model}'"
-            )
+            print("Adding DAB content type " f"'{ct.service}:{ct.app_label} | {ct.model}'")

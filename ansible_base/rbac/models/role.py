@@ -317,7 +317,9 @@ class ObjectRoleFields(models.Model):
 
     # role_definition set on child models to set appropriate help_text and related_name
     content_type = models.ForeignKey(
-        DABContentType, on_delete=models.CASCADE, help_text=_("The content type of the subject of permission assignments. Duplicated from related RoleDefinition.")
+        DABContentType,
+        on_delete=models.CASCADE,
+        help_text=_("The content type of the subject of permission assignments. Duplicated from related RoleDefinition."),
     )
     object_id = models.TextField(null=False, help_text=_("The database primary key of the subject of permission assignments."))
     content_object = FederatedForeignKey('content_type', 'object_id')
