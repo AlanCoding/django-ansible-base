@@ -9,6 +9,8 @@ from rest_framework.exceptions import ValidationError
 from ansible_base.lib.utils.models import is_add_perm
 from ansible_base.rbac.permission_registry import permission_registry
 
+from .remote import get_resource_prefix
+
 
 def system_roles_enabled():
     return bool(
@@ -163,7 +165,7 @@ def validate_permissions_for_model(permissions, content_type: Optional[Model], m
             if content_type and perm.codename.startswith('view'):
                 continue
             model = perm.content_type.model_class()
-            if permission_registry.get_resource_prefix(model) == 'shared':
+            if get_resource_prefix(model) == 'shared':
                 raise ValidationError({'permissions', 'Local custom roles can only include view permission for shared models'})
 
 
