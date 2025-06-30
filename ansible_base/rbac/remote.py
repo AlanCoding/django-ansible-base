@@ -1,9 +1,8 @@
 from typing import Type
 
-from django.db import models
 from django.conf import settings
+from django.db import models
 from django.utils.module_loading import import_string
-
 
 """
 This module has utilities related to processing of remote objects.
@@ -16,6 +15,7 @@ Even if this feature is not being used, this code will still be used.
 Because for consistency, in every case the project name will need to be set.
 This module will be the source of truth for things like the projet name.
 """
+
 
 def get_resource_registry():
     """Resource registry is another DAB app, and this returns its registry."""

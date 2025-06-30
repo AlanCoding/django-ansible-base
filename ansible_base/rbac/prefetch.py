@@ -1,4 +1,4 @@
-from django.contrib.contenttypes.models import ContentType
+from .models.content_type import DABContentType
 
 
 class TypesPrefetch:
@@ -27,7 +27,7 @@ class TypesPrefetch:
 
     def get_content_type(self, ct_id):
         if ct_id not in self._content_types:
-            self._content_types[ct_id] = ContentType.objects.get_for_id(ct_id)
+            self._content_types[ct_id] = DABContentType.objects.get_for_id(ct_id)
         return self._content_types[ct_id]
 
     def permissions_for_object_role(self, role):
