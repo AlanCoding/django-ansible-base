@@ -4,6 +4,7 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.filters import BaseFilterBackend
 
 from ansible_base.resource_registry.models import Resource
+from ansible_base.rbac.models import DABContentType
 
 
 class AnsibleIdAliasFilterBackend(BaseFilterBackend):
@@ -29,7 +30,8 @@ class AnsibleIdAliasFilterBackend(BaseFilterBackend):
                 resource_obj = Resource.objects.get(ansible_id=object_ansible_id)
 
                 # Filter the queryset based on the resource's content_type and object_id
-                queryset = queryset.filter(object_role__content_type=resource_obj.content_type, object_role__object_id=resource_obj.object_id)
+                ct = DABContentType.objects.get_for_model(resource_obj.content_type.model_class())
+                queryset = queryset.filter(object_role__content_type=ct, object_role__object_id=resource_obj.object_id)
             except Resource.DoesNotExist:
                 # If the resource is not found, return an empty queryset
                 return queryset.none()

@@ -1,12 +1,12 @@
 from collections import defaultdict
-from typing import Any, Dict, Optional, Sequence, Tuple, Type
+from typing import Any, Dict, Optional, Sequence, Tuple, Type, Union
 
 from django.apps import apps
 from django.db import models as django_models
 from django.db.models.options import Options
 from django.utils.translation import gettext_lazy as _
 
-from ..remote import get_remote_object_class, get_local_resource_prefix, RemoteObject
+from ..remote import RemoteObject, get_local_resource_prefix, get_remote_object_class
 
 
 class DABContentTypeManager(django_models.Manager["DABContentType"]):
@@ -19,7 +19,7 @@ class DABContentTypeManager(django_models.Manager["DABContentType"]):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self._cache: Dict[str, Dict[Tuple[str, str, str] | int, "DABContentType"]] = {}
+        self._cache: Dict[str, Dict[Union[Tuple[str, str, str], int], "DABContentType"]] = {}
 
     def clear_cache(self) -> None:
         self._cache.clear()
@@ -40,13 +40,13 @@ class DABContentTypeManager(django_models.Manager["DABContentType"]):
         key = (service, opts.app_label, opts.model_name)
         return self._cache[self.db][key]
 
-    def _get_opts(self, model: Type[django_models.Model], for_concrete_model: bool) -> Options:
+    def _get_opts(self, model: Union[Type[django_models.Model], django_models.Model], for_concrete_model: bool) -> Options:
         """Return the ``Options`` object for ``model``."""
         return model._meta.concrete_model._meta if for_concrete_model else model._meta
 
     def get_for_model(
         self,
-        model: Type[django_models.Model],
+        model: Union[Type[django_models.Model], django_models.Model],
         for_concrete_model: bool = True,
         service: Optional[str] = None,
     ) -> "DABContentType":
@@ -71,7 +71,7 @@ class DABContentTypeManager(django_models.Manager["DABContentType"]):
 
     def get_for_models(
         self,
-        *model_list: Type[django_models.Model],
+        *model_list: Union[Type[django_models.Model], django_models.Model],
         for_concrete_models: bool = True,
         service: Optional[str] = None,
     ) -> Dict[Type[django_models.Model], "DABContentType"]:
@@ -191,7 +191,7 @@ class DABContentType(django_models.Model):
         except LookupError:
             return None
 
-    def get_object_for_this_type(self, **kwargs: Any) -> django_models.Model | RemoteObject:
+    def get_object_for_this_type(self, **kwargs: Any) -> Union[django_models.Model, RemoteObject]:
         """Return the object referenced by this content type."""
         model = self.model_class()
         if model is None:
@@ -201,7 +201,7 @@ class DABContentType(django_models.Model):
             return get_remote_object_class()(self, object_id)
         return model._base_manager.get(**kwargs)
 
-    def get_all_objects_for_this_type(self, **kwargs: Any) -> django_models.QuerySet | Sequence[django_models.Model | RemoteObject]:
+    def get_all_objects_for_this_type(self, **kwargs: Any) -> Union[django_models.QuerySet, Sequence[Union[django_models.Model, RemoteObject]]]:
         """Return all objects referenced by this content type."""
         model = self.model_class()
         if model is None:

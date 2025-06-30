@@ -39,7 +39,7 @@ class ManagedRoleConstructor:
         model = self.get_model(apps)
         if model is None:
             return None
-        content_type_cls = apps.get_model('contenttypes', 'ContentType')
+        content_type_cls = apps.get_model('dab_rbac', 'DABContentType')
         return content_type_cls.objects.get_for_model(model)
 
     def get_or_create(self, apps):

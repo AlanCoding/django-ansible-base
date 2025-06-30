@@ -1,8 +1,7 @@
 import pytest
-from django.contrib.contenttypes.models import ContentType
 
 from ansible_base.lib.utils.response import get_relative_url
-from ansible_base.rbac.models import RoleDefinition
+from ansible_base.rbac.models import DABContentType, RoleDefinition
 from ansible_base.rbac.permission_registry import permission_registry
 from test_app.models import Organization, ParentName
 
@@ -14,7 +13,7 @@ def pn_rd():
     return RoleDefinition.objects.create_from_permissions(
         name='ParentName Admin',
         permissions=MODEL_PERMS,
-        content_type=ContentType.objects.get_for_model(ParentName),
+        content_type=DABContentType.objects.get_for_model(ParentName),
     )
 
 
@@ -23,7 +22,7 @@ def org_pn_rd():
     return RoleDefinition.objects.create_from_permissions(
         name='Organization-wide ParentName Admin',
         permissions=MODEL_PERMS + ['add_parentname', 'view_organization'],
-        content_type=ContentType.objects.get_for_model(Organization),
+        content_type=DABContentType.objects.get_for_model(Organization),
     )
 
 
