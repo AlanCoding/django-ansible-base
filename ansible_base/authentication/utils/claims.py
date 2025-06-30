@@ -8,7 +8,6 @@ from typing import Optional, Union
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AbstractUser
-from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError, models
 from django.utils.timezone import now
@@ -16,6 +15,7 @@ from django.utils.translation import gettext_lazy as _
 from rest_framework.serializers import DateTimeField
 
 from ansible_base.authentication.models import Authenticator, AuthenticatorMap, AuthenticatorUser
+from ansible_base.rbac.models import DABContentType
 from ansible_base.lib.abstract_models import AbstractOrganization, AbstractTeam, CommonModel
 from ansible_base.lib.utils.auth import get_organization_model, get_team_model
 from ansible_base.lib.utils.string import is_empty
@@ -582,7 +582,7 @@ class RoleUserAssignmentsCache:
     def __init__(self):
         self.cache = {}
         # NOTE(cutwater): We may probably execute this query once and cache the query results.
-        self.content_types = {content_type.model: content_type for content_type in ContentType.objects.get_for_models(Organization, Team).values()}
+        self.content_types = {content_type.model: content_type for content_type in DABContentType.objects.get_for_models(Organization, Team).values()}
         self.role_definitions = {}
 
     def items(self):
