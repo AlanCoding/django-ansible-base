@@ -4,7 +4,7 @@ import pytest
 from django.contrib.contenttypes.models import ContentType
 
 from ansible_base.lib.utils.response import get_relative_url
-from ansible_base.rbac.models import ObjectRole, RoleEvaluation, DABContentType
+from ansible_base.rbac.models import DABContentType, ObjectRole, RoleEvaluation
 from ansible_base.resource_registry.models import Resource
 
 

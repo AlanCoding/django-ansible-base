@@ -1,7 +1,7 @@
 import pytest
 
 from ansible_base.lib.utils.response import get_relative_url
-from ansible_base.rbac.models import RoleDefinition, DABContentType
+from ansible_base.rbac.models import DABContentType, RoleDefinition
 from test_app.models import PositionModel
 
 

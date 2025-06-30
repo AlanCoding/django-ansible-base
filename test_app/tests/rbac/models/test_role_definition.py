@@ -2,7 +2,7 @@ import pytest
 from rest_framework.exceptions import ValidationError
 
 from ansible_base.rbac import permission_registry
-from ansible_base.rbac.models import DABPermission, ObjectRole, RoleDefinition, RoleEvaluation, DABContentType
+from ansible_base.rbac.models import DABContentType, DABPermission, ObjectRole, RoleDefinition, RoleEvaluation
 from ansible_base.rbac.validators import validate_permissions_for_model
 from test_app.models import ExampleEvent, Organization
 

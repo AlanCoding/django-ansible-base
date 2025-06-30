@@ -21,9 +21,10 @@ from ansible_base.lib.utils.models import is_add_perm
 from ansible_base.rbac.permission_registry import permission_registry
 from ansible_base.rbac.prefetch import TypesPrefetch
 from ansible_base.rbac.validators import validate_assignment, validate_permissions_for_model
+
 from .content_type import DABContentType
-from .permission import DABPermission
 from .fields import FederatedForeignKey
+from .permission import DABPermission
 
 logger = logging.getLogger('ansible_base.rbac.models')
 

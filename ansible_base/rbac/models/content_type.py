@@ -6,7 +6,7 @@ from django.db import models as django_models
 from django.db.models.options import Options
 from django.utils.translation import gettext_lazy as _
 
-from ..remote import get_remote_object_class, get_local_resource_prefix, RemoteObject
+from ..remote import RemoteObject, get_local_resource_prefix, get_remote_object_class
 
 
 class DABContentTypeManager(django_models.Manager["DABContentType"]):

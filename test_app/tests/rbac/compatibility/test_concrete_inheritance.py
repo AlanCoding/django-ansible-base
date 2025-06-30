@@ -1,6 +1,6 @@
 import pytest
 
-from ansible_base.rbac.models import RoleDefinition, DABContentType
+from ansible_base.rbac.models import DABContentType, RoleDefinition
 from test_app.models import AutoExtraUUIDModel, ExtraExtraUUIDModel, ManualExtraUUIDModel
 
 

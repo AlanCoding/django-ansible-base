@@ -3,7 +3,7 @@ from django.test import override_settings
 
 from ansible_base.lib.utils.response import get_relative_url
 from ansible_base.rbac import permission_registry
-from ansible_base.rbac.models import RoleDefinition, RoleUserAssignment, DABContentType
+from ansible_base.rbac.models import DABContentType, RoleDefinition, RoleUserAssignment
 from test_app.models import Cow, Credential, Inventory, Organization
 
 

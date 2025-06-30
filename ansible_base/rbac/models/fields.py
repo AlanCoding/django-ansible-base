@@ -1,19 +1,16 @@
-from django.core.exceptions import FieldDoesNotExist, ObjectDoesNotExist
+from django.contrib.contenttypes.fields import GenericForeignKey as DjangoGenericForeignKey
 from django.core import checks
+from django.core.exceptions import FieldDoesNotExist, ObjectDoesNotExist
 from django.db import DEFAULT_DB_ALIAS, models
 from django.db.models import DO_NOTHING, ForeignObject, ForeignObjectRel
 from django.db.models.base import ModelBase, make_foreign_order_accessors
-
 from django.db.models.fields.related import lazy_related_operation
 from django.db.models.query_utils import PathInfo
 from django.db.models.sql import AND
 from django.db.models.sql.where import WhereNode
-from django.contrib.contenttypes.fields import (
-    GenericForeignKey as DjangoGenericForeignKey,
-)
 
-from .content_type import DABContentType
 from ..remote import get_local_resource_prefix, get_remote_object_class
+from .content_type import DABContentType
 
 
 class FederatedForeignKey(DjangoGenericForeignKey):

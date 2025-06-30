@@ -5,7 +5,6 @@ from django.test.utils import isolate_apps
 
 from ansible_base.rbac.models import DABContentType
 from ansible_base.rbac.remote import RemoteObject
-
 from test_app.models import Inventory
 
 

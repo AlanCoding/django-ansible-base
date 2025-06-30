@@ -3,7 +3,7 @@ from io import StringIO
 import pytest
 
 from ansible_base.rbac.management.commands.RBAC_checks import Command
-from ansible_base.rbac.models import ObjectRole, RoleDefinition, DABContentType
+from ansible_base.rbac.models import DABContentType, ObjectRole, RoleDefinition
 from test_app.models import Inventory
 
 

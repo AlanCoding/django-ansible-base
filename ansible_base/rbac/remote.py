@@ -1,9 +1,8 @@
 from typing import Type
 
-from django.db import models
 from django.conf import settings
+from django.db import models
 from django.utils.module_loading import import_string
-
 
 """
 This module has utilities related to processing of remote objects.

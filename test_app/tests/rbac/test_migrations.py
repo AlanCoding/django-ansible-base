@@ -2,7 +2,7 @@ import pytest
 from django.apps import apps
 
 from ansible_base.rbac.migrations._utils import give_permissions
-from ansible_base.rbac.models import DABPermission, RoleTeamAssignment, RoleUserAssignment, DABContentType
+from ansible_base.rbac.models import DABContentType, DABPermission, RoleTeamAssignment, RoleUserAssignment
 from ansible_base.rbac.permission_registry import permission_registry
 from test_app.models import Team, User
 
