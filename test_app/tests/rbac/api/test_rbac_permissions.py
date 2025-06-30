@@ -1,17 +1,16 @@
 import pytest
-from django.contrib.contenttypes.models import ContentType
 from django.test import override_settings
 
 from ansible_base.lib.utils.response import get_relative_url
 from ansible_base.rbac import permission_registry
-from ansible_base.rbac.models import RoleDefinition, RoleUserAssignment
+from ansible_base.rbac.models import RoleDefinition, RoleUserAssignment, DABContentType
 from test_app.models import Cow, Credential, Inventory, Organization
 
 
 @pytest.fixture
 def view_inv_rd():
     view_inv, _ = RoleDefinition.objects.get_or_create(
-        name='view-inv', permissions=['view_inventory', 'view_organization'], defaults={'content_type': ContentType.objects.get_for_model(Organization)}
+        name='view-inv', permissions=['view_inventory', 'view_organization'], defaults={'content_type': DABContentType.objects.get_for_model(Organization)}
     )
     return view_inv
 
@@ -169,7 +168,7 @@ def test_remove_organization(user_api_client, user, inv_rd, inventory):
 @pytest.mark.django_db
 def test_custom_action(user_api_client, user, organization):
     rd = RoleDefinition.objects.create_from_permissions(
-        name='change-cow', permissions=['change_cow', 'view_cow', 'delete_cow'], content_type=ContentType.objects.get_for_model(Cow)
+        name='change-cow', permissions=['change_cow', 'view_cow', 'delete_cow'], content_type=DABContentType.objects.get_for_model(Cow)
     )
     cow = Cow.objects.create(organization=organization)
     rd.give_permission(user, cow)
@@ -183,7 +182,7 @@ def test_custom_action(user_api_client, user, organization):
     assert r.status_code == 403
 
     say_rd = RoleDefinition.objects.create_from_permissions(
-        name='say-cow', permissions=['view_cow', 'say_cow'], content_type=ContentType.objects.get_for_model(Cow)
+        name='say-cow', permissions=['view_cow', 'say_cow'], content_type=DABContentType.objects.get_for_model(Cow)
     )
     say_rd.give_permission(user, cow)
 

@@ -17,6 +17,7 @@ Because for consistency, in every case the project name will need to be set.
 This module will be the source of truth for things like the projet name.
 """
 
+
 def get_resource_registry():
     """Resource registry is another DAB app, and this returns its registry."""
     if 'ansible_base.resource_registry' not in settings.INSTALLED_APPS:

@@ -1,8 +1,7 @@
 import pytest
-from django.contrib.contenttypes.models import ContentType
 
 from ansible_base.lib.utils.response import get_relative_url
-from ansible_base.rbac.models import RoleDefinition
+from ansible_base.rbac.models import RoleDefinition, DABContentType
 from test_app.models import WeirdPerm
 
 
@@ -11,7 +10,7 @@ def wp_rd():
     return RoleDefinition.objects.create_from_permissions(
         name='name-key-admin',
         permissions=["I'm a lovely coconut", 'crack', 'change_weirdperm', 'view_weirdperm', 'delete_weirdperm'],
-        content_type=ContentType.objects.get_for_model(WeirdPerm),
+        content_type=DABContentType.objects.get_for_model(WeirdPerm),
     )
 
 

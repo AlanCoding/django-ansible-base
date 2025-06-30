@@ -3,12 +3,11 @@ from os import environ
 
 from crum import impersonate
 from django.conf import settings
-from django.contrib.contenttypes.models import ContentType
 from django.core.management.base import BaseCommand, CommandError
 
 from ansible_base.authentication.models import Authenticator, AuthenticatorUser
 from ansible_base.oauth2_provider.models import OAuth2Application
-from ansible_base.rbac.models import RoleDefinition
+from ansible_base.rbac.models import RoleDefinition, DABContentType
 from test_app.models import EncryptionModel, InstanceGroup, Inventory, Organization, Team, User
 
 
@@ -85,7 +84,7 @@ class Command(BaseCommand):
         ig_admin, _ = RoleDefinition.objects.get_or_create(
             name='AWX InstanceGroup admin',
             permissions=['change_instancegroup', 'delete_instancegroup', 'view_instancegroup'],
-            defaults={'content_type': ContentType.objects.get_for_model(InstanceGroup)},
+            defaults={'content_type': DABContentType.objects.get_for_model(InstanceGroup)},
         )
 
         org_admin_user, _ = User.objects.get_or_create(username='org_admin')

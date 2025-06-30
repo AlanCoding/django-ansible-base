@@ -40,13 +40,13 @@ class DABContentTypeManager(django_models.Manager["DABContentType"]):
         key = (service, opts.app_label, opts.model_name)
         return self._cache[self.db][key]
 
-    def _get_opts(self, model: Type[django_models.Model], for_concrete_model: bool) -> Options:
+    def _get_opts(self, model: Type[django_models.Model] | django_models.Model, for_concrete_model: bool) -> Options:
         """Return the ``Options`` object for ``model``."""
         return model._meta.concrete_model._meta if for_concrete_model else model._meta
 
     def get_for_model(
         self,
-        model: Type[django_models.Model],
+        model: Type[django_models.Model] | django_models.Model,
         for_concrete_model: bool = True,
         service: Optional[str] = None,
     ) -> "DABContentType":
@@ -71,7 +71,7 @@ class DABContentTypeManager(django_models.Manager["DABContentType"]):
 
     def get_for_models(
         self,
-        *model_list: Type[django_models.Model],
+        *model_list: Type[django_models.Model] | django_models.Model,
         for_concrete_models: bool = True,
         service: Optional[str] = None,
     ) -> Dict[Type[django_models.Model], "DABContentType"]:

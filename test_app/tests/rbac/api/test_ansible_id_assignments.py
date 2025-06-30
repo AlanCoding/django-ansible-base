@@ -4,7 +4,7 @@ import pytest
 from django.contrib.contenttypes.models import ContentType
 
 from ansible_base.lib.utils.response import get_relative_url
-from ansible_base.rbac.models import ObjectRole, RoleEvaluation
+from ansible_base.rbac.models import ObjectRole, RoleEvaluation, DABContentType
 from ansible_base.resource_registry.models import Resource
 
 
@@ -28,7 +28,7 @@ def test_team_assignment_ansible_id(admin_api_client, inv_rd, team, inventory, m
     response = admin_api_client.post(url, data=data, format="json")
     assert response.status_code == 201, response.data
 
-    team_role = ObjectRole.objects.get(object_id=team.id, content_type=team_ct, role_definition=member_rd)
+    team_role = ObjectRole.objects.get(object_id=team.id, content_type=DABContentType.objects.get_for_model(team), role_definition=member_rd)
     assert RoleEvaluation.objects.filter(role=team_role, codename='change_inventory', object_id=inventory.id).count() == 1
     assert rando.has_obj_perm(inventory, 'change')
 

@@ -1,8 +1,7 @@
 import pytest
-from django.contrib.contenttypes.models import ContentType
 from django.test.utils import override_settings
 
-from ansible_base.rbac.models import RoleDefinition, RoleEvaluation
+from ansible_base.rbac.models import RoleDefinition, RoleEvaluation, DABContentType
 from test_app.models import User
 
 INVENTORY_OBJ_PERMS = ('change_inventory', 'update_inventory', 'view_inventory', 'delete_inventory')
@@ -19,7 +18,7 @@ def test_create_inventory_gain_role(rando, inventory):
 @pytest.mark.django_db
 def test_create_inventory_already_has_role(rando, inventory):
     org_inv_rd = RoleDefinition.objects.create_from_permissions(
-        name='global-inventory-admin', permissions=INVENTORY_OBJ_PERMS, content_type=ContentType.objects.get_for_model(inventory.organization)
+        name='global-inventory-admin', permissions=INVENTORY_OBJ_PERMS, content_type=DABContentType.objects.get_for_model(inventory.organization)
     )
     org_assignment = org_inv_rd.give_permission(rando, inventory.organization)
     # User should already have (at least) all object permissions on the inventory

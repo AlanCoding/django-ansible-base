@@ -1,13 +1,16 @@
 from django.db import models
-from django.contrib.contenttypes.models import ContentType
 from django.utils.translation import gettext_lazy as _
+
+from .content_type import DABContentType
 
 
 class DABPermission(models.Model):
     "This is a minimal copy of auth.Permission for internal use"
 
     name = models.CharField("name", max_length=255, help_text=_("The name of this permission."))
-    content_type = models.ForeignKey(ContentType, models.CASCADE, verbose_name="content type", help_text=_("The content type this permission will apply to."))
+    # TODO: make non-null, make db_constraint
+    content_type = models.ForeignKey(DABContentType, models.CASCADE, null=True, verbose_name="content type", help_text=_("The content type this permission will apply to."), db_constraint=False)
+    # tmp_content_type = models.ForeignKey(ContentType, models.CASCADE, verbose_name="content type", help_text=_("The content type this permission will apply to."))
     codename = models.CharField(
         "codename",
         max_length=100,

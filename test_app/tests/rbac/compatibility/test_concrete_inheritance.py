@@ -1,7 +1,6 @@
 import pytest
-from django.contrib.contenttypes.models import ContentType
 
-from ansible_base.rbac.models import RoleDefinition
+from ansible_base.rbac.models import RoleDefinition, DABContentType
 from test_app.models import AutoExtraUUIDModel, ExtraExtraUUIDModel, ManualExtraUUIDModel
 
 
@@ -25,7 +24,7 @@ def _make_rd(cls):
     return RoleDefinition.objects.create_from_permissions(
         name='object admin for extra UUID model',
         permissions=[f'change_{cls_name}', f'view_{cls_name}', f'delete_{cls_name}'],
-        content_type=ContentType.objects.get_for_model(cls),
+        content_type=DABContentType.objects.get_for_model(cls),
     )
 
 
