@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 def create_dab_permissions(app_config, verbosity=2, interactive=True, using=DEFAULT_DB_ALIAS, apps=global_apps, **kwargs):
     """
     This is modified from the django auth.
-    This will create DABPermission entries
+    This will create DABPermission and DABContentType entries
     this will only create permissions for registered models
     """
     if not getattr(app_config, 'models_module', None):
@@ -23,6 +23,7 @@ def create_dab_permissions(app_config, verbosity=2, interactive=True, using=DEFA
     if not any(cls._meta.app_label == app_label for cls in permission_registry._registry):
         return
 
+    # TODO: remove when migration is finished
     # Ensure that contenttypes are created for this app. Needed if
     # 'ansible_base.rbac' is in INSTALLED_APPS before
     # 'django.contrib.contenttypes'.
@@ -45,13 +46,21 @@ def create_dab_permissions(app_config, verbosity=2, interactive=True, using=DEFA
     if not router.allow_migrate_model(using, Permission):
         return
 
+    rbac_models = [klass for klass in app_config.get_models() if permission_registry.is_registered(klass)]
+
+    if not rbac_models:
+        logger.debug(f'No RBAC models registered for app {app_label}')
+        return
+
+    from .create_types import create_DAB_contenttypes
+
+    create_DAB_contenttypes(rbac_models, verbosity=verbosity, using=using, apps=apps)
+
     # This will hold the permissions we're looking for as (content_type, (codename, name))
     searched_perms = []
     # The codenames and ctypes that should exist.
     ctypes = set()
-    for klass in app_config.get_models():
-        if not permission_registry.is_registered(klass):
-            continue
+    for klass in rbac_models:
         # Force looking up the content types in the current database
         # before creating foreign keys to them.
         ctype = ContentType.objects.db_manager(using).get_for_model(klass, for_concrete_model=False)

@@ -6,7 +6,7 @@ from django.db import models as django_models
 from django.db.models.options import Options
 from django.utils.translation import gettext_lazy as _
 
-from ..remote import get_remote_object_class, get_local_resource_prefix
+from ..remote import get_remote_object_class, get_local_resource_prefix, RemoteObject
 
 
 class DABContentTypeManager(django_models.Manager["DABContentType"]):
@@ -191,7 +191,7 @@ class DABContentType(django_models.Model):
         except LookupError:
             return None
 
-    def get_object_for_this_type(self, **kwargs: Any) -> django_models.Model:
+    def get_object_for_this_type(self, **kwargs: Any) -> django_models.Model | RemoteObject:
         """Return the object referenced by this content type."""
         model = self.model_class()
         if model is None:
@@ -201,7 +201,7 @@ class DABContentType(django_models.Model):
             return get_remote_object_class()(self, object_id)
         return model._base_manager.get(**kwargs)
 
-    def get_all_objects_for_this_type(self, **kwargs: Any) -> django_models.QuerySet | Sequence[django_models.Model]:
+    def get_all_objects_for_this_type(self, **kwargs: Any) -> django_models.QuerySet | Sequence[django_models.Model | RemoteObject]:
         """Return all objects referenced by this content type."""
         model = self.model_class()
         if model is None:

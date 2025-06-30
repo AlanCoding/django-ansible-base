@@ -39,7 +39,7 @@ def get_local_resource_prefix() -> str:
     return 'local'
 
 
-def get_resource_prefix(cls: models.Model) -> str:
+def get_resource_prefix(cls: Type[models.Model]) -> str:
     """The API project designator for given cls, according to the resource registry
 
     This is used for related slug references, like "awx.inventory" to reference
