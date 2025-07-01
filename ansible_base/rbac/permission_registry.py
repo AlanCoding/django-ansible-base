@@ -190,15 +190,12 @@ class PermissionRegistry:
 
     @property
     def permission_qs(self):
-        """Return a queryset of the permission model restricted to the RBAC-tracked models
+        """Return a queryset of the permission model
 
-        Note that this should not be necessary, since the post_migrate signal for DABPermission
-        will only create entries for registered models.
-        However, removing permission entries after a model definition changes is still unsolved
-        and this is already problematic for auth.Permission.
+        This should already only have RBAC-tracked models,
+        but it may also include permissions for remote models.
         """
-        all_cts = self.content_type_model.objects.get_for_models(*self.all_registered_models)
-        return self.apps.get_model('dab_rbac.DABPermission').objects.filter(content_type__in=all_cts.values())
+        return self.apps.get_model('dab_rbac.DABPermission').objects.all()
 
     @property
     def team_permission(self):
