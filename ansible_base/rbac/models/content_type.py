@@ -157,6 +157,12 @@ class DABContentType(django_models.Model):
         max_length=100,
         help_text=_("Name of the type according to the Django ORM Meta model_name convention. Comes from the python class, but lowercase with no spaces."),
     )
+    parent_content_type = django_models.ForeignKey(
+        "self",
+        null=True,
+        help_text=_("Parent model within the RBAC system. Being assigned to a role in objects of the parent model can confer permissions to child objects."),
+        on_delete=django_models.SET_NULL,
+    )
 
     objects = DABContentTypeManager()
 

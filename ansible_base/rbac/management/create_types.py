@@ -1,9 +1,12 @@
+import logging
 from typing import Type
 
 from django.apps import apps as global_apps
 from django.db import DEFAULT_DB_ALIAS, models
 
 from ansible_base.rbac import permission_registry
+
+logger = logging.getLogger(__name__)
 
 
 def get_local_DAB_contenttypes(using: str, ct_model: Type[models.Model], service: str) -> dict[tuple[str, str], models.Model]:
@@ -44,4 +47,14 @@ def create_DAB_contenttypes(
     DABContentType.objects.using(using).bulk_create(cts)
     if verbosity >= 2:
         for ct in cts:
-            print("Adding DAB content type " f"'{ct.service}:{ct.app_label} | {ct.model}'")
+            logger.debug("Adding DAB content type " f"'{ct.service}:{ct.app_label} | {ct.model}'")
+
+    for ct in DABContentType.objects.all():
+        if not permission_registry.is_registered(ct.model_class()):
+            logger.warning(f'{ct.model} is a stale content type in DAB RBAC')
+            continue
+        if parent_model := permission_registry.get_parent_model(ct.model_class()):
+            parent_content_type = DABContentType.objects.get_for_model(parent_model)
+            if ct.parent_content_type != parent_content_type:
+                ct.parent_content_type = parent_content_type
+                ct.save(update_fields=['parent_content_type'])
