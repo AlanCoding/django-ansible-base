@@ -27,7 +27,8 @@ class Migration(migrations.Migration):
                 (
                     'app_label',
                     models.CharField(
-                        help_text='Django app that the model is in. This is an internal technical detail that does not affect API use.', max_length=100
+                        help_text='Django app that the model is in. This is an internal technical detail that does not affect API use.',
+                        max_length=100
                     ),
                 ),
                 (
@@ -37,6 +38,15 @@ class Migration(migrations.Migration):
                         max_length=100,
                     ),
                 ),
+                (
+                    'parent_content_type',
+                    models.ForeignKey(
+                        help_text='Parent model within the RBAC system. Being assigned to a role in objects of the parent model can confer permissions to child objects.',
+                        null=True,
+                        on_delete=models.deletion.SET_NULL,
+                        to='dab_rbac.dabcontenttype'
+                    )
+                )
             ],
             options={
                 'unique_together': {('service', 'app_label', 'model')},
