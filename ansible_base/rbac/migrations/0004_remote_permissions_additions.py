@@ -55,6 +55,12 @@ class Migration(migrations.Migration):
                 ('objects', ansible_base.rbac.models.content_type.DABContentTypeManager()),
             ],
         ),
+        # Related, supporting, schema addition for remote RBAC
+        migrations.AddField(
+            model_name='objectrole',
+            name='parent_reference',
+            field=models.TextField(blank=True, db_index=True, help_text='The ansible_id or object_id of the parent resource.'),
+        ),
         # Add new fields with a temporary name
         migrations.AddField(
             model_name='dabpermission',
