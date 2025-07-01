@@ -13,6 +13,7 @@ class DABPermission(models.Model):
         models.CASCADE,
         verbose_name="content type",
         help_text=_("The content type this permission will apply to."),
+        related_name='dab_permissions',
     )
     codename = models.CharField(
         "codename",

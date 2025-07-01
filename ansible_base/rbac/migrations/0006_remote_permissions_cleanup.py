@@ -64,4 +64,15 @@ class Migration(migrations.Migration):
             name='dabcontenttype',
             unique_together={('service', 'model')},
         ),
+        # Add related names
+        migrations.AlterField(
+            model_name='dabcontenttype',
+            name='parent_content_type',
+            field=models.ForeignKey(help_text='Parent model within the RBAC system. Being assigned to a role in objects of the parent model can confer permissions to child objects.', null=True, on_delete=models.deletion.SET_NULL, related_name='child_content_types', to='dab_rbac.dabcontenttype'),
+        ),
+        migrations.AlterField(
+            model_name='dabpermission',
+            name='content_type',
+            field=models.ForeignKey(help_text='The content type this permission will apply to.', on_delete=models.deletion.CASCADE, related_name='dab_permissions', to='dab_rbac.dabcontenttype', verbose_name='content type'),
+        ),
     ]
