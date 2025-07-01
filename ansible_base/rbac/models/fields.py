@@ -9,7 +9,7 @@ from django.db.models.query_utils import PathInfo
 from django.db.models.sql import AND
 from django.db.models.sql.where import WhereNode
 
-from ..remote import get_local_resource_prefix, get_remote_object_class
+from ..remote import get_local_resource_prefix, get_remote_standin_class
 from .content_type import DABContentType
 
 
@@ -93,7 +93,7 @@ class FederatedForeignKey(DjangoGenericForeignKey):
                 except (ObjectDoesNotExist, LookupError):
                     rel_obj = None
             else:
-                rel_obj = get_remote_object_class()(ct, pk_val)
+                rel_obj = ct.get_object_for_this_type(pk=pk_val)
         self.set_cached_value(instance, rel_obj)
         return rel_obj
 
