@@ -106,6 +106,8 @@ class Migration(migrations.Migration):
             preserve_default=False,
         ),
         # Temporary adjustments to constraints due to the field renaming happening in next migration
+        # this is actually for subtle postgres behaviors that Django does not know about
+        # constraints follow the field when it is renamed, but that is unknown to Django
         migrations.AlterUniqueTogether(
             name='dabpermission',
             unique_together={},
@@ -113,5 +115,13 @@ class Migration(migrations.Migration):
         migrations.RemoveConstraint(
             model_name='objectrole',
             name='one_object_role_per_object_and_role',
+        ),
+        migrations.RemoveConstraint(
+            model_name='roleevaluation',
+            name='one_entry_per_object_permission_and_role',
+        ),
+        migrations.RemoveConstraint(
+            model_name='roleevaluationuuid',
+            name='one_entry_per_object_permission_and_role_uuid',
         ),
     ]
