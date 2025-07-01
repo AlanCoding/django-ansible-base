@@ -16,10 +16,10 @@ from flags.state import flag_enabled
 from rest_framework.serializers import DateTimeField
 
 from ansible_base.authentication.models import Authenticator, AuthenticatorMap, AuthenticatorUser
-from ansible_base.rbac.models import DABContentType
 from ansible_base.lib.abstract_models import AbstractOrganization, AbstractTeam, CommonModel
 from ansible_base.lib.utils.auth import get_organization_model, get_team_model
 from ansible_base.lib.utils.string import is_empty
+from ansible_base.rbac.models import DABContentType
 
 from .trigger_definition import TRIGGER_DEFINITION
 

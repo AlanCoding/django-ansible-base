@@ -5,7 +5,7 @@ import pytest
 
 from ansible_base.jwt_consumer.common.exceptions import InvalidService
 from ansible_base.jwt_consumer.hub.auth import HubJWTAuth
-from ansible_base.rbac.models import RoleDefinition, RoleUserAssignment, DABContentType
+from ansible_base.rbac.models import DABContentType, RoleDefinition, RoleUserAssignment
 from test_app.models import Organization, Team, User
 
 
