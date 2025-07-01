@@ -3,6 +3,31 @@
 from django.db import migrations
 
 
+def create_types_and_permissions(apps, schema_editor):
+    """Before we can migrate to the new DABContentType, entries in that table must be created.
+
+    This method runs what is ordinarily the post_migrate logic, but in the migration case here.
+    """
+    from ansible_base.rbac.management import create_dab_permissions
+
+    create_dab_permissions(apps=apps)
+
+
+def migrate_content_type(apps, schema_editor):
+    ct_cls = apps.get_model('dab_rbac', 'DABContentType')
+    ct_cls.objects.clear_cache()
+    for model_name in ('dabpermission', 'objectrole', 'roledefinition', 'roleuserassignment', 'roleteamassignment'):
+        cls = apps.get_model('dab_rbac', model_name)
+        for obj in cls.objects.all():
+            old_ct = obj.content_type
+            # NOTE: could give duplicate normally, but that is impossible in migration path
+            obj.new_content_type = ct_cls.objects.get_by_natural_key(old_ct.app_label, old_ct.model)
+            obj.save()
+    for model_name in ('roleevaluation', 'roleevaluationuuid'):
+        cls = apps.get_model('dab_rbac', model_name)
+        cls.objects.delete()
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -10,7 +35,8 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        # TODO: migrate any existing data to new_content_type, ids are not the same
+        migrations.RunPython(migrate_content_type, migrations.RunPython.noop),
+        migrations.RunPython(migrate_content_type, migrations.RunPython.noop),
         migrations.RemoveField(
             model_name='dabpermission',
             name='content_type',

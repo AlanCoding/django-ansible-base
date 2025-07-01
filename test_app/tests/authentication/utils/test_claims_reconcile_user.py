@@ -6,8 +6,8 @@ import pytest
 from django.contrib.auth import get_user_model
 
 from ansible_base.authentication.utils.claims import ReconcileUser, create_organizations_and_teams
-from ansible_base.rbac.models import DABContentType
 from ansible_base.lib.utils.auth import get_organization_model, get_team_model
+from ansible_base.rbac.models import DABContentType
 
 Organization = get_organization_model()
 Team = get_team_model()
