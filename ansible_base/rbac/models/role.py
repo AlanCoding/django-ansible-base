@@ -1,6 +1,6 @@
 import logging
 from collections.abc import Iterable
-from typing import Optional, Type
+from typing import Optional, Type, Union
 
 # Django
 from django.conf import settings
@@ -118,7 +118,15 @@ class RoleDefinitionManager(models.Manager):
 
     def create_from_permissions(self, permissions=(), **kwargs):
         "Create from a list of text-type permissions and do validation"
-        perm_list = [permission_registry.permission_qs.get(codename=str_perm) for str_perm in permissions]
+        perm_list: list[str] = []
+        for str_perm in permissions:
+            if '.' in str_perm:
+                service, codename = str_perm.split('.', 1)
+                print((service, codename))
+                perm_list.append(permission_registry.permission_qs.get(content_type__service=service, codename=codename))
+            else:
+                # Giving a codename by itself like "change_inventory" implies a local or shared permission
+                perm_list.append(permission_registry.permission_qs.get(codename=str_perm))
 
         ct = kwargs.get('content_type', None)
         if kwargs.get('content_type_id', None):
@@ -481,6 +489,8 @@ class ObjectRole(ObjectRoleFields):
         related_name='has_roles',
         help_text=_("Teams or groups who have access to the permissions defined by this object role."),
     )
+    # Only for remote models
+    parent_reference = models.TextField(blank=True, db_index=True, help_text=_("The ansible_id or object_id of the parent resource."))
     # COMPUTED DATA
     provides_teams = models.ManyToManyField(
         settings.ANSIBLE_BASE_TEAM_MODEL,
@@ -508,7 +518,14 @@ class ObjectRole(ObjectRoleFields):
             descendents.update(set(target_team.has_roles.all()))
         return descendents
 
-    def expected_direct_permissions(self, types_prefetch=None):
+    def expected_direct_permissions(self, types_prefetch=None) -> tuple[str, int, Union[int, str]]:
+        """The expected permissions that holding this ObjectRole confers to the holder
+
+        This is given in the form of tuples, which represent RoleEvaluation entries.
+        Values are (permission codename, content type id, object primary key)
+
+        In the case of remote objects, this list may not be comprehensive
+        """
         expected_evaluations = set()
         cached_id_lists = {}
         if not types_prefetch:
@@ -558,6 +575,7 @@ class ObjectRole(ObjectRoleFields):
             if eval_ct in cached_id_lists:
                 id_list = cached_id_lists[eval_ct]
             else:
+                # TODO: build id_list from ObjectRole objects it is remote object
                 id_list = child_model.objects.filter(**{filter_path: object_id}).values_list('pk', flat=True)
                 cached_id_lists[eval_ct] = list(id_list)
 

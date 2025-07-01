@@ -5,19 +5,19 @@ from django.apps import apps as global_apps
 from django.db import DEFAULT_DB_ALIAS, models
 
 from ansible_base.rbac import permission_registry
+from ansible_base.rbac.remote import get_resource_prefix
 
 logger = logging.getLogger(__name__)
 
 
-def get_local_DAB_contenttypes(using: str, ct_model: Type[models.Model], service: str) -> dict[tuple[str, str], models.Model]:
+def get_local_DAB_contenttypes(using: str, ct_model: Type[models.Model]) -> dict[tuple[str, str], models.Model]:
     # This should work in migration scenarios, but other code checks for existence of it on manager
     ct_model.objects.clear_cache()
 
-    return {(ct.service, ct.model): ct for ct in ct_model.objects.using(using).filter(service=service)}
+    return {(ct.service, ct.model): ct for ct in ct_model.objects.using(using)}
 
 
 def create_DAB_contenttypes(
-    service: str,
     verbosity=2,
     using=DEFAULT_DB_ALIAS,
     apps=global_apps,
@@ -31,17 +31,21 @@ def create_DAB_contenttypes(
     """
     DABContentType = apps.get_model("dab_rbac", "DABContentType")
 
-    content_types = get_local_DAB_contenttypes(using, DABContentType, service)
+    content_types = get_local_DAB_contenttypes(using, DABContentType)
 
-    cts = [
-        DABContentType(
-            service=service,
-            app_label=model._meta.app_label,
-            model=model._meta.model_name,
-        )
-        for model in permission_registry.all_registered_models
-        if (service, model._meta.model_name) not in content_types
-    ]
+    # TODO: add api_slug field when added
+    cts = []
+    for model in permission_registry.all_registered_models:
+        service = get_resource_prefix(model)
+        if (service, model._meta.model_name) not in content_types:
+            # The content type is not seen in existing entries, add to list for creation
+            cts.append(
+                DABContentType(
+                    service=service,
+                    app_label=model._meta.app_label,
+                    model=model._meta.model_name,
+                )
+            )
     if not cts:
         return
     DABContentType.objects.using(using).bulk_create(cts)

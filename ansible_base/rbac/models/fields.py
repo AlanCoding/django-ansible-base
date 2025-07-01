@@ -40,7 +40,7 @@ class FederatedForeignKey(DjangoGenericForeignKey):
                 return [
                     checks.Error(
                         "'%s.%s' is not a ForeignKey." % (self.model._meta.object_name, self.ct_field),
-                        hint=("GenericForeignKeys must use a ForeignKey to " "'federated_foreign_key.DABContentType' as the " "'content_type' field."),
+                        hint=("GenericForeignKeys must use a ForeignKey to 'federated_foreign_key.DABContentType' as the 'content_type' field."),
                         obj=self,
                         id="contenttypes.E003",
                     )
@@ -49,7 +49,7 @@ class FederatedForeignKey(DjangoGenericForeignKey):
                 return [
                     checks.Error(
                         "'%s.%s' is not a ForeignKey to 'federated_foreign_key.DABContentType'." % (self.model._meta.object_name, self.ct_field),
-                        hint=("GenericForeignKeys must use a ForeignKey to " "'federated_foreign_key.DABContentType' as the " "'content_type' field."),
+                        hint=("GenericForeignKeys must use a ForeignKey to 'federated_foreign_key.DABContentType' as the 'content_type' field."),
                         obj=self,
                         id="contenttypes.E004",
                     )
@@ -174,8 +174,7 @@ class FederatedRelation(ForeignObject):
             else:
                 return [
                     checks.Error(
-                        ("The GenericRelation defines a relation with the model '%s', " "but that model does not have a GenericForeignKey.")
-                        % target._meta.label,
+                        ("The GenericRelation defines a relation with the model '%s', but that model does not have a GenericForeignKey.") % target._meta.label,
                         obj=self,
                         id="contenttypes.E004",
                     )
