@@ -26,4 +26,13 @@ class Migration(migrations.Migration):
             model_name='objectrole',
             constraint=models.UniqueConstraint(fields=('object_id', 'content_type', 'role_definition'), name='one_object_role_per_object_and_role'),
         ),
+        # Same subtle postgres issue but with evaluation models
+        migrations.AddConstraint(
+            model_name='roleevaluation',
+            constraint=models.UniqueConstraint(fields=('object_id', 'content_type_id', 'codename', 'role'), name='one_entry_per_object_permission_and_role'),
+        ),
+        migrations.AddConstraint(
+            model_name='roleevaluationuuid',
+            constraint=models.UniqueConstraint(fields=('object_id', 'content_type_id', 'codename', 'role'), name='one_entry_per_object_permission_and_role_uuid'),
+        ),
     ]
