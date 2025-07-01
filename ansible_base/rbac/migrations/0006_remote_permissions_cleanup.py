@@ -35,4 +35,9 @@ class Migration(migrations.Migration):
             model_name='roleevaluationuuid',
             constraint=models.UniqueConstraint(fields=('object_id', 'content_type_id', 'codename', 'role'), name='one_entry_per_object_permission_and_role_uuid'),
         ),
+        migrations.AlterField(
+            model_name='dabpermission',
+            name='content_type',
+            field=models.ForeignKey(help_text='The content type this permission will apply to.', on_delete=models.deletion.CASCADE, to='dab_rbac.dabcontenttype', verbose_name='content type'),
+        ),
     ]
