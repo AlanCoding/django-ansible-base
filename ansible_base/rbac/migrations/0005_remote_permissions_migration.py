@@ -25,7 +25,7 @@ def migrate_content_type(apps, schema_editor):
             obj.save()
     for model_name in ('roleevaluation', 'roleevaluationuuid'):
         cls = apps.get_model('dab_rbac', model_name)
-        cls.objects.delete()
+        cls.objects.all().delete()
 
 
 class Migration(migrations.Migration):
