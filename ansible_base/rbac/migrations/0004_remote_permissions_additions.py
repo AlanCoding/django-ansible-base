@@ -124,4 +124,23 @@ class Migration(migrations.Migration):
             model_name='roleevaluationuuid',
             name='one_entry_per_object_permission_and_role_uuid',
         ),
+        # These have to be removed for sqlite3, only
+        # postgres is able to handle them
+        # but we will delete all data in these tables anyway, so low risk
+        migrations.RemoveIndex(
+            model_name='roleevaluation',
+            name='dab_rbac_ro_role_id_604bc4_idx',
+        ),
+        migrations.RemoveIndex(
+            model_name='roleevaluation',
+            name='dab_rbac_ro_role_id_8b9faf_idx',
+        ),
+        migrations.RemoveIndex(
+            model_name='roleevaluationuuid',
+            name='dab_rbac_ro_role_id_237936_idx',
+        ),
+        migrations.RemoveIndex(
+            model_name='roleevaluationuuid',
+            name='dab_rbac_ro_role_id_4fe905_idx',
+        ),
     ]

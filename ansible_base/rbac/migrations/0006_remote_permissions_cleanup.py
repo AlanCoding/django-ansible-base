@@ -40,4 +40,22 @@ class Migration(migrations.Migration):
             name='content_type',
             field=models.ForeignKey(help_text='The content type this permission will apply to.', on_delete=models.deletion.CASCADE, to='dab_rbac.dabcontenttype', verbose_name='content type'),
         ),
+        # Add back indexes for evaluations after new fields are in place
+        # this is the thing that is only needed for sqlite3
+        migrations.AddIndex(
+            model_name='roleevaluation',
+            index=models.Index(fields=['role', 'content_type_id', 'object_id'], name='dab_rbac_ro_role_id_604bc4_idx'),
+        ),
+        migrations.AddIndex(
+            model_name='roleevaluation',
+            index=models.Index(fields=['role', 'content_type_id', 'codename'], name='dab_rbac_ro_role_id_8b9faf_idx'),
+        ),
+        migrations.AddIndex(
+            model_name='roleevaluationuuid',
+            index=models.Index(fields=['role', 'content_type_id', 'object_id'], name='dab_rbac_ro_role_id_237936_idx'),
+        ),
+        migrations.AddIndex(
+            model_name='roleevaluationuuid',
+            index=models.Index(fields=['role', 'content_type_id', 'codename'], name='dab_rbac_ro_role_id_4fe905_idx'),
+        ),
     ]
