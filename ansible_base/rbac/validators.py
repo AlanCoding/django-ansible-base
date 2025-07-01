@@ -9,7 +9,7 @@ from rest_framework.exceptions import ValidationError
 from ansible_base.lib.utils.models import is_add_perm
 from ansible_base.rbac.permission_registry import permission_registry
 
-from .remote import get_resource_prefix
+from .remote import RemoteObject, get_resource_prefix
 
 
 def system_roles_enabled():
@@ -19,7 +19,7 @@ def system_roles_enabled():
     )
 
 
-def prnt_model_name(model: Optional[Type[Model]]) -> str:
+def prnt_model_name(model: Optional[Union[Type[Model], Type[RemoteObject]]]) -> str:
     return model._meta.model_name if model else 'global role'
 
 
@@ -44,10 +44,30 @@ def permissions_allowed_for_system_role() -> dict[Type[Model], list[str]]:
     return permissions_by_model
 
 
-def permissions_allowed_for_role(cls) -> dict[Type[Model], list[str]]:
+def permissions_allowed_for_remote_cls(cls: Type[RemoteObject]) -> dict[Union[Type[Model], Type[RemoteObject]], list[str]]:
+    "Model is on remote server, return valid permissions via the content type definitions"
+    from .models.content_type import DABContentType
+
+    permissions_by_model = defaultdict(list)
+    # Add permissions for the current type
+    cls_ct = DABContentType.objects.get_by_natural_key(*cls.type_data)
+    for permission in cls_ct.dab_permissions.all():
+        if not is_add_perm(permission.codename):
+            permissions_by_model[cls].append(permission.codename)
+
+    # Add permissions for all child types, although this is probably relatively uncommon for remote models
+    for ct in cls_ct.child_content_types.prefetch_related('dab_permissions'):
+        for permission in ct.dab_permissions.all():
+            permissions_by_model[ct.model_class()].append(permission.codename)
+    return permissions_by_model
+
+
+def permissions_allowed_for_role(cls) -> dict[Union[Type[Model], Type[RemoteObject]], list[str]]:
     "Permission codenames valid for a RoleDefinition of given class, organized by permission class"
     if cls is None:
         return permissions_allowed_for_system_role()
+    elif issubclass(cls, RemoteObject):
+        return permissions_allowed_for_remote_cls(cls)
 
     if not permission_registry.is_registered(cls):
         raise ValidationError(f'Django-ansible-base RBAC does not track permissions for model {cls._meta.model_name}')
@@ -63,7 +83,7 @@ def permissions_allowed_for_role(cls) -> dict[Type[Model], list[str]]:
     return permissions_by_model
 
 
-def combine_values(data: dict[Type[Model], list[str]]) -> set[str]:
+def combine_values(data: dict[Union[Type[Model], Type[RemoteObject]], list[str]]) -> set[str]:
     "Utility method to merge everything in .values() into a single set"
     ret = set()
     for this_list in data.values():
@@ -90,14 +110,19 @@ def validate_role_definition_enabled(permissions, content_type) -> None:
                 raise ValidationError('Creating custom roles that include team permissions is disabled')
 
 
-def check_view_permission_criteria(codename_set: set[str], permissions_by_model: dict[Type[Model], list[str]]) -> None:
+def check_view_permission_criteria(codename_set: set[str], permissions_by_model: dict[Union[Type[Model], Type[RemoteObject]], list[str]]) -> None:
     """Given a codename_set to be used in a role definition, enforce that view permission is included
 
     For example, a role can not give change permission to a thing without also giving view permission,
     because being able to change a thing without the ability to see it makes no sense.
     """
     for cls, valid_model_permissions in permissions_by_model.items():
-        if 'view' in cls._meta.default_permissions:
+        # if issubclass(cls, RemoteObject):
+        #     from .models.content_type import DABContentType
+
+        #     cls_ct = DABContentType.objects.get_by_natural_key(*cls.type_data)
+        #     if any(permission.codename.startswith('view') for permission in cls_ct.permissions.all()):
+        if any('view' in codename for codename in valid_model_permissions):
             model_permissions = set(valid_model_permissions) & codename_set
             local_codenames = {codename for codename in model_permissions if not is_add_perm(codename)}
             if local_codenames and not any('view' in codename for codename in local_codenames):
@@ -106,7 +131,7 @@ def check_view_permission_criteria(codename_set: set[str], permissions_by_model:
                 )
 
 
-def check_has_change_with_delete(codename_set: set[str], permissions_by_model: dict[Type[Model], list[str]]):
+def check_has_change_with_delete(codename_set: set[str], permissions_by_model: dict[Union[Type[Model], Type[RemoteObject]], list[str]]):
     """Given a codename_set to be used in a role definition, include change if including delete
 
     We would like to get rid of this criteria eventually, but no harm in making it configurable.
@@ -115,7 +140,8 @@ def check_has_change_with_delete(codename_set: set[str], permissions_by_model: d
     If it has delete permission without change permission, throw an error.
     """
     for cls, valid_model_permissions in permissions_by_model.items():
-        if 'delete' in cls._meta.default_permissions and 'change' in cls._meta.default_permissions:
+        if any('delete' in codename for codename in valid_model_permissions) and any('change' in codename for codename in valid_model_permissions):
+            # if 'delete' in cls._meta.default_permissions and 'change' in cls._meta.default_permissions:
             model_permissions = set(valid_model_permissions) & codename_set
             local_codenames = {codename for codename in model_permissions if not is_add_perm(codename)}
             if any('delete' in codename for codename in local_codenames) and not any('change' in codename for codename in local_codenames):

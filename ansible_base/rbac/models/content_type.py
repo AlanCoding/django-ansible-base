@@ -1,3 +1,4 @@
+import inspect
 from collections import defaultdict
 from typing import Any, Dict, Optional, Sequence, Tuple, Type, Union
 
@@ -6,7 +7,7 @@ from django.db import models as django_models
 from django.db.models.options import Options
 from django.utils.translation import gettext_lazy as _
 
-from ..remote import RemoteObject, get_local_resource_prefix, get_remote_object_class, get_resource_prefix
+from ..remote import RemoteObject, get_local_resource_prefix, get_resource_prefix
 
 
 class DABContentTypeManager(django_models.Manager["DABContentType"]):
@@ -47,10 +48,20 @@ class DABContentTypeManager(django_models.Manager["DABContentType"]):
 
     def get_for_model(
         self,
-        model: Union[Type[django_models.Model], django_models.Model],
+        model: Union[Type[django_models.Model], django_models.Model, RemoteObject, Type[RemoteObject]],
         for_concrete_model: bool = True,
         service: Optional[str] = None,
     ) -> "DABContentType":
+        # Is a remote object, we only know of these objects by virtue of their content type
+        if isinstance(model, RemoteObject):
+            ct = model.content_type
+            self._add_to_cache(self.db, ct)
+            return ct
+        elif inspect.isclass(model) and issubclass(model, RemoteObject):
+            ct = self.get_by_natural_key(model.type_data)
+            self._add_to_cache(self.db, ct)
+            return ct
+
         if service is None:
             service = get_resource_prefix(model)
         opts = self._get_opts(model, for_concrete_model)
@@ -173,6 +184,7 @@ class DABContentType(django_models.Model):
         null=True,
         help_text=_("Parent model within the RBAC system. Being assigned to a role in objects of the parent model can confer permissions to child objects."),
         on_delete=django_models.SET_NULL,
+        related_name='child_content_types',
     )
 
     objects = DABContentTypeManager()
@@ -202,34 +214,52 @@ class DABContentType(django_models.Model):
             return self.model
         return f"{model._meta.app_config.verbose_name} | {model._meta.verbose_name}"
 
-    def model_class(self) -> Optional[Type[django_models.Model]]:
-        """Return the model class if available for the current service."""
+    def model_class(self) -> Union[Type[django_models.Model], Type[RemoteObject]]:
+        """Return the model class or a stand-in.
+
+        So it could return a Django model class or a python class.
+        """
         if self.service not in ("shared", get_local_resource_prefix()):
-            return None
-        try:
-            return apps.get_model(self.app_label, self.model)
-        except LookupError:
-            return None
+            from .fields import get_remote_standin_class
+
+            return get_remote_standin_class(self)
+
+        return apps.get_model(self.app_label, self.model)
 
     def get_object_for_this_type(self, **kwargs: Any) -> Union[django_models.Model, RemoteObject]:
         """Return the object referenced by this content type."""
         model = self.model_class()
-        if model is None:
+
+        from .fields import get_remote_base_class
+
+        remote_base = get_remote_base_class()
+
+        if issubclass(model, remote_base):
             object_id = kwargs.get("pk") or kwargs.get("id") or kwargs.get("pk__exact") or kwargs.get("id__exact")
             if object_id is None:
-                raise LookupError("Model not available in this service")
-            return get_remote_object_class()(self, object_id)
+                raise LookupError("Model id was not provided")
+            return model(self, object_id)
+
         return model._base_manager.get(**kwargs)
 
     def get_all_objects_for_this_type(self, **kwargs: Any) -> Union[django_models.QuerySet, Sequence[Union[django_models.Model, RemoteObject]]]:
         """Return all objects referenced by this content type."""
         model = self.model_class()
-        if model is None:
+
+        from .fields import get_remote_base_class
+
+        remote_base = get_remote_base_class()
+        if issubclass(model, remote_base):
             ids = kwargs.get("pk__in") or kwargs.get("id__in") or (kwargs.get("pk") and [kwargs["pk"]]) or (kwargs.get("id") and [kwargs["id"]])
             if not ids:
                 return []
-            return [get_remote_object_class()(self, obj_id) for obj_id in ids]
+            return [model(self, obj_id) for obj_id in ids]
+
         return list(model._base_manager.filter(**kwargs))
 
     def natural_key(self) -> Tuple[str, str, str]:
         return (self.service, self.app_label, self.model)
+
+    @property
+    def is_remote(self):
+        return self.service not in ('shared', get_local_resource_prefix())

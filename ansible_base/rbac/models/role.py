@@ -22,6 +22,7 @@ from ansible_base.rbac.permission_registry import permission_registry
 from ansible_base.rbac.prefetch import TypesPrefetch
 from ansible_base.rbac.validators import validate_assignment, validate_permissions_for_model
 
+from ..remote import RemoteObject
 from .content_type import DABContentType
 from .fields import FederatedForeignKey
 from .permission import DABPermission
@@ -122,7 +123,6 @@ class RoleDefinitionManager(models.Manager):
         for str_perm in permissions:
             if '.' in str_perm:
                 service, codename = str_perm.split('.', 1)
-                print((service, codename))
                 perm_list.append(permission_registry.permission_qs.get(content_type__service=service, codename=codename))
             else:
                 # Giving a codename by itself like "change_inventory" implies a local or shared permission
@@ -243,9 +243,15 @@ class RoleDefinition(CommonModel):
     def give_or_remove_permission(self, actor, content_object, giving=True, sync_action=False):
         "Shortcut method to do whatever needed to give user or team these permissions"
         validate_assignment(self, actor, content_object)
-        obj_ct = DABContentType.objects.get_for_model(content_object)
-        # sanitize the object_id to its database version, practically, remove "-" chars from uuids
-        object_id = content_object._meta.pk.get_db_prep_value(content_object.pk, connection)
+
+        if isinstance(content_object, RemoteObject):
+            obj_ct = content_object.content_type
+            object_id = content_object.object_id
+        else:
+            obj_ct = DABContentType.objects.get_for_model(content_object)
+            # sanitize the object_id to its database version, practically, remove "-" chars from uuids
+            object_id = content_object._meta.pk.get_db_prep_value(content_object.pk, connection)
+
         kwargs = dict(role_definition=self, content_type=obj_ct, object_id=object_id)
 
         created = False
@@ -518,7 +524,7 @@ class ObjectRole(ObjectRoleFields):
             descendents.update(set(target_team.has_roles.all()))
         return descendents
 
-    def expected_direct_permissions(self, types_prefetch=None) -> tuple[str, int, Union[int, str]]:
+    def expected_direct_permissions(self, types_prefetch=None) -> set[tuple[str, int, Union[int, str]]]:
         """The expected permissions that holding this ObjectRole confers to the holder
 
         This is given in the form of tuples, which represent RoleEvaluation entries.
@@ -532,8 +538,11 @@ class ObjectRole(ObjectRoleFields):
             types_prefetch = TypesPrefetch()
         role_content_type = types_prefetch.get_content_type(self.content_type_id)
         role_model = role_content_type.model_class()
-        # ObjectRole.object_id is stored as text, we convert it to the model pk native type
-        object_id = role_model._meta.pk.to_python(self.object_id)
+        if role_content_type.is_remote:
+            object_id = self.object_id
+        else:
+            # ObjectRole.object_id is stored as text, we convert it to the model pk native type
+            object_id = role_model._meta.pk.to_python(self.object_id)
         for permission in types_prefetch.permissions_for_object_role(self):
             permission_content_type = types_prefetch.get_content_type(permission.content_type_id)
 
