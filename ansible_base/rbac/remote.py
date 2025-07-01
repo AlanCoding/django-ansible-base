@@ -1,4 +1,5 @@
-from typing import Type
+import inspect
+from typing import Type, Union
 
 from django.conf import settings
 from django.db import models
@@ -15,6 +16,30 @@ Even if this feature is not being used, this code will still be used.
 Because for consistency, in every case the project name will need to be set.
 This module will be the source of truth for things like the projet name.
 """
+
+
+class RemoteObject:
+    """Placeholder for objects that live in another project."""
+
+    def __init__(self, content_type: models.Model, object_id: Union[int, str]):
+        self.content_type = content_type
+        self.object_id = object_id
+
+    def __repr__(self):
+        return f"<RemoteObject {self.content_type} id={self.object_id}>"
+
+
+def get_remote_base_class() -> Type[RemoteObject]:
+    """Return the class which represents remote objects.
+
+    This is for further ORM-level customization of remote object handling.
+    More specifically, if you use the DAB RBAC objects, but create your own view.
+    This would add properties to the assignment.content_object in the case of remote objects.
+    """
+    remote_cls = getattr(settings, 'RBAC_REMOTE_OBJECT_CLASS', None)
+    if remote_cls:
+        return import_string(remote_cls)
+    return RemoteObject
 
 
 def get_resource_registry():
@@ -39,16 +64,21 @@ def get_local_resource_prefix() -> str:
     return 'local'
 
 
-def get_resource_prefix(cls: Type[models.Model]) -> str:
+def get_resource_prefix(model: Union[Type[models.Model], models.Model, Type[RemoteObject], RemoteObject]) -> str:
     """The API project designator for given cls, according to the resource registry
 
     This is used for related slug references, like "awx.inventory" to reference
     The inventory model under the service known as awx.
     """
+    if isinstance(model, RemoteObject) or (inspect.isclass(model) and issubclass(model, RemoteObject)):
+        # If it is a remote object, it was only ever created from this to begin with
+        service, _, _ = model.type_data
+        return service
+
     if registry := get_resource_registry():
         # duplicates logic in ansible_base/resource_registry/apps.py
         try:
-            resource_config = registry.get_config_for_model(cls)
+            resource_config = registry.get_config_for_model(model)
             if resource_config.managed_serializer:
                 return "shared"  # shared model
         except KeyError:
@@ -60,25 +90,26 @@ def get_resource_prefix(cls: Type[models.Model]) -> str:
         return 'local'
 
 
-class RemoteObject:
-    """Placeholder for objects that live in another project."""
-
-    def __init__(self, content_type, object_id):
-        self.content_type = content_type
-        self.object_id = object_id
-
-    def __repr__(self):
-        return f"<RemoteObject {self.content_type} id={self.object_id}>"
+_REMOTE_STANDIN_CACHE: dict[tuple[str, str], Type[models.Model]] = {}
 
 
-def get_remote_object_class() -> Type[RemoteObject]:
-    """Return the class which represents remote objects.
+def get_remote_standin_class(content_type: models.Model) -> Type:
+    """Return a class for a remote model, given its content type."""
+    key = (content_type.service, content_type.model)
+    standin = _REMOTE_STANDIN_CACHE.get(key)
+    if standin is None:
+        base = get_remote_base_class()
+        name = f"Remote[{content_type.service}:{content_type.app_label}.{content_type.model}]"
 
-    This is for further ORM-level customization of remote object handling.
-    More specifically, if you use the DAB RBAC objects, but create your own view.
-    This would add properties to the assignment.content_object in the case of remote objects.
-    """
-    remote_cls = getattr(settings, 'RBAC_REMOTE_OBJECT_CLASS', None)
-    if remote_cls:
-        return import_string(remote_cls)
-    return RemoteObject
+        class StandinMeta:
+            def __init__(self, ct: models.Model):
+                self.model_name = ct.model
+                self.app_label = ct.app_label
+
+        standin = type(
+            name,
+            (base,),
+            {"_meta": StandinMeta(content_type), "type_data": (content_type.service, content_type.app_label, content_type.model)},
+        )
+        _REMOTE_STANDIN_CACHE[key] = standin
+    return standin
