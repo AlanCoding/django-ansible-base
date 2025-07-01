@@ -58,4 +58,10 @@ class Migration(migrations.Migration):
             model_name='roleevaluationuuid',
             index=models.Index(fields=['role', 'content_type_id', 'codename'], name='dab_rbac_ro_role_id_4fe905_idx'),
         ),
+        # This is an additional, app-specific, constraint
+        # goes beyond what the standard ContentType imposes
+        migrations.AlterUniqueTogether(
+            name='dabcontenttype',
+            unique_together={('service', 'model')},
+        ),
     ]

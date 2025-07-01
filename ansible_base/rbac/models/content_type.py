@@ -6,7 +6,7 @@ from django.db import models as django_models
 from django.db.models.options import Options
 from django.utils.translation import gettext_lazy as _
 
-from ..remote import RemoteObject, get_local_resource_prefix, get_remote_object_class
+from ..remote import RemoteObject, get_local_resource_prefix, get_remote_object_class, get_resource_prefix
 
 
 class DABContentTypeManager(django_models.Manager["DABContentType"]):
@@ -25,6 +25,7 @@ class DABContentTypeManager(django_models.Manager["DABContentType"]):
         self._cache.clear()
 
     def create(self, *args: Any, **kwargs: Any) -> "DABContentType":
+        # TODO: set api_slug field
         obj = super().create(*args, **kwargs)
         self._add_to_cache(self.db, obj)
         return obj
@@ -51,7 +52,7 @@ class DABContentTypeManager(django_models.Manager["DABContentType"]):
         service: Optional[str] = None,
     ) -> "DABContentType":
         if service is None:
-            service = get_local_resource_prefix()
+            service = get_resource_prefix(model)
         opts = self._get_opts(model, for_concrete_model)
         try:
             return self._get_from_cache(opts, service)
@@ -75,19 +76,28 @@ class DABContentTypeManager(django_models.Manager["DABContentType"]):
         for_concrete_models: bool = True,
         service: Optional[str] = None,
     ) -> Dict[Type[django_models.Model], "DABContentType"]:
-        """Return ``DABContentType`` objects for each model in ``model_list``."""
-        if service is None:
-            service = get_local_resource_prefix()
+        """Return ``DABContentType`` objects for each model in ``model_list``.
+
+        This gets deep into the customization of unique rules for DAB RBAC.
+        We require that model_name must be unique for a given service,
+        and this will rely on that assumption, which compares to app_label
+        in the original ContentType model.
+        """
         results: Dict[Type[django_models.Model], "DABContentType"] = {}
-        needed_models: Dict[str, set[str]] = defaultdict(set)
-        needed_opts: Dict[Tuple[str, str], list[Type[django_models.Model]]] = defaultdict(list)
+        # A keyed by (service, app_name) unlike Django where it was just app_name
+        needed_models: Dict[Tuple[str, str], set[str]] = defaultdict(set)
+        # A dict of (service, app_name, model_name), differs from Django ContentType
+        # in Django content type it was (app_name, model_name)
+        needed_opts: Dict[Tuple[str, str, str], list[Type[django_models.Model]]] = defaultdict(list)
         for model in model_list:
             opts = self._get_opts(model, for_concrete_models)
+            # For local models, this will give the local service name of "shared" for shared models
+            service = get_resource_prefix(model)
             try:
                 ct = self._get_from_cache(opts, service)
             except KeyError:
-                needed_models[opts.app_label].add(opts.model_name)
-                needed_opts[(opts.app_label, opts.model_name)].append(model)
+                needed_models[(service, opts.app_label)].add(opts.model_name)
+                needed_opts[(service, opts.app_label, opts.model_name)].append(model)
             else:
                 results[model] = ct
 
@@ -95,22 +105,23 @@ class DABContentTypeManager(django_models.Manager["DABContentType"]):
             condition = django_models.Q(
                 *(
                     django_models.Q(
-                        ("service", service),
+                        ("service", service_search),  # To not shadow var from prior loop
                         ("app_label", app_label),
                         ("model__in", models),
                     )
-                    for app_label, models in needed_models.items()
+                    for (service_search, app_label), models in needed_models.items()
                 ),
                 _connector=django_models.Q.OR,
             )
             cts = self.filter(condition)
             for ct in cts:
-                opts_models = needed_opts.pop((ct.app_label, ct.model), [])
+                opts_models = needed_opts.pop((ct.service, ct.app_label, ct.model), [])
                 for model in opts_models:
                     results[model] = ct
                 self._add_to_cache(self.db, ct)
-            for (app_label, model_name), opts_models in needed_opts.items():
-                ct = self.create(service=service, app_label=app_label, model=model_name)
+            # Named it service_create to not shadown variable from prior loop
+            for (service_create, app_label, model_name), opts_models in needed_opts.items():
+                ct = self.create(service=service_create, app_label=app_label, model=model_name)
                 self._add_to_cache(self.db, ct)
                 for model in opts_models:
                     results[model] = ct
@@ -168,7 +179,10 @@ class DABContentType(django_models.Model):
 
     class Meta:
         unique_together = [
-            ("service", "app_label", "model"),
+            # Explanation: normally these are unique on (app_label, model_name)
+            # DAB RABC imposes, as an additional constraint,
+            # that a single service can only continute a single model to the collective
+            ("service", "model"),
         ]
 
     def __str__(self) -> str:

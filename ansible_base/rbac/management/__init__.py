@@ -4,6 +4,9 @@ from django.apps import apps as global_apps
 from django.db import DEFAULT_DB_ALIAS, router
 
 from ansible_base.rbac import permission_registry
+from ansible_base.rbac.remote import get_resource_prefix
+
+from .create_types import create_DAB_contenttypes
 
 logger = logging.getLogger(__name__)
 
@@ -47,12 +50,7 @@ def sync_DAB_permissions(verbosity=2, using=DEFAULT_DB_ALIAS, apps=global_apps):
     DABContentType = apps.get_model("dab_rbac", "DABContentType")
     Permission = apps.get_model("dab_rbac", "DABPermission")
 
-    from ..remote import get_local_resource_prefix
-    from .create_types import create_DAB_contenttypes
-
-    service = get_local_resource_prefix()
-
-    create_DAB_contenttypes(service, verbosity=verbosity, using=using, apps=apps)
+    create_DAB_contenttypes(verbosity=verbosity, using=using, apps=apps)
 
     # This will hold the permissions we're looking for as (content_type, (codename, name))
     searched_perms = []
@@ -61,6 +59,7 @@ def sync_DAB_permissions(verbosity=2, using=DEFAULT_DB_ALIAS, apps=global_apps):
     for klass in permission_registry.all_registered_models:
         # Force looking up the content types in the current database
         # before creating foreign keys to them.
+        service = get_resource_prefix(klass)
         ctype = DABContentType.objects.db_manager(using).get_for_model(klass, service=service, for_concrete_model=False)
 
         ctypes.add(ctype)
@@ -83,6 +82,7 @@ def sync_DAB_permissions(verbosity=2, using=DEFAULT_DB_ALIAS, apps=global_apps):
     # a list of the ones we're going to create.
     all_perms = set(Permission.objects.using(using).filter(content_type__in=ctypes).values_list("content_type", "codename"))
 
+    # TODO: add api_slug field when added
     perms = []
     for ct, (codename, name) in searched_perms:
         if (ct.pk, codename) not in all_perms:
