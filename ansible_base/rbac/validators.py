@@ -30,7 +30,10 @@ def prnt_codenames(codename_set: set[str]) -> str:
 
 def codenames_for_remote_cls(cls: Union[Type[RemoteObject], RemoteObject]) -> list[str]:
     """For remote objects, we have to use the database to get its known permissions"""
-    ct = cls.get_ct_from_type()
+    if inspect.isclass(cls):
+        ct = cls.get_ct_from_type()
+    else:
+        ct = cls.content_type
     return [permission.codename for permission in ct.dab_permissions.all()]
 
 
