@@ -18,3 +18,9 @@ def test_give_remote_permission(rando):
 
     # We can do evaluation querysets, but these can not return objects, just id values
     assert set(foo_type.model_class().access_ids_qs(actor=rando, codename='foo')) == {(int(assignment.object_id),)}
+
+    # Test that user-attached methods also work
+    assert rando.has_obj_perm(a_foo, 'foo')
+    with pytest.raises(RuntimeError) as exc:
+        assert not rando.has_obj_perm(a_foo, 'bar')  # not a valid permission
+    assert 'The permission bar_foo is not valid for model foo' in str(exc)
