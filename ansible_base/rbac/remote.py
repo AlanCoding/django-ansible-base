@@ -19,12 +19,21 @@ This module will be the source of truth for things like the projet name.
 """
 
 
+class StandinMeta:
+    def __init__(self, ct: models.Model, abstract=False):
+        self.service = ct.service
+        self.model_name = ct.model
+        self.app_label = ct.app_label
+        self.abstract = abstract
+
+
 class RemoteObject:
     """Placeholder for objects that live in another project."""
 
     def __init__(self, content_type: models.Model, object_id: Union[int, str]):
         self.content_type = content_type
         self.object_id = object_id
+        self._meta = StandinMeta(content_type, abstract=True)
 
     def __repr__(self):
         return f"<RemoteObject {self.content_type} id={self.object_id}>"
@@ -47,6 +56,10 @@ class RemoteObject:
         from .evaluations import remote_obj_id_qs
 
         return remote_obj_id_qs(actor, remote_cls=cls, codename=codename, content_types=content_types, cast_field=cast_field)
+
+    @property
+    def pk(self):
+        return self.object_id
 
 
 def get_remote_base_class() -> Type[RemoteObject]:
@@ -119,12 +132,6 @@ def get_remote_standin_class(content_type: models.Model) -> Type:
     if standin is None:
         base = get_remote_base_class()
         name = f"Remote[{content_type.service}:{content_type.app_label}.{content_type.model}]"
-
-        class StandinMeta:
-            def __init__(self, ct: models.Model):
-                self.service = ct.service
-                self.model_name = ct.model
-                self.app_label = ct.app_label
 
         standin = type(
             name,
