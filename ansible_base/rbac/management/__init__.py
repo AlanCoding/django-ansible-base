@@ -82,7 +82,6 @@ def sync_DAB_permissions(verbosity=2, using=DEFAULT_DB_ALIAS, apps=global_apps):
     # a list of the ones we're going to create.
     all_perms = set(Permission.objects.using(using).filter(content_type__in=ctypes).values_list("content_type", "codename"))
 
-    # TODO: add api_slug field when added
     perms = []
     for ct, (codename, name) in searched_perms:
         if (ct.pk, codename) not in all_perms:
@@ -91,6 +90,7 @@ def sync_DAB_permissions(verbosity=2, using=DEFAULT_DB_ALIAS, apps=global_apps):
             permission.codename = codename
             permission.name = name
             permission.content_type = ct
+            permission.api_slug = f'{ct.service}.{codename}'
             perms.append(permission)
 
     Permission.objects.using(using).bulk_create(perms)
