@@ -1,6 +1,7 @@
 import logging
 from collections.abc import Iterable
 from typing import Optional, Type, Union
+from uuid import UUID
 
 # Django
 from django.conf import settings
@@ -524,7 +525,7 @@ class ObjectRole(ObjectRoleFields):
             descendents.update(set(target_team.has_roles.all()))
         return descendents
 
-    def expected_direct_permissions(self, types_prefetch=None) -> set[tuple[str, int, Union[int, str]]]:
+    def expected_direct_permissions(self, types_prefetch=None) -> set[tuple[str, int, Union[int, str, UUID]]]:
         """The expected permissions that holding this ObjectRole confers to the holder
 
         This is given in the form of tuples, which represent RoleEvaluation entries.
