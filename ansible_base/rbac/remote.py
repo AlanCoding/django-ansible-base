@@ -1,6 +1,7 @@
 import inspect
 from typing import Type, Union
 
+from django.apps import apps
 from django.conf import settings
 from django.db import models
 from django.utils.module_loading import import_string
@@ -27,6 +28,13 @@ class RemoteObject:
 
     def __repr__(self):
         return f"<RemoteObject {self.content_type} id={self.object_id}>"
+
+    @classmethod
+    def get_ct_from_type(cls):
+        if not hasattr(cls, '_meta'):
+            raise ValueError('Generlized RemoteObject can not obtain content_type from its class')
+        ct_model = apps.get_model('dab_rbac', 'DABContentType')
+        return ct_model.objects.get_by_natural_key(cls._meta.service, cls._meta.app_label, cls._meta.model)
 
 
 def get_remote_base_class() -> Type[RemoteObject]:
@@ -103,6 +111,7 @@ def get_remote_standin_class(content_type: models.Model) -> Type:
 
         class StandinMeta:
             def __init__(self, ct: models.Model):
+                self.service = ct.service
                 self.model_name = ct.model
                 self.app_label = ct.app_label
 
