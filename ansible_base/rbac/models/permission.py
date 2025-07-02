@@ -27,6 +27,11 @@ class DABPermission(models.Model):
             )
         ),
     )
+    api_slug = models.CharField(
+        max_length=201,  # combines content_type.service and codename fields with a period in-between
+        default='',
+        help_text=_("String to use for references to this type from other models in the API."),
+    )
 
     class Meta:
         app_label = 'dab_rbac'
@@ -37,3 +42,12 @@ class DABPermission(models.Model):
 
     def __str__(self):
         return f"<{self.__class__.__name__}: {self.codename}>"
+
+    def save(self, *args, **kwargs):
+        # Set the api_slug field if it is not synchronized to other fields
+        api_slug = f'{self.content_type.service}.{self.codename}'
+        if api_slug != self.api_slug:
+            self.api_slug = api_slug
+            if update_fields := kwargs.get('update_fields', []):
+                update_fields.append('api_slug')
+        return super().save(*args, **kwargs)
