@@ -1,5 +1,6 @@
-from django.db import connection
 import inspect
+
+from django.db import connection
 
 from ..remote import RemoteObject
 from .content_type import DABContentType
@@ -20,8 +21,11 @@ __all__ = [
 
 
 def get_evaluation_model(cls):
-    if (inspect.isclass(cls) and issubclass(cls, RemoteObject)) or isinstance(cls, RemoteObject):
+    if isinstance(cls, RemoteObject):
         # For remote models, we save the pk type in the database specifically for use here
+        pk_db_type = cls.content_type.pk_field_type
+    elif inspect.isclass(cls) and issubclass(cls, RemoteObject):
+        # Weirdness when passed a remote class but not a remote object, get type first
         pk_db_type = cls.get_ct_from_type().pk_field_type
     else:
         pk_field = cls._meta.pk
