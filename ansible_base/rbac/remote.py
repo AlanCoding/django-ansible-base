@@ -36,6 +36,18 @@ class RemoteObject:
         ct_model = apps.get_model('dab_rbac', 'DABContentType')
         return ct_model.objects.get_by_natural_key(cls._meta.service, cls._meta.app_label, cls._meta.model_name)
 
+    @classmethod
+    def access_ids_qs(cls, actor, codename: str = 'view', content_types=None, cast_field=None):
+        """Returns a values_list type queryset of ids
+
+        Remote objects do not exist locally, so we can not get a queryset of them,
+        but we can still do this, giving a queryset of ids.
+        You could use the materialized list to filter API endpoints on the remote server?
+        """
+        from .evaluations import remote_obj_id_qs
+
+        return remote_obj_id_qs(actor, remote_cls=cls, codename=codename, content_types=content_types, cast_field=cast_field)
+
 
 def get_remote_base_class() -> Type[RemoteObject]:
     """Return the class which represents remote objects.
@@ -80,8 +92,7 @@ def get_resource_prefix(model: Union[Type[models.Model], models.Model, Type[Remo
     """
     if isinstance(model, RemoteObject) or (inspect.isclass(model) and issubclass(model, RemoteObject)):
         # If it is a remote object, it was only ever created from this to begin with
-        service, _, _ = model.type_data
-        return service
+        return model._meta.model_name
 
     if registry := get_resource_registry():
         # duplicates logic in ansible_base/resource_registry/apps.py

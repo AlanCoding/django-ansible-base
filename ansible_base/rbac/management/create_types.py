@@ -2,7 +2,7 @@ import logging
 from typing import Type
 
 from django.apps import apps as global_apps
-from django.db import DEFAULT_DB_ALIAS, models
+from django.db import DEFAULT_DB_ALIAS, connection, models
 
 from ansible_base.rbac import permission_registry
 from ansible_base.rbac.remote import get_resource_prefix
@@ -34,7 +34,6 @@ def create_DAB_contenttypes(
 
     content_types = get_local_DAB_contenttypes(using, DABContentType)
 
-    # TODO: add api_slug field when added
     ct_data = []
     for model in permission_registry.all_registered_models:
         service = get_resource_prefix(model)
@@ -44,6 +43,8 @@ def create_DAB_contenttypes(
                 service=service,
                 app_label=model._meta.app_label,
                 model=model._meta.model_name,
+                api_slug=f'{service}.{model._meta.model_name}',
+                pk_field_type=model._meta.pk.db_type(connection),
             )
             # To make usage earier in a transitional period, we will set the content type
             # of any new entries created here to the id of its corresponding ContentType
