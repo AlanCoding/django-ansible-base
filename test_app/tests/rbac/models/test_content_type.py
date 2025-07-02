@@ -1,4 +1,5 @@
 import pytest
+from django.contrib.contenttypes.models import ContentType
 from django.db import models
 from django.test import TestCase
 from django.test.utils import isolate_apps
@@ -6,6 +7,14 @@ from django.test.utils import isolate_apps
 from ansible_base.rbac.models import DABContentType
 from ansible_base.rbac.remote import RemoteObject
 from test_app.models import Inventory, Organization
+
+
+@pytest.mark.django_db
+def test_migration_shadows_real_contenttype():
+    assert DABContentType.objects.count() > 0  # sanity
+    for dab_ct in DABContentType.objects.all():
+        ct = ContentType.objects.get_by_natural_key(dab_ct.app_label, dab_ct.model)
+        assert ct.id == dab_ct.id
 
 
 @pytest.mark.django_db

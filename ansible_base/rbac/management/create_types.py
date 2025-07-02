@@ -30,25 +30,38 @@ def create_DAB_contenttypes(
     comes from the permission registry.
     """
     DABContentType = apps.get_model("dab_rbac", "DABContentType")
+    ContentType = apps.get_model("contenttypes", "ContentType")
 
     content_types = get_local_DAB_contenttypes(using, DABContentType)
 
     # TODO: add api_slug field when added
-    cts = []
+    ct_data = []
     for model in permission_registry.all_registered_models:
         service = get_resource_prefix(model)
         if (service, model._meta.model_name) not in content_types:
             # The content type is not seen in existing entries, add to list for creation
-            cts.append(
-                DABContentType(
-                    service=service,
-                    app_label=model._meta.app_label,
-                    model=model._meta.model_name,
-                )
+            ct_item_data = dict(
+                service=service,
+                app_label=model._meta.app_label,
+                model=model._meta.model_name,
             )
-    if not cts:
+            # To make usage earier in a transitional period, we will set the content type
+            # of any new entries created here to the id of its corresponding ContentType
+            # from the actual contenttypes app, allowing many filters to work
+            real_ct = ContentType.objects.get_for_model(model)
+            if not DABContentType.objects.filter(id=real_ct.id).exists():
+                ct_item_data['id'] = real_ct.id
+            ct_data.append(ct_item_data)
+    if not ct_data:
         return
-    DABContentType.objects.using(using).bulk_create(cts)
+
+    # To make usage earier in a transitional period, we will set the content type
+    # of any new entries created here to the id of its corresponding ContentType
+    # from the actual contenttypes app, allowing many filters to work
+    cts = []
+    for ct_item_data in ct_data:
+        cts.append(DABContentType.objects.create(**ct_item_data))
+
     if verbosity >= 2:
         for ct in cts:
             logger.debug("Adding DAB content type " f"'{ct.service}:{ct.app_label} | {ct.model}'")
