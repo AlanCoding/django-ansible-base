@@ -1,5 +1,7 @@
 from django.db import connection
+import inspect
 
+from ..remote import RemoteObject
 from .content_type import DABContentType
 from .permission import DABPermission
 from .role import ObjectRole, RoleDefinition, RoleEvaluation, RoleEvaluationUUID, RoleTeamAssignment, RoleUserAssignment
@@ -18,10 +20,14 @@ __all__ = [
 
 
 def get_evaluation_model(cls):
-    pk_field = cls._meta.pk
-    # For proxy models, including django-polymorphic, use the id field from parent table
-    # we accomplish this by inspecting the raw database type of the field
-    pk_db_type = pk_field.db_type(connection)
+    if (inspect.isclass(cls) and issubclass(cls, RemoteObject)) or isinstance(cls, RemoteObject):
+        # For remote models, we save the pk type in the database specifically for use here
+        pk_db_type = cls.get_ct_from_type().pk_field_type
+    else:
+        pk_field = cls._meta.pk
+        # For proxy models, including django-polymorphic, use the id field from parent table
+        # we accomplish this by inspecting the raw database type of the field
+        pk_db_type = pk_field.db_type(connection)
     for eval_cls in (RoleEvaluation, RoleEvaluationUUID):
         if pk_db_type == eval_cls._meta.get_field('object_id').db_type(connection):
             return eval_cls

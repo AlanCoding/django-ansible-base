@@ -159,4 +159,20 @@ class Migration(migrations.Migration):
             model_name='roleevaluationuuid',
             name='dab_rbac_ro_role_id_4fe905_idx',
         ),
+        # Fields unique to DAB RBAC and not generally shared with ContentType or Permission
+        migrations.AddField(
+            model_name='dabcontenttype',
+            name='api_slug',
+            field=models.CharField(default='', help_text='String to use for references to this type from other models in the API.', max_length=201),
+        ),
+        migrations.AddField(
+            model_name='dabcontenttype',
+            name='pk_field_type',
+            field=models.CharField(default='integer', help_text='Database field type of the primary key field of the model, relevant for interal logic tracking permissions.', max_length=100),
+        ),
+        migrations.AddField(
+            model_name='dabpermission',
+            name='api_slug',
+            field=models.CharField(default='', help_text='String to use for references to this type from other models in the API.', max_length=201),
+        ),
     ]

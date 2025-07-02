@@ -3,6 +3,7 @@ from collections import defaultdict
 from typing import Any, Dict, Optional, Sequence, Tuple, Type, Union
 
 from django.apps import apps
+from django.db import connection
 from django.db import models as django_models
 from django.db.models.options import Options
 from django.utils.translation import gettext_lazy as _
@@ -26,7 +27,6 @@ class DABContentTypeManager(django_models.Manager["DABContentType"]):
         self._cache.clear()
 
     def create(self, *args: Any, **kwargs: Any) -> "DABContentType":
-        # TODO: set api_slug field
         obj = super().create(*args, **kwargs)
         self._add_to_cache(self.db, obj)
         return obj
@@ -58,7 +58,7 @@ class DABContentTypeManager(django_models.Manager["DABContentType"]):
             self._add_to_cache(self.db, ct)
             return ct
         elif inspect.isclass(model) and issubclass(model, RemoteObject):
-            ct = self.get_by_natural_key(model.type_data)
+            ct = self.get_by_natural_key(model._meta.service, model._meta.app_label, model._meta.model_name)
             self._add_to_cache(self.db, ct)
             return ct
 
@@ -77,6 +77,8 @@ class DABContentTypeManager(django_models.Manager["DABContentType"]):
                 service=service,
                 app_label=opts.app_label,
                 model=opts.model_name,
+                api_slug=f'{service}.{opts.model_name}',
+                pk_field_type=model._meta.pk.db_type(connection),
             )
         self._add_to_cache(self.db, ct)
         return ct
@@ -132,7 +134,13 @@ class DABContentTypeManager(django_models.Manager["DABContentType"]):
                 self._add_to_cache(self.db, ct)
             # Named it service_create to not shadown variable from prior loop
             for (service_create, app_label, model_name), opts_models in needed_opts.items():
-                ct = self.create(service=service_create, app_label=app_label, model=model_name)
+                if opts_models:
+                    pk_field_type = opts_models[0]._meta.pk.db_type(connection)
+                else:
+                    pk_field_type = 'integer'
+                ct = self.create(
+                    service=service_create, app_label=app_label, model=model_name, api_slug=f'{service_create}.{model_name}', pk_field_type=pk_field_type
+                )
                 self._add_to_cache(self.db, ct)
                 for model in opts_models:
                     results[model] = ct
@@ -188,6 +196,16 @@ class DABContentType(django_models.Model):
         on_delete=django_models.SET_NULL,
         related_name='child_content_types',
     )
+    api_slug = django_models.CharField(
+        max_length=201,  # combines service and model fields with a period in-between
+        default='',  # will be set by the saving or creation logic
+        help_text=_("String to use for references to this type from other models in the API."),
+    )
+    pk_field_type = django_models.CharField(
+        max_length=100,
+        default='integer',
+        help_text=_("Database field type of the primary key field of the model, relevant for interal logic tracking permissions."),
+    )
 
     objects = DABContentTypeManager()
 
@@ -215,6 +233,15 @@ class DABContentType(django_models.Model):
         if not model:
             return self.model
         return f"{model._meta.app_config.verbose_name} | {model._meta.verbose_name}"
+
+    def save(self, *args, **kwargs):
+        # Set the api_slug field if it is not synchronized to other fields
+        api_slug = f'{self.service}.{self.model}'
+        if api_slug != self.api_slug:
+            self.api_slug = api_slug
+            if update_fields := kwargs.get('update_fields', []):
+                update_fields.append('api_slug')
+        return super().save(*args, **kwargs)
 
     def model_class(self) -> Union[Type[django_models.Model], Type[RemoteObject]]:
         """Return the model class or a stand-in.
