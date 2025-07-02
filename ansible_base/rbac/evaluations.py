@@ -1,3 +1,4 @@
+import inspect
 from typing import Iterable, Optional, Type
 
 from django.conf import settings
@@ -120,7 +121,9 @@ def remote_obj_id_qs(actor, remote_cls: Type[RemoteObject], codename: str = 'vie
 
 
 def bound_has_obj_perm(self, obj, codename) -> bool:
-    if not permission_registry.is_registered(obj):
+    if (inspect.isclass(obj) and issubclass(obj, RemoteObject)) or isinstance(obj, RemoteObject):
+        pass  # no need to validate remote content type, assumed we have content type entry already
+    elif not permission_registry.is_registered(obj):
         raise ValidationError(f'Object of {obj._meta.model_name} type is not registered with DAB RBAC')
     full_codename = validate_codename_for_model(codename, obj)
     if has_super_permission(self, full_codename):
