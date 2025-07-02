@@ -222,7 +222,7 @@ class DABContentType(django_models.Model):
         So it could return a Django model class or a python class.
         """
         if self.service not in ("shared", get_local_resource_prefix()):
-            from .fields import get_remote_standin_class
+            from ..remote import get_remote_standin_class
 
             return get_remote_standin_class(self)
 
