@@ -1,17 +1,13 @@
 import inspect
-import logging
 from collections import defaultdict
 from typing import Any, Dict, Optional, Sequence, Tuple, Type, Union
 
 from django.apps import apps
-from django.db import connection
 from django.db import models as django_models
 from django.db.models.options import Options
 from django.utils.translation import gettext_lazy as _
 
 from ..remote import RemoteObject, get_local_resource_prefix, get_resource_prefix
-
-logger = logging.getLogger(__name__)
 
 
 class DABContentTypeManager(django_models.Manager["DABContentType"]):
@@ -76,12 +72,9 @@ class DABContentTypeManager(django_models.Manager["DABContentType"]):
         try:
             ct = self.get(service=service, app_label=opts.app_label, model=opts.model_name)
         except self.model.DoesNotExist:
-            logger.warning(f'Could not find content type for {(service, opts.app_label, opts.model_name)}, so creating new')
-            ct, _ = self.get_or_create(
-                service=service,
-                app_label=opts.app_label,
-                model=opts.model_name,
-                defaults=dict(api_slug=f'{service}.{opts.model_name}', pk_field_type=model._meta.pk.db_type(connection)),
+            raise RuntimeError(
+                f'Could not find content type for {(service, opts.app_label, opts.model_name)}, '
+                'and creating new objects via get_for_model is not allowed for DAB RBAC'
             )
         self._add_to_cache(self.db, ct)
         return ct
@@ -135,19 +128,11 @@ class DABContentTypeManager(django_models.Manager["DABContentType"]):
                 for model in opts_models:
                     results[model] = ct
                 self._add_to_cache(self.db, ct)
-            # Named it service_create to not shadown variable from prior loop
-            for (service_create, app_label, model_name), opts_models in needed_opts.items():
-                if opts_models:
-                    pk_field_type = opts_models[0]._meta.pk.db_type(connection)
-                else:
-                    pk_field_type = 'integer'
-                logger.warning(f'Could not find content type for {(service_create, app_label, model_name)}, so creating new, out of:\n{needed_models.keys()}')
-                ct = self.create(
-                    service=service_create, app_label=app_label, model=model_name, api_slug=f'{service_create}.{model_name}', pk_field_type=pk_field_type
+            if needed_opts:
+                raise RuntimeError(
+                    f'Could not find content type for any of {needed_opts.keys()}, '
+                    f'and creating new objects via get_for_models is not enabled for DAB RBAC, looked in:\n{needed_models.keys()}'
                 )
-                self._add_to_cache(self.db, ct)
-                for model in opts_models:
-                    results[model] = ct
         return results
 
     def get_by_natural_key(self, *args: str) -> "DABContentType":
