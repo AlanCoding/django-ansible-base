@@ -34,7 +34,7 @@ class RemoteObject:
         if not hasattr(cls, '_meta'):
             raise ValueError('Generlized RemoteObject can not obtain content_type from its class')
         ct_model = apps.get_model('dab_rbac', 'DABContentType')
-        return ct_model.objects.get_by_natural_key(cls._meta.service, cls._meta.app_label, cls._meta.model)
+        return ct_model.objects.get_by_natural_key(cls._meta.service, cls._meta.app_label, cls._meta.model_name)
 
 
 def get_remote_base_class() -> Type[RemoteObject]:
@@ -118,7 +118,7 @@ def get_remote_standin_class(content_type: models.Model) -> Type:
         standin = type(
             name,
             (base,),
-            {"_meta": StandinMeta(content_type), "type_data": (content_type.service, content_type.app_label, content_type.model)},
+            {"_meta": StandinMeta(content_type)},
         )
         _REMOTE_STANDIN_CACHE[key] = standin
     return standin

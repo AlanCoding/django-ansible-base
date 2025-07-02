@@ -46,11 +46,9 @@ def permissions_allowed_for_system_role() -> dict[Type[Model], list[str]]:
 
 def permissions_allowed_for_remote_cls(cls: Type[RemoteObject]) -> dict[Union[Type[Model], Type[RemoteObject]], list[str]]:
     "Model is on remote server, return valid permissions via the content type definitions"
-    from .models.content_type import DABContentType
-
     permissions_by_model = defaultdict(list)
     # Add permissions for the current type
-    cls_ct = DABContentType.objects.get_by_natural_key(*cls.type_data)
+    cls_ct = cls.get_ct_from_type()
     for permission in cls_ct.dab_permissions.all():
         if not is_add_perm(permission.codename):
             permissions_by_model[cls].append(permission.codename)
@@ -120,7 +118,7 @@ def check_view_permission_criteria(codename_set: set[str], permissions_by_model:
         # if issubclass(cls, RemoteObject):
         #     from .models.content_type import DABContentType
 
-        #     cls_ct = DABContentType.objects.get_by_natural_key(*cls.type_data)
+        #     cls_ct = cls.get_ct_from_type()
         #     if any(permission.codename.startswith('view') for permission in cls_ct.permissions.all()):
         if any('view' in codename for codename in valid_model_permissions):
             model_permissions = set(valid_model_permissions) & codename_set
