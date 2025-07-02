@@ -1,3 +1,4 @@
+import inspect
 import re
 from collections import defaultdict
 from typing import Optional, Type, Union
@@ -27,8 +28,16 @@ def prnt_codenames(codename_set: set[str]) -> str:
     return ', '.join(codename_set)
 
 
-def codenames_for_cls(cls) -> list[str]:
+def codenames_for_remote_cls(cls: Union[Type[RemoteObject], RemoteObject]) -> list[str]:
+    """For remote objects, we have to use the database to get its known permissions"""
+    ct = cls.get_ct_from_type()
+    return [permission.codename for permission in ct.dab_permissions.all()]
+
+
+def codenames_for_cls(cls: Union[Model, Type[Model], Type[RemoteObject], RemoteObject]) -> list[str]:
     "Helper method that gives the Django permission codenames for a given class"
+    if (inspect.isclass(cls) and issubclass(cls, RemoteObject)) or isinstance(cls, RemoteObject):
+        return codenames_for_remote_cls(cls)
     return [t[0] for t in cls._meta.permissions] + [f'{act}_{cls._meta.model_name}' for act in cls._meta.default_permissions]
 
 
@@ -115,11 +124,8 @@ def check_view_permission_criteria(codename_set: set[str], permissions_by_model:
     because being able to change a thing without the ability to see it makes no sense.
     """
     for cls, valid_model_permissions in permissions_by_model.items():
-        # if issubclass(cls, RemoteObject):
-        #     from .models.content_type import DABContentType
-
-        #     cls_ct = cls.get_ct_from_type()
-        #     if any(permission.codename.startswith('view') for permission in cls_ct.permissions.all()):
+        # NOTE: there is some concern about using valid_model_permissions here, as opposed to all model permissions
+        # however, no specific issue has yet been identified for this
         if any('view' in codename for codename in valid_model_permissions):
             model_permissions = set(valid_model_permissions) & codename_set
             local_codenames = {codename for codename in model_permissions if not is_add_perm(codename)}
@@ -193,7 +199,7 @@ def validate_permissions_for_model(permissions, content_type: Optional[Model], m
                 raise ValidationError({'permissions', 'Local custom roles can only include view permission for shared models'})
 
 
-def validate_codename_for_model(codename: str, model: Union[Model, Type[Model]]) -> str:
+def validate_codename_for_model(codename: str, model: Union[Model, Type[Model], Type[RemoteObject], RemoteObject]) -> str:
     """Shortcut method and validation to allow action name, codename, or app_name.codename
 
     This institutes a shortcut for easier use of the evaluation methods
