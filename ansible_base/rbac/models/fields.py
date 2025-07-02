@@ -9,7 +9,7 @@ from django.db.models.query_utils import PathInfo
 from django.db.models.sql import AND
 from django.db.models.sql.where import WhereNode
 
-from ..remote import get_local_resource_prefix, get_remote_standin_class
+from ..remote import get_local_resource_prefix
 from .content_type import DABContentType
 
 

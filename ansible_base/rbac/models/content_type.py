@@ -143,13 +143,15 @@ class DABContentTypeManager(django_models.Manager["DABContentType"]):
         if len(args) == 2:
             service = get_local_resource_prefix()
             app_label, model = args
+            kwargs = {'service__in': [get_local_resource_prefix(), 'shared'], 'app_label': app_label, 'model': model}
         else:
             service, app_label, model = args
+            kwargs = {'service': service, 'app_label': app_label, 'model': model}
         key = (service, app_label, model)
         try:
             return self._cache[self.db][key]
         except KeyError:
-            ct = self.get(service=service, app_label=app_label, model=model)
+            ct = self.get(**kwargs)
             self._add_to_cache(self.db, ct)
             return ct
 
@@ -220,7 +222,7 @@ class DABContentType(django_models.Model):
         So it could return a Django model class or a python class.
         """
         if self.service not in ("shared", get_local_resource_prefix()):
-            from .fields import get_remote_standin_class
+            from ..remote import get_remote_standin_class
 
             return get_remote_standin_class(self)
 
@@ -230,7 +232,7 @@ class DABContentType(django_models.Model):
         """Return the object referenced by this content type."""
         model = self.model_class()
 
-        from .fields import get_remote_base_class
+        from ..remote import get_remote_base_class
 
         remote_base = get_remote_base_class()
 
@@ -246,7 +248,7 @@ class DABContentType(django_models.Model):
         """Return all objects referenced by this content type."""
         model = self.model_class()
 
-        from .fields import get_remote_base_class
+        from ..remote import get_remote_base_class
 
         remote_base = get_remote_base_class()
         if issubclass(model, remote_base):
