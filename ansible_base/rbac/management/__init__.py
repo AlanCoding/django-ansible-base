@@ -1,7 +1,7 @@
 import logging
 
 from django.apps import apps as global_apps
-from django.db import DEFAULT_DB_ALIAS, router, connection
+from django.db import DEFAULT_DB_ALIAS, connection, router
 
 from ansible_base.rbac import permission_registry
 from ansible_base.rbac.remote import get_resource_prefix
@@ -102,9 +102,12 @@ def sync_DAB_permissions(verbosity=2, using=DEFAULT_DB_ALIAS, apps=global_apps):
         table = DABContentType._meta.db_table
         pk_column = DABContentType._meta.pk.column
         with connection.cursor() as cursor:
-            cursor.execute(f"""
+            cursor.execute(
+                f"""
                 SELECT setval(
                     pg_get_serial_sequence(%s, %s),
                     (SELECT MAX({pk_column}) FROM {table})
                 )
-            """, [table, pk_column])
+            """,
+                [table, pk_column],
+            )
