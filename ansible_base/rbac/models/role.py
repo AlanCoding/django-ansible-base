@@ -69,6 +69,9 @@ class RoleDefinitionManager(models.Manager):
         self.managed = ManagedRoleManager(self.model._meta.apps)
 
     def give_creator_permissions(self, user, obj) -> Optional['RoleUserAssignment']:
+        if not permission_registry.is_registered(obj):
+            return  # Exit before getting content type, which will not exist
+
         # If the user is a superuser, no need to bother giving the creator permissions
         for super_flag in settings.ANSIBLE_BASE_BYPASS_SUPERUSER_FLAGS:
             if getattr(user, super_flag):

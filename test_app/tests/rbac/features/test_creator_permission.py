@@ -1,7 +1,8 @@
 import pytest
+from django.apps import apps
 from django.test.utils import override_settings
 
-from ansible_base.rbac.models import DABContentType, RoleDefinition, RoleEvaluation
+from ansible_base.rbac.models import DABContentType, RoleDefinition, RoleEvaluation, RoleUserAssignment
 from test_app.models import User
 
 INVENTORY_OBJ_PERMS = ('change_inventory', 'update_inventory', 'view_inventory', 'delete_inventory')
@@ -60,3 +61,18 @@ def test_custom_creation_perms(rando, inventory):
     with override_settings(ANSIBLE_BASE_CREATOR_DEFAULTS=['change', 'view']):
         RoleDefinition.objects.give_creator_permissions(rando, inventory)
         assert set(perm_name.split('_', 1)[0] for perm_name in RoleEvaluation.get_permissions(rando, inventory)) == {'change', 'view'}
+
+
+@pytest.mark.django_db
+def test_creator_permission_for_unregistered_model(admin_api_client, inventory, inv_rd, user):
+    prior_ct = DABContentType.objects.count()
+    prior_assignments = RoleUserAssignment.objects.count()
+    prior_rds = RoleDefinition.objects.count()
+
+    cls = apps.get_model('test_app.secretcolor')
+    obj = cls.objects.create()
+    RoleDefinition.objects.give_creator_permissions(user, obj)  # should do nothing
+
+    assert DABContentType.objects.count() == prior_ct  # did not create anything
+    assert RoleUserAssignment.objects.count() == prior_assignments
+    assert RoleDefinition.objects.count() == prior_rds
