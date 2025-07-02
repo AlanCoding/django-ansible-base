@@ -20,7 +20,6 @@ def test_role_definition_list_remote_and_local(admin_api_client, inv_rd, foo_rd)
 
 
 @pytest.mark.django_db
-@pytest.mark.skip
 def test_create_remote_role_definition(admin_api_client, foo_type, foo_permission):
     """
     Test creation of a custom, remote role definition.
