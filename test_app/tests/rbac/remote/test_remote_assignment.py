@@ -1,6 +1,6 @@
 import pytest
 
-from ansible_base.rbac.models import DABContentType, DABPermission, RoleDefinition, RoleUserAssignment
+from ansible_base.rbac.models import RoleUserAssignment
 from ansible_base.rbac.remote import RemoteObject
 
 
