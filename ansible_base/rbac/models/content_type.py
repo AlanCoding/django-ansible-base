@@ -141,6 +141,10 @@ class DABContentTypeManager(django_models.Manager["DABContentType"]):
             service = get_local_resource_prefix()
             app_label, model = args
             kwargs = {'service__in': [get_local_resource_prefix(), 'shared'], 'app_label': app_label, 'model': model}
+            # This ask here is actually ambiguous, so we try this extra lookup
+            shared_key = ('shared', app_label, model)
+            if ('shared', app_label, model) in self._cache[self.db]:
+                return self._cache[self.db][shared_key]
         else:
             service, app_label, model = args
             kwargs = {'service': service, 'app_label': app_label, 'model': model}
