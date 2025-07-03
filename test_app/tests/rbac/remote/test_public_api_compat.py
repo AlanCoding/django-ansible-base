@@ -1,8 +1,6 @@
 import pytest
-from django.test.utils import override_settings
 
 from ansible_base.lib.utils.response import get_relative_url
-from ansible_base.rbac.models import RoleDefinition
 
 
 @pytest.mark.django_db

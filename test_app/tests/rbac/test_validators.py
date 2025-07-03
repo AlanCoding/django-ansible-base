@@ -30,7 +30,7 @@ def test_custom_role_rules_do_not_apply_to_managed_roles():
 @override_settings(ANSIBLE_BASE_ALLOW_CUSTOM_ROLES=False)
 def test_role_definition_enablement_validation_in_api(admin_api_client):
     url = get_relative_url('roledefinition-list')
-    r = admin_api_client.post(url, data={'name': 'foo', 'permissions': ['view_inventory'], 'content_type': 'aap.inventory'})
+    r = admin_api_client.post(url, data={'name': 'foo', 'permissions': ['aap.view_inventory'], 'content_type': 'aap.inventory'})
     assert r.status_code == 400, r.data
     assert 'Creating custom roles is disabled' in str(r.data)
 
