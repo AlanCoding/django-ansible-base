@@ -9,7 +9,7 @@ from django.db.models.query_utils import PathInfo
 from django.db.models.sql import AND
 from django.db.models.sql.where import WhereNode
 
-from ..remote import get_local_resource_prefix
+from ..remote import RemoteObject, get_local_resource_prefix
 from .content_type import DABContentType
 
 
@@ -59,6 +59,8 @@ class FederatedForeignKey(DjangoGenericForeignKey):
 
     def get_content_type(self, obj=None, id=None, using=None, model=None):
         if obj is not None:
+            if isinstance(obj, RemoteObject):
+                return obj.content_type
             return DABContentType.objects.db_manager(obj._state.db).get_for_model(
                 obj.__class__,
             )
