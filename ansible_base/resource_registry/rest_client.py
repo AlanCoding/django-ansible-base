@@ -10,8 +10,8 @@ from ansible_base.resource_registry.resource_server import get_resource_server_c
 
 ResourceRequestBody = namedtuple(
     "ResourceRequestBody",
-    ["ansible_id", "service_id", "is_partially_migrated", "resource_type", "resource_data"],
-    defaults=(None, None, None, None, None),
+    ["ansible_id", "service_id", "is_partially_migrated", "resource_type", "resource_data", "additional_data"],
+    defaults=(None, None, None, None, None, None),
 )
 
 
