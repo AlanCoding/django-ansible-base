@@ -19,7 +19,9 @@ def test_create_role_definition(admin_api_client):
     Test creation of a custom role definition.
     """
     url = get_relative_url("roledefinition-list")
-    data = dict(name='foo-role-def', description='bar', permissions=['aap.view_organization', 'aap.change_organization'], content_type='shared.organization')
+    data = dict(
+        name='foo-role-def', description='bar', permissions=['shared.view_organization', 'shared.change_organization'], content_type='shared.organization'
+    )
     response = admin_api_client.post(url, data=data, format="json")
     assert response.status_code == 201, response.data
     assert response.data['name'] == 'foo-role-def'
@@ -28,7 +30,7 @@ def test_create_role_definition(admin_api_client):
 @pytest.mark.django_db
 def test_create_global_role_definition(admin_api_client):
     url = get_relative_url("roledefinition-list")
-    data = dict(name='global_view_org', description='bar', permissions=['aap.view_organization'])
+    data = dict(name='global_view_org', description='bar', permissions=['shared.view_organization'])
     response = admin_api_client.post(url, data=data, format="json")
     assert response.status_code == 201, response.data
     assert response.data['name'] == 'global_view_org'

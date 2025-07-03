@@ -79,16 +79,15 @@ class DABContentTypeTests(TestCase):
             DABContentType.objects.get_for_model(Inventory)
 
     @isolate_apps("tests")
-    def test_get_for_model_create_contenttype(self):
+    def test_get_for_model_not_registered(self):
         class ModelCreatedOnTheFly(models.Model):
             name = models.CharField(max_length=10)
 
             class Meta:
                 app_label = "tests"
 
-        ct = DABContentType.objects.get_for_model(ModelCreatedOnTheFly)
-        assert ct.app_label == "tests"
-        assert ct.model == "modelcreatedonthefly"
+        with pytest.raises(RuntimeError):
+            DABContentType.objects.get_for_model(ModelCreatedOnTheFly)
 
 
 @pytest.mark.django_db
