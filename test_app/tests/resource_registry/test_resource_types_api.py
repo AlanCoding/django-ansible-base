@@ -20,7 +20,8 @@ def test_resource_type_list(admin_api_client):
             "aap.original2",
             "shared.organization",
             "shared.roledefinition",
-            "aap.resourcemigrationtestmodel"]
+            "aap.resourcemigrationtestmodel",
+        ]
     )
 
 
