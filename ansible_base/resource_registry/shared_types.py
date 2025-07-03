@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from ansible_base.rbac.models import DABContentType
 from ansible_base.resource_registry.utils.resource_type_serializers import AnsibleResourceForeignKeyField, SharedResourceTypeSerializer
 from ansible_base.resource_registry.utils.sso_provider import get_sso_provider_server
 
@@ -75,4 +76,28 @@ class TeamType(SharedResourceTypeSerializer):
     description = serializers.CharField(
         default="",
         allow_blank=True,
+    )
+
+
+class RoleDefinitionPermissionsSerializer(serializers.Serializer):
+    permissions = serializers.SlugRelatedField(
+        slug_field='api_slug',
+        read_only=True,
+        many=True,
+    )
+
+
+class RoleDefinitionType(SharedResourceTypeSerializer):
+    RESOURCE_TYPE = "roledefinition"
+    ADDITIONAL_DATA_SERIALIZER = RoleDefinitionPermissionsSerializer
+    UNIQUE_FIELDS = ("name",)
+
+    name = serializers.CharField()
+    description = serializers.CharField(default="", allow_blank=True)
+    managed = serializers.BooleanField()
+    content_type = serializers.SlugRelatedField(
+        slug_field='api_slug',
+        queryset=DABContentType.objects.all(),
+        allow_null=True,
+        default=None,
     )

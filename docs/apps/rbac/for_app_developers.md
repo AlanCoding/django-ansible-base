@@ -350,3 +350,31 @@ role definition with the name "team-member".
 Apps that utilize django-ansible-base may wish to add extra validation when assigning roles to actors (users or teams).
 
 see [Validation callback for role assignment](../../lib/validation.md)
+
+### Remote Permissions
+
+There is an API under `/service-index/` designed for the purpose (primarily) for use in
+coordination of permissions between multiple servers or services.
+Actually doing the coordination of permissions in a cluster is an exercise left up to the reader.
+
+Types and permissions are shown in:
+ - `/service-index/role-types/`
+ - `/service-index/role-permissions/`
+
+To get everything you need, you must add an entry to your `RESOURCE_LIST` setting.
+
+```
+from ansible_base.rbac.models import RoleDefinition
+from ansible_base.resource_registry.shared_types import RoleDefinitionType
+
+RESOURCE_LIST = (
+    ...
+    ResourceConfig(
+        RoleDefinition,
+        shared_resource=SharedResource(serializer=RoleDefinitionType, is_provider=False),
+    ),
+)
+```
+
+With this, role definitions should appear in the endpoint
+ - `/service-index/resources/?`
