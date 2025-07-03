@@ -221,6 +221,8 @@ class DABContentType(django_models.Model):
         model = self.model_class()
         if not model:
             return self.model
+        if issubclass(model, RemoteObject):
+            return f'RemoteObject | {self.model}'
         return f"{model._meta.app_config.verbose_name} | {model._meta.verbose_name}"
 
     def save(self, *args, **kwargs):

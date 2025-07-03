@@ -26,6 +26,20 @@ class StandinMeta:
         self.app_label = ct.app_label
         self.abstract = abstract
 
+        class PK:
+            def __init__(self, pk_field_type):
+                self.pk_field_type = pk_field_type
+
+            def get_prep_value(self, value):
+                # TODO: handle uuid fields based on
+                # if self.pk_field_type:
+                return int(value)
+
+            def to_python(self, value):
+                return int(value)
+
+        self.pk = PK(ct.pk_field_type)
+
 
 class RemoteObject:
     """Placeholder for objects that live in another project."""
@@ -33,10 +47,23 @@ class RemoteObject:
     def __init__(self, content_type: models.Model, object_id: Union[int, str]):
         self.content_type = content_type
         self.object_id = object_id
-        self._meta = StandinMeta(content_type, abstract=True)
+        if not hasattr(self, '_meta'):
+            # If object is created without a type-specific subclass, do the best we can
+            self._meta = StandinMeta(content_type, abstract=True)
+        else:
+            if content_type.model != self._meta.model_name:
+                raise RuntimeError(f'RemoteObject created with type {content_type} but with type for {self._meta.model_name}')
 
     def __repr__(self):
         return f"<RemoteObject {self.content_type} id={self.object_id}>"
+
+    def __eq__(self, value):
+        if isinstance(value, RemoteObject):
+            return bool(self.content_type.id == value.content_type.id and self.pk == value.pk)
+        return super().__eq__(value)
+
+    def __hash__(self):
+        return hash((self.content_type.id, self.pk))
 
     @classmethod
     def get_ct_from_type(cls):
@@ -59,7 +86,16 @@ class RemoteObject:
 
     @property
     def pk(self):
-        return self.object_id
+        """Alias to :attr:`object_id` for compatibility with Django. Also, handles type."""
+        return self._meta.pk.to_python(self.object_id)
+
+    def summary_fields(self):
+        """This gives a placeholder, planned to introduce a summary_fields shared endpoint.
+
+        This placeholder should be cleary identifable by a client or by the RBAC resource server.
+        Then, the idea, is that it can make a request to the remote server to get the summary data.
+        """
+        return {'<remote_object_placeholder>': True, 'model_name': self._meta.model_name, 'service': self._meta.service, 'pk': self.pk}
 
 
 def get_remote_base_class() -> Type[RemoteObject]:
