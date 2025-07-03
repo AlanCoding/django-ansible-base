@@ -6,6 +6,7 @@ from ansible_base.rbac.remote import RemoteObject
 
 @pytest.mark.django_db
 def test_role_definition_list_remote_and_local(admin_api_client, inv_rd, foo_rd):
+    "Test that the role_definitions endpoint does not choke when remote permissions are listed."
     url = get_relative_url('roledefinition-list')
     response = admin_api_client.get(url)
     assert response.status_code == 200
@@ -19,10 +20,8 @@ def test_role_definition_list_remote_and_local(admin_api_client, inv_rd, foo_rd)
 
 
 @pytest.mark.django_db
-def test_create_remote_role_definition(admin_api_client, foo_type, foo_permission):
-    """
-    Test creation of a custom, remote role definition.
-    """
+def test_create_remote_role_definition_for_remote(admin_api_client, foo_type, foo_permission):
+    "Test creation of a custom role definition that gives permission to remote things."
     url = get_relative_url("roledefinition-list")
     data = dict(name='foo-foo-foo-custom', description='bar', permissions=[foo_permission.api_slug], content_type=foo_type.api_slug)
     response = admin_api_client.post(url, data=data, format="json")
@@ -32,7 +31,8 @@ def test_create_remote_role_definition(admin_api_client, foo_type, foo_permissio
 
 
 @pytest.mark.django_db
-def test_give_remote_permission(admin_api_client, rando, foo_type, foo_rd):
+def test_user_role_assignment_remote_and_local(admin_api_client, rando, foo_type, foo_rd):
+    "Test that after assigning permission to remote objects the assignment list works."
     a_foo = RemoteObject(content_type=foo_type, object_id=42)
     assignment = foo_rd.give_permission(rando, a_foo)
     assignment.content_object

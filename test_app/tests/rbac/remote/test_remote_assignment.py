@@ -7,6 +7,7 @@ from test_app.models import User
 
 @pytest.mark.django_db
 def test_give_remote_permission(rando, foo_type, foo_permission, foo_rd):
+    "Test for a few technical elements related to giving permission to remote objects, and using in query."
     assert foo_type.service == 'foo'  # a place, a domain, a server, known as foo
     assert foo_type.api_slug == 'foo.foo'  # there lives a foo in foo
 
@@ -15,6 +16,7 @@ def test_give_remote_permission(rando, foo_type, foo_permission, foo_rd):
     a_foo = RemoteObject(content_type=foo_type, object_id=42)
     assignment = foo_rd.give_permission(rando, a_foo)
     assert '42' in repr(a_foo)
+    assert a_foo.pk == 42
 
     assignment = RoleUserAssignment.objects.get(pk=assignment.pk)
     assert assignment.content_object.pk == 42
