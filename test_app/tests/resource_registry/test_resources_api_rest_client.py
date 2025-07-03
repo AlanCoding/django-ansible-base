@@ -5,9 +5,12 @@ import pytest
 from requests.exceptions import HTTPError
 
 from ansible_base.authentication.models import AuthenticatorUser
+from ansible_base.rbac import permission_registry
+from ansible_base.rbac.models import RoleDefinition
 from ansible_base.resource_registry.models import Resource, service_id
 from ansible_base.resource_registry.resource_server import get_resource_server_config
 from ansible_base.resource_registry.rest_client import ResourceAPIClient, ResourceRequestBody
+from test_app.models import Inventory
 
 
 @pytest.fixture
@@ -182,7 +185,7 @@ def test_get_resource_404(resource_client):
 
 
 @pytest.mark.django_db
-def test_additional_data(resource_client, django_user_model, github_authenticator):
+def test_additional_data_read(resource_client, django_user_model, github_authenticator):
     user = django_user_model.objects.create(username="lisan_al_gaib")
 
     AuthenticatorUser.objects.create(provider=github_authenticator, user=user, uid="different_uid")
@@ -198,6 +201,30 @@ def test_additional_data(resource_client, django_user_model, github_authenticato
     assert additional["social_auth"][0]["uid"] == "different_uid"
     assert additional["social_auth"][0]["backend_type"] == github_authenticator.type
     assert additional["social_auth"][0]["sso_server"] == "https://github.com/login/oauth/authorize"
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize('partial', [True, False])
+def test_additional_data_write(resource_client, partial):
+    "Will remove a permission from a role definition using the additional_data field."
+    rd = RoleDefinition.objects.create_from_permissions(
+        permissions=['aap.change_inventory', 'aap.view_inventory'],
+        name='change-inv-for-now',
+        content_type=permission_registry.content_type_model.objects.get_for_model(Inventory),
+    )
+    ansible_id = str(rd.resource.ansible_id)
+
+    # Need this to make a coherent PUT
+    resp = resource_client.get_resource(ansible_id)
+    assert resp.status_code == 200
+    ref = resp.json()
+
+    data = ResourceRequestBody(additional_data={'permissions': ['aap.view_inventory', 'fooland.action_unicorns']}, resource_data=ref['resource_data'])
+    resp = resource_client.update_resource(ansible_id, data, partial=partial)
+    assert resp.status_code == 200, resp.__dict__
+
+    # Removed the change permission
+    assert {perm.api_slug for perm in rd.permissions.all()} == {'aap.view_inventory'}
 
 
 @pytest.mark.django_db
