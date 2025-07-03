@@ -165,6 +165,21 @@ class DABContentTypeManager(django_models.Manager["DABContentType"]):
             self._add_to_cache(self.db, ct)
             return ct
 
+    def load_remote_types(self, remote_data: list[dict]):
+        parent_mapping: dict[django_models.Model, str] = {}
+        for remote_type in remote_data:
+            service = remote_type.pop('service')
+            model = remote_type.pop('model')
+            pct_slug = remote_type.pop('parent_content_type')
+            ct, _ = self.get_or_create(service=service, model=model, defaults=remote_type)
+            parent_mapping[ct] = pct_slug
+
+        # The parent type link needs to be filled in via a second pass
+        for ct, pct_slug in parent_mapping.items():
+            if pct_slug and (ct.parent_content_type_id is None or ct.parent_content_type.api_slug != pct_slug):
+                ct.parent_content_type = DABContentType.objects.get(api_slug=pct_slug)
+                ct.save()
+
 
 class DABContentType(django_models.Model):
     """Like Django ContentType model but scoped by service."""

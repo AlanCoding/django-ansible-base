@@ -1,6 +1,9 @@
+from copy import deepcopy
+
 import pytest
 
 from ansible_base.lib.utils.response import get_relative_url
+from ansible_base.rbac.models import DABContentType, DABPermission
 
 
 @pytest.mark.django_db
@@ -51,3 +54,48 @@ def test_role_definition_listed_as_resource(admin_api_client, org_admin_rd):
     assert resource_data['content_type'] == 'shared.organization'
     assert 'permissions' in detail.data['additional_data']
     assert 'aap.add_inventory' in detail.data['additional_data']['permissions']
+
+
+@pytest.mark.django_db
+def test_reload_types(admin_api_client):
+    url = get_relative_url('dabcontenttype-list')
+    response = admin_api_client.get(url + '?page_size=200', format="json")
+    assert response.status_code == 200, response.data
+
+    type_list = response.data['results']
+    original = deepcopy(type_list)
+
+    DABContentType.objects.all().delete()  # Delete all types, see if we get them back
+
+    DABContentType.objects.load_remote_types(type_list)
+
+    response = admin_api_client.get(url + '?page_size=200', format="json")
+    assert response.status_code == 200, response.data
+
+    assert response.data['results'] == original
+
+
+@pytest.mark.django_db
+def test_load_child_of_org():
+    DABContentType.objects.load_remote_types([{'service': 'fooland', 'app_label': 'foop', 'model': 'fooser', 'parent_content_type': 'shared.organization'}])
+    ct = DABContentType.objects.get(api_slug='fooland.fooser')
+    assert ct.parent_content_type.app_label == 'test_app'  # proves connection to existing
+
+
+@pytest.mark.django_db
+def test_reload_permissions(admin_api_client):
+    url = get_relative_url('dabpermission-list')
+    response = admin_api_client.get(url + '?page_size=200', format="json")
+    assert response.status_code == 200, response.data
+
+    perm_list = response.data['results']
+    original = deepcopy(perm_list)
+
+    DABPermission.objects.all().delete()  # Delete all permissions, see if we get them back
+
+    DABPermission.objects.load_remote_types(perm_list)
+
+    response = admin_api_client.get(url + '?page_size=200', format="json")
+    assert response.status_code == 200, response.data
+
+    assert response.data['results'] == original
