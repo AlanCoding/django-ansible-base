@@ -101,3 +101,6 @@ class RoleDefinitionType(SharedResourceTypeSerializer):
         allow_null=True,
         default=None,
     )
+
+    def process_additional_data(self, instance, additional_data):
+        instance.save_remote_permissions(additional_data.get('permissions'))

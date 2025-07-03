@@ -22,6 +22,7 @@ from ansible_base.lib.utils.models import is_add_perm
 from ansible_base.rbac.permission_registry import permission_registry
 from ansible_base.rbac.prefetch import TypesPrefetch
 from ansible_base.rbac.validators import validate_assignment, validate_permissions_for_model
+from ansible_base.resource_registry.fields import AnsibleResourceField
 
 from ..remote import RemoteObject
 from .content_type import DABContentType
@@ -164,6 +165,8 @@ class RoleDefinition(CommonModel):
         default=None,
         on_delete=models.CASCADE,
     )
+    # This is a synchronized field, so add reverse relation for resource
+    resource = AnsibleResourceField(primary_key_field="id")
 
     objects = RoleDefinitionManager()
     router_basename = 'roledefinition'
@@ -322,6 +325,15 @@ class RoleDefinition(CommonModel):
             perm_qs = permission_qs.filter(role_definitions__in=rd_qs)
             perm_set.update(perm_qs)
         return perm_set
+
+    def save_remote_permissions(self, additional_data: list[str]):
+        """Save permissions from an external system.
+
+        This does very little more than just making the related permissions exactly equal to the set.
+        If a provided permission is not present in the local system, we pretend we did not get it.
+        However, we must still allow removing permissions from the role.
+        """
+        self.permissions.set(DABPermission.objects.filter(api_slug__in=additional_data))
 
     def summary_fields(self):
         return {'id': self.id, 'name': self.name, 'description': self.description, 'managed': self.managed}
