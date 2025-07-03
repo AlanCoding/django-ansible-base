@@ -157,6 +157,22 @@ def test_list_resource_types(resource_client):
 
 
 @pytest.mark.django_db
+def test_list_role_types(resource_client):
+    resp = resource_client.list_role_types(filters={"api_slug": "shared.organization"})
+    assert resp.status_code == 200
+    assert resp.json()["count"] == 1
+    assert resp.json()["results"][0]["api_slug"] == "shared.organization"
+
+
+@pytest.mark.django_db
+def test_list_role_permissions(resource_client):
+    resp = resource_client.list_role_permissions(filters={"api_slug": "shared.view_organization"})
+    assert resp.status_code == 200
+    assert resp.json()["count"] == 1
+    assert resp.json()["results"][0]["api_slug"] == "shared.view_organization"
+
+
+@pytest.mark.django_db
 def test_get_resource_404(resource_client):
     resource_client.raise_if_bad_request = True
 
