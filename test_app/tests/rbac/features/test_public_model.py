@@ -45,7 +45,7 @@ def test_org_level_validator_without_view():
 @pytest.mark.django_db
 def test_custom_role_for_public_model(admin_api_client, rando, public_item):
     url = get_relative_url('roledefinition-list')
-    data = {'name': 'Public data editor', 'permissions': ['local.change_publicdata'], 'content_type': 'local.publicdata'}
+    data = {'name': 'Public data editor', 'permissions': ['aap.change_publicdata'], 'content_type': 'aap.publicdata'}
     response = admin_api_client.post(url, data=data, format="json")
     assert response.status_code == 201, response.data
 

@@ -64,14 +64,14 @@ def test_custom_creation_perms(rando, inventory):
 
 
 @pytest.mark.django_db
-def test_creator_permission_for_unregistered_model(admin_api_client, inventory, inv_rd, user):
+def test_creator_permission_for_unregistered_model(rando):
     prior_ct = DABContentType.objects.count()
     prior_assignments = RoleUserAssignment.objects.count()
     prior_rds = RoleDefinition.objects.count()
 
     cls = apps.get_model('test_app.secretcolor')
     obj = cls.objects.create()
-    RoleDefinition.objects.give_creator_permissions(user, obj)  # should do nothing
+    RoleDefinition.objects.give_creator_permissions(rando, obj)  # should do nothing
 
     assert DABContentType.objects.count() == prior_ct  # did not create anything
     assert RoleUserAssignment.objects.count() == prior_assignments
