@@ -159,3 +159,10 @@ class ResourceAPIClient:
 
     def get_resource_type_manifest(self, name, filters: Optional[dict] = None):
         return self._make_request("get", f"resource-types/{name}/manifest/", params=filters, stream=True)
+
+    # RBAC related methods
+    def list_role_types(self, filters: Optional[dict] = None):
+        return self._make_request("get", "role-types/", params=filters)
+
+    def list_role_permissions(self, filters: Optional[dict] = None):
+        return self._make_request("get", "role-permissions/", params=filters)
