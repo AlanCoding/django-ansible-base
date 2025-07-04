@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from ansible_base.rbac.models import DABContentType
+from ansible_base.rbac.models import DABContentType, DABPermission
 from ansible_base.resource_registry.utils.resource_type_serializers import AnsibleResourceForeignKeyField, SharedResourceTypeSerializer
 from ansible_base.resource_registry.utils.sso_provider import get_sso_provider_server
 
@@ -87,6 +87,17 @@ class RoleDefinitionPermissionsSerializer(serializers.Serializer):
     )
 
 
+class LenientPermissionSlugListField(serializers.ListField):
+    child = serializers.CharField()
+
+    def to_internal_value(self, data):
+        data = super().to_internal_value(data)
+        return list(DABPermission.objects.filter(api_slug__in=data))
+
+    def to_representation(self, value):
+        return [perm.api_slug for perm in value.all() if perm is not None]
+
+
 class RoleDefinitionType(SharedResourceTypeSerializer):
     RESOURCE_TYPE = "roledefinition"
     ADDITIONAL_DATA_SERIALIZER = RoleDefinitionPermissionsSerializer
@@ -101,6 +112,4 @@ class RoleDefinitionType(SharedResourceTypeSerializer):
         allow_null=True,
         default=None,
     )
-
-    def process_additional_data(self, instance, additional_data):
-        instance.save_remote_permissions(additional_data.get('permissions'))
+    permissions = LenientPermissionSlugListField()

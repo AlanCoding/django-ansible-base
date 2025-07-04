@@ -326,15 +326,6 @@ class RoleDefinition(CommonModel):
             perm_set.update(perm_qs)
         return perm_set
 
-    def save_remote_permissions(self, additional_data: list[str]):
-        """Save permissions from an external system.
-
-        This does very little more than just making the related permissions exactly equal to the set.
-        If a provided permission is not present in the local system, we pretend we did not get it.
-        However, we must still allow removing permissions from the role.
-        """
-        self.permissions.set(DABPermission.objects.filter(api_slug__in=additional_data))
-
     def summary_fields(self):
         return {'id': self.id, 'name': self.name, 'description': self.description, 'managed': self.managed}
 
