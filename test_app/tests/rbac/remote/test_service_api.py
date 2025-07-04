@@ -99,3 +99,20 @@ def test_reload_permissions(admin_api_client):
     assert response.status_code == 200, response.data
 
     assert response.data['results'] == original
+
+
+@pytest.mark.django_db
+def test_list_role_user_assignments(admin_api_client, rando, inv_rd, inventory):
+    inv_rd.give_permission(rando, inventory)
+
+    url = get_relative_url('serviceuserassignment-list')
+    response = admin_api_client.get(url + '?page_size=200', format="json")
+    assert response.status_code == 200, response.data
+
+    candidates = [assignment for assignment in response.data['results'] if assignment['role_definition'] == inv_rd.name]
+    assert len(candidates) == 1, response.data
+    from_api = candidates[0]
+
+    assert int(from_api['object_id']) == inventory.id
+    assert from_api['user_ansible_id'] == str(rando.resource.ansible_id)
+    assert from_api['content_type'] == 'aap.inventory'
