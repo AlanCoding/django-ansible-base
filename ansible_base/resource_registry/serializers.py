@@ -96,7 +96,7 @@ class ResourceListSerializer(serializers.ModelSerializer):
 
 
 class ResourceSerializer(ResourceListSerializer):
-    additional_data = serializers.JSONField(write_only=True, required=False)
+    additional_data = serializers.SerializerMethodField()
     resource_data = ResourceDataField(source="*")
 
     class Meta:
@@ -106,37 +106,12 @@ class ResourceSerializer(ResourceListSerializer):
             "additional_data",
         ]
 
-    def to_representation(self, instance):
-        ret = super().to_representation(instance)
-
-        additional_data = None
-        if serializer := instance.content_type.resource_type.serializer_class:
+    def get_additional_data(self, obj):
+        if serializer := obj.content_type.resource_type.serializer_class:
             if serializer.ADDITIONAL_DATA_SERIALIZER is not None:
-                additional_data = serializer.ADDITIONAL_DATA_SERIALIZER(instance.content_object).data
+                return serializer.ADDITIONAL_DATA_SERIALIZER(obj.content_object).data
 
-        ret['additional_data'] = additional_data
-        return ret
-
-    def _maybe_process_additional_data(self, instance, additional_data):
-        if not additional_data:
-            return
-
-        if serializer := instance.content_type.resource_type.serializer_class:
-            if serializer and hasattr(serializer, 'process_additional_data'):
-                logger.debug(f'Processing additional data for resource {str(instance.ansible_id)}')
-                serializer(instance.content_object).process_additional_data(instance.content_object, additional_data)
-
-    def create(self, validated_data):
-        additional_data = validated_data.pop('additional_data', None)
-        instance = super().create(validated_data)
-        self._maybe_process_additional_data(instance, additional_data)
-        return instance
-
-    def update(self, instance, validated_data):
-        additional_data = validated_data.pop('additional_data', None)
-        instance = super().update(instance, validated_data)
-        self._maybe_process_additional_data(instance, additional_data)
-        return instance
+        return None
 
 
 class ResourceTypeSerializer(serializers.ModelSerializer):

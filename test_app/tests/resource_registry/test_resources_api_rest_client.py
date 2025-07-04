@@ -219,7 +219,10 @@ def test_additional_data_write(resource_client, partial):
     assert resp.status_code == 200
     ref = resp.json()
 
-    data = ResourceRequestBody(additional_data={'permissions': ['aap.view_inventory', 'fooland.action_unicorns']}, resource_data=ref['resource_data'])
+    res_data = ref['resource_data']
+    res_data['permissions'] = ['aap.view_inventory', 'fooland.action_unicorns']
+
+    data = ResourceRequestBody(resource_data=res_data)
     resp = resource_client.update_resource(ansible_id, data, partial=partial)
     assert resp.status_code == 200, resp.__dict__
 

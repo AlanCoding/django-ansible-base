@@ -105,12 +105,3 @@ def test_change_role_definition_member_permission(organization, inventory, org_t
     # Adding it back restores them
     member_rd.permissions.add(member_perm)
     assert [u.has_obj_perm(inventory, 'change') for u in (team_user, org_team_user)] == [True, True]
-
-
-@pytest.mark.django_db
-def test_save_remote_permissions(inv_rd):
-    "This is tested as part of resource registry in test_additional_data_write"
-    assert {perm.api_slug for perm in inv_rd.permissions.all()} == {'aap.view_inventory', 'aap.change_inventory'}
-    assert len(DABPermission.objects.filter(api_slug__in={'aap.view_inventory', 'fooland.not_here'})) == 1
-    inv_rd.permissions.set([DABPermission.objects.get(api_slug='aap.view_inventory')])
-    assert {perm.api_slug for perm in inv_rd.permissions.all()} == {'aap.view_inventory'}

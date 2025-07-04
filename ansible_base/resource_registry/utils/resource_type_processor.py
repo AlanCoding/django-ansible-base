@@ -39,3 +39,18 @@ class ResourceTypeProcessor:
 
         self.instance.save()
         return self.instance
+
+
+class RoleDefinitionProcessor(ResourceTypeProcessor):
+    def save(self, validated_data, is_new=False):
+        permissions = None  # many-to-many field
+        for k, val in validated_data.items():
+            if k == 'permissions':
+                permissions = val
+            else:
+                setattr(self.instance, k, val)
+
+        self.instance.save()
+        if permissions is not None:
+            self.instance.permissions.set(permissions)
+        return self.instance
