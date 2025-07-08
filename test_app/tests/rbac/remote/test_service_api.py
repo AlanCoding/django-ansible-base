@@ -132,3 +132,33 @@ def test_apply_role_assignment(admin_api_client, rando, inv_rd, inventory):
     # Second try, response code indicates assignment already exists
     response = admin_api_client.post(url, data=data)
     assert response.status_code == 409, response.data
+
+
+@pytest.mark.django_db
+def test_filter_assignment_list(admin_api_client, rando, inv_rd, view_inv_rd, org_inv_rd, inventory):
+    inv_rd.give_permission(rando, inventory)
+    org_inv_rd.give_permission(rando, inventory.organization)
+    view_inv_rd.give_permission(rando, inventory)
+
+    url = get_relative_url('serviceuserassignment-list')
+    response = admin_api_client.get(url + f'?user={rando.id}', format="json")
+    assert response.status_code == 200, response.data
+    assert response.data['count'] == 3  # user rando has 3 rol assignments
+
+    # Get just one single assignment
+    response = admin_api_client.get(url + f'?assignment={str(rando.resource.ansible_id)},{inv_rd.name},{inventory.id}', format="json")
+    assert response.status_code == 200, response.data
+    assert response.data['count'] == 1
+    assert response.data['results'][0]['role_definition'] == inv_rd.name
+
+    # Assure we can get two assignments at the same time
+    response = admin_api_client.get(
+        url
+        + (
+            f'?assignment={str(rando.resource.ansible_id)},{inv_rd.name},{inventory.id}&'
+            f'assignment={str(rando.resource.ansible_id)},{org_inv_rd.name},{inventory.organization.id}'
+        ),
+        format="json",
+    )
+    assert response.status_code == 200, response.data
+    assert response.data['count'] == 2
