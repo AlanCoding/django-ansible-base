@@ -135,4 +135,4 @@ class RoleAssignmentFilterBackend(BaseFilterBackend):
                 query |= q
             queryset = queryset.filter(query)
 
-        return super().filter_queryset(request, queryset, view)
+        return queryset
