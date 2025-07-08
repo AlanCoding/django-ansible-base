@@ -32,6 +32,7 @@ from ansible_base.rest_filters.rest_framework import ansible_id_backend
 
 from ..models import DABContentType, DABPermission, get_evaluation_model
 from ..remote import RemoteObject, get_resource_prefix
+from ..policies import check_content_obj_permission
 
 
 def list_combine_values(data: dict[Type[Model], list[str]]) -> list[str]:
@@ -242,8 +243,11 @@ class UserAccessViewSet(
             else:
                 self.related_object = model_cls(content_type=self.content_type, object_id=object_id)
 
-            if not self.request.user.has_obj_perm(self.related_object, 'view'):
-                raise NotFound
+            try:
+                if not self.request.user.has_obj_perm(self.related_object, 'view'):
+                    raise NotFound
+            except RuntimeError:
+                check_content_obj_permission(self.request.user, self.related_object)
 
         return (self.permission, self.content_type, self.related_object)
 
