@@ -176,6 +176,14 @@ def test_list_role_permissions(resource_client):
 
 
 @pytest.mark.django_db
+def test_list_role_permissions_all_pages(resource_client):
+    resp = resource_client.list_role_permissions()
+    assert resp.status_code == 200
+    assert resp.json()["next"] is not None
+    assert resp.json()["count"] > 25
+
+
+@pytest.mark.django_db
 def test_get_resource_404(resource_client):
     resource_client.raise_if_bad_request = True
 

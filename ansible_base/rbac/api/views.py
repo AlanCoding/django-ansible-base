@@ -31,8 +31,8 @@ from ansible_base.rbac.validators import check_locally_managed, permissions_allo
 from ansible_base.rest_filters.rest_framework import ansible_id_backend
 
 from ..models import DABContentType, DABPermission, get_evaluation_model
-from ..remote import RemoteObject, get_resource_prefix
 from ..policies import check_content_obj_permission
+from ..remote import RemoteObject, get_resource_prefix
 
 
 def list_combine_values(data: dict[Type[Model], list[str]]) -> list[str]:
