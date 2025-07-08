@@ -8,13 +8,14 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.serializers import ValidationError
 
 from ansible_base.lib.abstract_models.common import get_url_for_object
-from ansible_base.lib.serializers.common import CommonModelSerializer, ImmutableCommonModelSerializer
+from ansible_base.lib.serializers.common import AbstractCommonModelSerializer, CommonModelSerializer, ImmutableCommonModelSerializer
+from ansible_base.lib.utils.auth import get_team_model
 from ansible_base.rbac.models import RoleDefinition, RoleTeamAssignment, RoleUserAssignment
 from ansible_base.rbac.permission_registry import permission_registry  # careful for circular imports
 from ansible_base.rbac.policies import check_content_obj_permission, visible_users
 from ansible_base.rbac.validators import check_locally_managed, validate_permissions_for_model
 
-from ..models import DABContentType, DABPermission
+from ..models import DABContentType, DABPermission, get_evaluation_model
 
 
 class RoleDefinitionSerializer(CommonModelSerializer):
@@ -242,3 +243,56 @@ class RoleTeamAssignmentSerializer(BaseAssignmentSerializer):
 
 class RoleMetadataSerializer(serializers.Serializer):
     allowed_permissions = serializers.DictField(help_text=_('A List of permissions allowed for a role definition, given its content type.'))
+
+
+class AccessListMixin(AbstractCommonModelSerializer):
+    role_assignments = serializers.SerializerMethodField()
+
+    @staticmethod
+    def summarize_role_definition(role_definition):
+        return {"name": role_definition.name, "url": get_url_for_object(role_definition)}
+
+    def get_role_assignments(self, actor):
+        obj = self.context.get("related_object")
+        permission = self.context.get("permission")
+        ct = self.context.get("content_type")
+
+        assignment_list = []
+
+        evaluation_cls = get_evaluation_model(obj)
+        reverse_name = evaluation_cls._meta.get_field('role').remote_field.name
+        if permission:
+            obj_eval_qs = evaluation_cls.objects.filter(codename=permission.codename, object_id=obj.pk, content_type_id=ct.id)
+        else:
+            # All relevant assignments for the object
+            obj_eval_qs = evaluation_cls.objects.filter(object_id=obj.pk, content_type_id=ct.id)
+        obj_assignment_qs = actor.role_assignments.filter(**{f'object_role__{reverse_name}__in': obj_eval_qs})
+
+        team_ct = DABContentType.objects.get_for_model(get_team_model())
+
+        for assignment in obj_assignment_qs.distinct():
+            if assignment.content_type_id == team_ct.pk:
+                perm_type = "team"
+            elif assignment.content_type_id == ct.pk:
+                perm_type = "direct"
+            else:
+                perm_type = "indirect"
+            assignment_list.append({"type": perm_type, "role_definition": self.summarize_role_definition(assignment.role_definition)})
+
+        if permission:
+            global_assignment_qs = actor.role_assignments.filter(content_type=None, role_definition__permissions=permission)
+        else:
+            global_assignment_qs = actor.role_assignments.filter(content_type=None, role_definition__permissions__content_type=ct)
+
+        for assignment in global_assignment_qs.distinct():
+            assignment_list.append({"type": "global", "role_definition": self.summarize_role_definition(assignment.role_definition)})
+
+        return assignment_list
+
+
+class UserAccessListMixin(AccessListMixin):
+    _expected_fields = ['username', 'role_assignments']
+
+
+class TeamAccessListMixin(AccessListMixin):
+    _expected_fields = ['name', 'organization', 'role_assignments']

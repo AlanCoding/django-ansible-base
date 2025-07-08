@@ -5,11 +5,12 @@ from django.db import transaction
 from django.db.models import Model
 from django.utils.translation import gettext_lazy as _
 from rest_framework import permissions
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.generics import GenericAPIView
 from rest_framework.response import Response
-from rest_framework.viewsets import ModelViewSet
+from rest_framework.viewsets import GenericViewSet, ModelViewSet, mixins
 
+from ansible_base.lib.utils.auth import get_team_model, get_user_model
 from ansible_base.lib.utils.views.django_app_api import AnsibleBaseDjangoAppApiView
 from ansible_base.lib.utils.views.permissions import try_add_oauth2_scope_permission
 from ansible_base.rbac.api.permissions import RoleDefinitionPermissions
@@ -19,16 +20,18 @@ from ansible_base.rbac.api.serializers import (
     RoleMetadataSerializer,
     RoleTeamAssignmentSerializer,
     RoleUserAssignmentSerializer,
+    TeamAccessListMixin,
+    UserAccessListMixin,
 )
 from ansible_base.rbac.evaluations import has_super_permission
 from ansible_base.rbac.models import RoleDefinition
 from ansible_base.rbac.permission_registry import permission_registry
 from ansible_base.rbac.policies import check_can_remove_assignment
 from ansible_base.rbac.validators import check_locally_managed, permissions_allowed_for_role, system_roles_enabled
-from ansible_base.rest_filters.rest_framework.ansible_id_backend import TeamAnsibleIdAliasFilterBackend, UserAnsibleIdAliasFilterBackend
+from ansible_base.rest_filters.rest_framework import ansible_id_backend
 
-from ..models.content_type import DABContentType
-from ..remote import get_resource_prefix
+from ..models import DABContentType, DABPermission, get_evaluation_model
+from ..remote import RemoteObject, get_resource_prefix
 
 
 def list_combine_values(data: dict[Type[Model], list[str]]) -> list[str]:
@@ -174,7 +177,8 @@ class RoleTeamAssignmentViewSet(BaseAssignmentViewSet):
     serializer_class = RoleTeamAssignmentSerializer
     prefetch_related = ('team',)
     filter_backends = BaseAssignmentViewSet.filter_backends + [
-        TeamAnsibleIdAliasFilterBackend,
+        ansible_id_backend.TeamAnsibleIdAliasFilterBackend,
+        ansible_id_backend.RoleAssignmentFilterBackend,
     ]
 
 
@@ -193,5 +197,108 @@ class RoleUserAssignmentViewSet(BaseAssignmentViewSet):
     serializer_class = RoleUserAssignmentSerializer
     prefetch_related = ('user',)
     filter_backends = BaseAssignmentViewSet.filter_backends + [
-        UserAnsibleIdAliasFilterBackend,
+        ansible_id_backend.UserAnsibleIdAliasFilterBackend,
+        ansible_id_backend.RoleAssignmentFilterBackend,
     ]
+
+
+class UserAccessViewSet(
+    AnsibleBaseDjangoAppApiView,
+    mixins.ListModelMixin,
+    GenericViewSet,
+):
+    """
+    Use this endpoint to get a list of users who have access to a resource.
+    This is a list-only view that provides a list of users, plus extra data.
+    """
+
+    serializer_mixin = UserAccessListMixin
+
+    def get_actor_model(self):
+        return get_user_model()
+
+    def get_data_from_url(self):
+        if not hasattr(self, 'related_object'):
+            model_name = self.kwargs.get("model_name")
+            object_id = self.kwargs.get("pk")
+
+            # Prefer treating the URL as requesting for some permission
+            self.permission = DABPermission.objects.filter(api_slug=model_name).first()
+
+            if not self.permission:
+                self.content_type = DABContentType.objects.filter(api_slug=model_name).first()
+                if not self.content_type:
+                    raise NotFound(f'The slug {model_name} is not a valid permission or type identifier')
+            else:
+                # Access list will be all permissions for the given object
+                self.content_type = self.permission.content_type
+
+            model_cls = self.content_type.model_class()
+            if not issubclass(model_cls, RemoteObject):
+                try:
+                    self.related_object = model_cls.objects.get(pk=object_id)
+                except model_cls.DoesNotExist:
+                    raise NotFound
+            else:
+                self.related_object = model_cls(content_type=self.content_type, object_id=object_id)
+
+            if not self.request.user.has_obj_perm(self.related_object, 'view'):
+                raise NotFound
+
+        return (self.permission, self.content_type, self.related_object)
+
+    def get_queryset(self):
+        permission, ct, obj = self.get_data_from_url()
+
+        evaluation_cls = get_evaluation_model(obj)
+        reverse_name = evaluation_cls._meta.get_field('role').remote_field.name
+        actor_cls = self.get_actor_model()
+        assignment_cls = actor_cls._meta.get_field('role_assignments').related_model
+
+        if permission:
+            obj_eval_qs = evaluation_cls.objects.filter(codename=permission.codename, object_id=obj.pk, content_type_id=ct.id)
+        else:
+            # All relevant evaluations for the object
+            obj_eval_qs = evaluation_cls.objects.filter(object_id=obj.pk, content_type_id=ct.id)
+        obj_assignment_qs = assignment_cls.objects.filter(**{f'object_role__{reverse_name}__in': obj_eval_qs})
+
+        if permission:
+            global_assignment_qs = assignment_cls.objects.filter(content_type=None, role_definition__permissions=permission)
+        else:
+            global_assignment_qs = assignment_cls.objects.filter(content_type=None, role_definition__permissions__content_type=ct)
+
+        assignment_qs = obj_assignment_qs | global_assignment_qs
+        actor_qs = actor_cls.objects.filter(role_assignments__in=assignment_qs)
+        if actor_cls._meta.model_name == 'user':
+            actor_qs |= actor_qs.filter(is_superuser=True)
+        return actor_qs
+
+    def get_serializer_class(self):
+        actor_cls = self.get_actor_model()
+
+        class DynamicActorSerializer(self.serializer_mixin):
+            class Meta:
+                model = actor_cls
+                fields = self.serializer_mixin.Meta.fields + self.serializer_mixin._expected_fields
+
+        return DynamicActorSerializer
+
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        permission, ct, obj = self.get_data_from_url()
+
+        ctx.update(
+            {
+                "permission": permission,
+                "related_object": obj,
+                "content_type": ct,
+            }
+        )
+        return ctx
+
+
+class TeamAccessViewSet(UserAccessViewSet):
+    serializer_mixin = TeamAccessListMixin
+
+    def get_actor_model(self):
+        return get_team_model()
