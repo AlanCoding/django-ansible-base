@@ -116,3 +116,19 @@ def test_list_role_user_assignments(admin_api_client, rando, inv_rd, inventory):
     assert int(from_api['object_id']) == inventory.id
     assert from_api['user_ansible_id'] == str(rando.resource.ansible_id)
     assert from_api['content_type'] == 'aap.inventory'
+
+
+@pytest.mark.django_db
+def test_apply_role_assignment(admin_api_client, rando, inv_rd, inventory):
+    url = get_relative_url('serviceuserassignment-assign')
+
+    data = {"role_definition": inv_rd.name, "user_ansible_id": str(rando.resource.ansible_id), "object_id": inventory.pk}
+
+    assert not rando.has_obj_perm(inventory, 'change')
+    response = admin_api_client.post(url, data=data)
+    assert response.status_code == 201, response.data
+    assert not rando.has_obj_perm(inventory, 'change')
+
+    # Second try, response code indicates assignment already exists
+    response = admin_api_client.post(url, data=data)
+    assert response.status_code == 409, response.data
