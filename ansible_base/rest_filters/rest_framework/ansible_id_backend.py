@@ -1,5 +1,6 @@
 import uuid
 
+from django.db.models import Q
 from rest_framework.exceptions import ValidationError
 from rest_framework.filters import BaseFilterBackend
 
@@ -80,4 +81,58 @@ class TeamAnsibleIdAliasFilterBackend(AnsibleIdAliasFilterBackend):
                 raise ValidationError(f"Invalid UUID format for team_ansible_id: {team_ansible_id}")
             # Filter the queryset based on the team's ansible_id
             queryset = queryset.filter(team__resource__ansible_id=team_ansible_id)
+        return super().filter_queryset(request, queryset, view)
+
+
+class RoleAssignmentFilterBackend(BaseFilterBackend):
+    """
+    Filter backend for listing a specific set of role (user or team) assignments.
+
+    For cross-component coordination, we want to avoid filtering by the primary key.
+    This allows returning records that matche a list of tuples.
+
+    Example:
+    /api/v1/role_user_assignments/?assignment=joe,Inventory%20Admin,42
+
+    This would return the role assignment that user joe has to the inventory pk=42,
+    if it exists.
+    Crucially, this will OR multiple entries so you can get multiple items
+    in a single request.
+
+    Example:
+    /api/v1/role_user_assignments/?assignment=joe,Inventory%20Admin,42&assignment=joe,Project%20Admin,9
+    """
+
+    def filter_queryset(self, request, queryset, view):
+        raw_filters = request.query_params.getlist("assignment")
+        q_objects = []
+
+        view_model = queryset.model._meta.model_name
+
+        for raw in raw_filters:
+            actor_ansible_id, role_name, object_id = raw.split(",", 2)
+            if '.' in object_id:
+                raise ValidationError(f"Each filter must have exactly 3 values: {raw!r}")
+
+            try:
+                # Validate if the provided actor specifier is a valid UUID
+                uuid.UUID(actor_ansible_id)
+            except ValueError:
+                raise ValidationError(f"Invalid UUID format for first part of assignment filter: {actor_ansible_id}")
+
+            if view_model == 'roleuserassignment':
+                this_q = Q(user__resource__ansible_id=actor_ansible_id, role_definition__name=role_name, object_id=object_id)
+            elif view_model == 'roleteamassignment':
+                this_q = Q(team__resource__ansible_id=actor_ansible_id, role_definition__name=role_name, object_id=object_id)
+            else:
+                raise RuntimeError('RoleAssignmentFilterBackend only valid for assignment views')
+
+            q_objects.append(this_q)
+
+        if q_objects:
+            query = q_objects[0]
+            for q in q_objects[1:]:
+                query |= q
+            queryset = queryset.filter(query)
+
         return super().filter_queryset(request, queryset, view)

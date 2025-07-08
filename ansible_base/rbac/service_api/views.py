@@ -1,6 +1,10 @@
+from rest_framework import status
+from rest_framework.decorators import action
+from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet, mixins
 
 from ansible_base.lib.utils.views.django_app_api import AnsibleBaseDjangoAppApiView
+from ansible_base.rest_filters.rest_framework import ansible_id_backend
 
 from ..models import DABContentType, DABPermission, RoleTeamAssignment, RoleUserAssignment
 from . import serializers as service_serializers
@@ -43,6 +47,42 @@ class ServiceRoleUserAssignmentViewSet(
 
     queryset = RoleUserAssignment.objects.prefetch_related('user__resource', *prefetch_related)
     serializer_class = service_serializers.RoleUserAssignmentSerializer
+    filter_backends = AnsibleBaseDjangoAppApiView.filter_backends + [
+        ansible_id_backend.UserAnsibleIdAliasFilterBackend,
+        ansible_id_backend.RoleAssignmentFilterBackend,
+    ]
+
+    @action(detail=False, methods=['post'], url_path='assign')
+    def assign(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        existing = serializer.find_existing_assignment(self.get_queryset())
+        if existing:
+            return Response(
+                {"detail": "This assignment already exists."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        instance = serializer.save()
+        output_serializer = self.get_serializer(instance)
+        return Response(output_serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=['post'], url_path='unassign')
+    def unassign(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        existing = serializer.find_existing_assignment(self.get_queryset())
+        if not existing:
+            return Response(
+                {"detail": "No such assignment exists."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        # Use standard DRF delete logic
+        self.perform_destroy(existing)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class ServiceRoleTeamAssignmentViewSet(
@@ -54,3 +94,7 @@ class ServiceRoleTeamAssignmentViewSet(
 
     queryset = RoleTeamAssignment.objects.prefetch_related('team__resource', *prefetch_related)
     serializer_class = service_serializers.RoleTeamAssignmentSerializer
+    filter_backends = AnsibleBaseDjangoAppApiView.filter_backends + [
+        ansible_id_backend.TeamAnsibleIdAliasFilterBackend,
+        ansible_id_backend.RoleAssignmentFilterBackend,
+    ]

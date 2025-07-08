@@ -1,3 +1,4 @@
+from django.apps import apps
 from rest_framework import serializers
 
 from ..models import DABContentType, DABPermission, RoleTeamAssignment, RoleUserAssignment
@@ -28,6 +29,8 @@ class BaseAssignmentSerializer(serializers.ModelSerializer):
     role_definition = serializers.SlugRelatedField(read_only=True, slug_field='name')
     created_by_ansible_id = serializers.SerializerMethodField()
     object_ansible_id = serializers.SerializerMethodField()
+    # TODO: use the from_service to control what we sync back to
+    from_service = serializers.CharField(write_only=True)
 
     def get_created_by_ansible_id(self, obj):
         return str(obj.created_by.resource.ansible_id)
@@ -40,9 +43,20 @@ class BaseAssignmentSerializer(serializers.ModelSerializer):
             return str(content_object.resource.ansible_id)
         return None
 
+    def find_existing_assignment(self, queryset):
+        actor_ansible_id = self.validated_data[f'{self.actor_field}_ansible_id']
+        object_id = self.validated_data['object_id']
+        role_definition = self.validated_data['role_definition']
+
+        resource_cls = apps.get_model('dab_resource_registry', 'Resource')
+        actor_resource = resource_cls.objects.get(ansible_id=actor_ansible_id)
+        actor = actor_resource.content_object
+        return queryset.filter(object_id=object_id, role_definition=role_definition, **{self.actor_field: actor}).first()
+
 
 class RoleUserAssignmentSerializer(BaseAssignmentSerializer):
     user_ansible_id = serializers.SerializerMethodField()
+    actor_field = 'user'
 
     class Meta:
         model = RoleUserAssignment
@@ -54,6 +68,7 @@ class RoleUserAssignmentSerializer(BaseAssignmentSerializer):
 
 class RoleTeamAssignmentSerializer(BaseAssignmentSerializer):
     user_ansible_id = serializers.SerializerMethodField()
+    actor_field = 'team'
 
     class Meta:
         model = RoleTeamAssignment
