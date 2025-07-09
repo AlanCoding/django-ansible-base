@@ -31,7 +31,7 @@ def create_dab_permissions(app_config, verbosity=2, interactive=True, using=DEFA
     try:
         DABContentType = apps.get_model("dab_rbac", "DABContentType")
     except LookupError:
-        logger.debug('Skipping DAB RBAC type and permission creation since models are not available')
+        logger.warning('Skipping DAB RBAC type and permission creation since models are not available')
         return
 
     if not router.allow_migrate_model(using, DABContentType):
