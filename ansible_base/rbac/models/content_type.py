@@ -143,8 +143,9 @@ class DABContentTypeManager(django_models.Manager["DABContentType"]):
             kwargs = {'service__in': [get_local_resource_prefix(), 'shared'], 'app_label': app_label, 'model': model}
             # This ask here is actually ambiguous, so we try this extra lookup
             shared_key = ('shared', app_label, model)
-            if (self.db in self._cache) and (('shared', app_label, model) in self._cache[self.db]):
-                return self._cache[self.db][shared_key]
+            if self.db in self._cache:
+                if shared_key in self._cache[self.db]:
+                    return self._cache[self.db][shared_key]
         else:
             service, app_label, model = args
             kwargs = {'service': service, 'app_label': app_label, 'model': model}
@@ -152,7 +153,10 @@ class DABContentTypeManager(django_models.Manager["DABContentType"]):
         try:
             return self._cache[self.db][key]
         except KeyError:
-            ct = self.get(**kwargs)
+            # Here we are adding additional error details for migration problems
+            ct = self.filter(**kwargs).first()
+            if ct is None:
+                raise self.model.DoesNotExist(f'Could not get ContentType {args}, existing: {list(self.values_list("model", flat=True))}')
             self._add_to_cache(self.db, ct)
             return ct
 
