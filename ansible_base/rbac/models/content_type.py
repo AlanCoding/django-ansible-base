@@ -10,7 +10,7 @@ from django.utils.translation import gettext_lazy as _
 from ..remote import RemoteObject, get_local_resource_prefix, get_resource_prefix
 
 
-class DABContentTypeManager(django_models.Manager["DABContentType"]):
+class DABContentTypeManager(django_models.Manager[django_models.Model]):
     """Manager storing DABContentType objects in a local cache like original ContentType.
 
     The major structural difference is that the cache keys have to add the service reference.
@@ -20,23 +20,23 @@ class DABContentTypeManager(django_models.Manager["DABContentType"]):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self._cache: Dict[str, Dict[Union[Tuple[str, str, str], int], "DABContentType"]] = {}
+        self._cache: Dict[str, Dict[Union[Tuple[str, str, str], int], django_models.Model]] = {}
 
     def clear_cache(self) -> None:
         self._cache.clear()
 
-    def create(self, *args: Any, **kwargs: Any) -> "DABContentType":
+    def create(self, *args: Any, **kwargs: Any) -> django_models.Model:
         obj = super().create(*args, **kwargs)
         self._add_to_cache(self.db, obj)
         return obj
 
-    def _add_to_cache(self, using: str, ct: "DABContentType") -> None:
+    def _add_to_cache(self, using: str, ct: django_models.Model) -> None:
         """Store ``ct`` in the manager cache for the given database alias."""
         key = (ct.service, ct.app_label, ct.model)
         self._cache.setdefault(using, {})[key] = ct
         self._cache.setdefault(using, {})[ct.id] = ct
 
-    def _get_from_cache(self, opts: Options, service: str) -> "DABContentType":
+    def _get_from_cache(self, opts: Options, service: str) -> django_models.Model:
         """Return a cached ``DABContentType`` for ``opts`` and ``service``."""
         key = (service, opts.app_label, opts.model_name)
         return self._cache[self.db][key]
@@ -50,7 +50,7 @@ class DABContentTypeManager(django_models.Manager["DABContentType"]):
         model: Union[Type[django_models.Model], django_models.Model, RemoteObject, Type[RemoteObject]],
         for_concrete_model: bool = True,
         service: Optional[str] = None,
-    ) -> "DABContentType":
+    ) -> django_models.Model:
         # Is a remote object, we only know of these objects by virtue of their content type
         if isinstance(model, RemoteObject):
             ct = model.content_type
@@ -84,7 +84,7 @@ class DABContentTypeManager(django_models.Manager["DABContentType"]):
         *model_list: Union[Type[django_models.Model], django_models.Model],
         for_concrete_models: bool = True,
         service: Optional[str] = None,
-    ) -> Dict[Type[django_models.Model], "DABContentType"]:
+    ) -> Dict[Type[django_models.Model], django_models.Model]:
         """Return ``DABContentType`` objects for each model in ``model_list``.
 
         This gets deep into the customization of unique rules for DAB RBAC.
@@ -92,7 +92,7 @@ class DABContentTypeManager(django_models.Manager["DABContentType"]):
         and this will rely on that assumption, which compares to app_label
         in the original ContentType model.
         """
-        results: Dict[Type[django_models.Model], "DABContentType"] = {}
+        results: Dict[Type[django_models.Model], django_models.Model] = {}
         # A keyed by (service, app_name) unlike Django where it was just app_name
         needed_models: Dict[Tuple[str, str], set[str]] = defaultdict(set)
         # A dict of (service, app_name, model_name), differs from Django ContentType
@@ -135,8 +135,12 @@ class DABContentTypeManager(django_models.Manager["DABContentType"]):
                 )
         return results
 
-    def get_by_natural_key(self, *args: str) -> "DABContentType":
-        """Return the content type identified by its natural key."""
+    def get_by_natural_key(self, *args: str) -> django_models.Model:
+        """Return the content type identified by its natural key.
+
+        Note that we can not type hint the return value fully because it is used in migrations.
+        Migrations will return a prior model state.
+        """
         if len(args) == 2:
             service = get_local_resource_prefix()
             app_label, model = args
@@ -160,7 +164,7 @@ class DABContentTypeManager(django_models.Manager["DABContentType"]):
             self._add_to_cache(self.db, ct)
             return ct
 
-    def get_for_id(self, id: int) -> "DABContentType":
+    def get_for_id(self, id: int) -> django_models.Model:
         """Return the content type with primary key ``id`` from the cache."""
         try:
             return self._cache[self.db][id]
