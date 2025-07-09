@@ -56,11 +56,17 @@ def permissions_allowed_for_system_role() -> dict[Type[Model], list[str]]:
     return permissions_by_model
 
 
-def permissions_allowed_for_remote_cls(cls: Type[RemoteObject]) -> dict[Union[Type[Model], Type[RemoteObject]], list[str]]:
-    "Model is on remote server, return valid permissions via the content type definitions"
+def permissions_allowed_for_role(cls) -> dict[Union[Type[Model], Type[RemoteObject]], list[str]]:
+    "Permission codenames valid for a RoleDefinition of given class, organized by permission class"
+    if cls is None:
+        return permissions_allowed_for_system_role()
+
+    if not permission_registry.is_registered(cls):
+        raise ValidationError(f'Django-ansible-base RBAC does not track permissions for model {cls._meta.model_name}')
+
     permissions_by_model = defaultdict(list)
-    # Add permissions for the current type
-    cls_ct = cls.get_ct_from_type()
+
+    cls_ct = permission_registry.content_type_model.objects.get_for_model(cls)
     for permission in cls_ct.dab_permissions.all():
         if not is_add_perm(permission.codename):
             permissions_by_model[cls].append(permission.codename)
@@ -69,27 +75,6 @@ def permissions_allowed_for_remote_cls(cls: Type[RemoteObject]) -> dict[Union[Ty
     for ct in cls_ct.child_content_types.prefetch_related('dab_permissions'):
         for permission in ct.dab_permissions.all():
             permissions_by_model[ct.model_class()].append(permission.codename)
-    return permissions_by_model
-
-
-def permissions_allowed_for_role(cls) -> dict[Union[Type[Model], Type[RemoteObject]], list[str]]:
-    "Permission codenames valid for a RoleDefinition of given class, organized by permission class"
-    if cls is None:
-        return permissions_allowed_for_system_role()
-    elif issubclass(cls, RemoteObject):
-        return permissions_allowed_for_remote_cls(cls)
-
-    if not permission_registry.is_registered(cls):
-        raise ValidationError(f'Django-ansible-base RBAC does not track permissions for model {cls._meta.model_name}')
-
-    # Include direct model permissions (except for add permission)
-    permissions_by_model = defaultdict(list)
-    permissions_by_model[cls] = [codename for codename in codenames_for_cls(cls) if not is_add_perm(codename)]
-
-    # Include model permissions for all child models, including the add permission
-    for rel, child_cls in permission_registry.get_child_models(cls):
-        permissions_by_model[child_cls] += codenames_for_cls(child_cls)
-
     return permissions_by_model
 
 
