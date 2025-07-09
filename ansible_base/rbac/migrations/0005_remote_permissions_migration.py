@@ -10,7 +10,7 @@ def create_types_and_permissions(apps, schema_editor):
     """
     from ansible_base.rbac.management import create_dab_permissions
 
-    create_dab_permissions(apps=apps)
+    create_dab_permissions(apps.get_app_config('dab_rbac'), apps=apps)
 
 
 def migrate_content_type(apps, schema_editor):
@@ -35,7 +35,7 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunPython(migrate_content_type, migrations.RunPython.noop),
+        migrations.RunPython(create_types_and_permissions, migrations.RunPython.noop),
         migrations.RunPython(migrate_content_type, migrations.RunPython.noop),
         migrations.RemoveField(
             model_name='dabpermission',
