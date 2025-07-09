@@ -202,19 +202,19 @@ class TestRoleBasedAssignment:
         member_rd.give_permission(user, child_team)
         admin_rd.give_permission(user, child_team)
         response = user_api_client.post(url, data=data)
-        assert response.status_code == 400
+        assert response.status_code == 400, response.data
         assert 'object does not exist' in response.data['team'][0]
         admin_rd.remove_permission(user, child_team)  # hacky, need to test (1) in isolation of (2)
 
         # (2) user does not have admin permissions to the target (child) team, cannot make assignment
         member_rd.give_permission(user, parent_team)
         response = user_api_client.post(url, data=data)
-        assert response.status_code == 403
+        assert response.status_code == 403, response.data
 
         # (3) with admin permission to child team and view permission to parent, can make assignment
         admin_rd.give_permission(user, child_team)
         response = user_api_client.post(url, data=data)
-        assert response.status_code == 201
+        assert response.status_code == 201, response.data
         assert rando.has_obj_perm(inventory, 'change')
 
 

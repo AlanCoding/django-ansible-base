@@ -183,6 +183,11 @@ class ServiceIndexRootView(AnsibleBaseDjangoAppApiView):
         data['metadata'] = get_relative_url('service-metadata')
         data['resources'] = get_relative_url('resource-list')
         data['resource-types'] = get_relative_url('resourcetype-list')
+        if 'ansible_base.rbac' in settings.INSTALLED_APPS:
+            data['role-types'] = get_relative_url('dabcontenttype-list')
+            data['role-permissions'] = get_relative_url('dabpermission-list')
+            data['role-user-assignments'] = get_relative_url('serviceuserassignment-list')
+            data['role-team-assignments'] = get_relative_url('serviceteamassignment-list')
         return Response(data)
 
 
