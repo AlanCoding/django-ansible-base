@@ -59,7 +59,16 @@ class ManagedRoleConstructor:
         if created:
             permissions = self.get_permissions(apps)
             permission_cls = apps.get_model('dab_rbac', 'DABPermission')
-            perm_list = [permission_cls.objects.get(codename=str_perm) for str_perm in permissions]
+            perm_list = []
+            for str_perm in permissions:
+                try:
+                    permission_cls.objects.get(codename=str_perm)
+                except permission_cls.DoesNotExist:
+                    # Better error handling for debugging
+                    db_codenames = list(permission_cls.objects.values_list('codename', flat=True))
+                    raise permission_cls.DoesNotExist(
+                        f'Permission codename {str_perm} does not exist. Manged role {self} expected: {permissions}\n Database permissions: {db_codenames}'
+                    )
             rd.permissions.add(*perm_list)
             logger.info(f'Created {self.shortname} managed role definition, name={self.name}')
             logger.debug(f'Data of {self.name} role definition: {defaults}')
