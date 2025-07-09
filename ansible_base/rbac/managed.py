@@ -67,7 +67,7 @@ class ManagedRoleConstructor:
                     # Better error handling for debugging
                     db_codenames = list(permission_cls.objects.values_list('codename', flat=True))
                     raise permission_cls.DoesNotExist(
-                        f'Permission codename {str_perm} does not exist. Manged role {self} expected: {permissions}\n Database permissions: {db_codenames}'
+                        f'Permission codename {str_perm} does not exist. Manged role {self}\n expected: {permissions}\n Database permissions: {db_codenames}'
                     )
             rd.permissions.add(*perm_list)
             logger.info(f'Created {self.shortname} managed role definition, name={self.name}')
