@@ -62,7 +62,7 @@ class ManagedRoleConstructor:
             perm_list = []
             for str_perm in permissions:
                 try:
-                    permission_cls.objects.get(codename=str_perm)
+                    perm_list.append(permission_cls.objects.get(codename=str_perm))
                 except permission_cls.DoesNotExist:
                     # Better error handling for debugging
                     db_codenames = list(permission_cls.objects.values_list('codename', flat=True))
