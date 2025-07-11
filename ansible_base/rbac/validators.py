@@ -56,6 +56,26 @@ def permissions_allowed_for_system_role() -> dict[Type[Model], list[str]]:
     return permissions_by_model
 
 
+def get_descendent_models_from_db(main_ct: Model):
+    """For a given content type, get all content types from the database that reference them as a parent
+
+    Including any content types that reference a content type that reference this content type as a parent.
+    """
+    seen_ids = set()
+    result = []
+    queue = [main_ct]
+
+    while queue:
+        current = queue.pop(0)
+        for child in current.child_content_types.all():
+            if child.pk not in seen_ids:
+                seen_ids.add(child.pk)
+                result.append(child)
+                queue.append(child)
+
+    return result
+
+
 def permissions_allowed_for_role(cls) -> dict[Union[Type[Model], Type[RemoteObject]], list[str]]:
     "Permission codenames valid for a RoleDefinition of given class, organized by permission class"
     if cls is None:
@@ -66,19 +86,21 @@ def permissions_allowed_for_role(cls) -> dict[Union[Type[Model], Type[RemoteObje
 
     permissions_by_model = defaultdict(list)
 
+    # Warm cache to load all types and related permissions
+    permission_registry.content_type_model.objects.warm_cache(permission_registry.content_type_model.objects.prefetch_related('dab_permissions'))
+
+    # Add direct model permissions
     cls_ct = permission_registry.content_type_model.objects.get_for_model(cls)
     for permission in cls_ct.dab_permissions.all():
         if not is_add_perm(permission.codename):
             permissions_by_model[cls].append(permission.codename)
 
     # Add permissions for all child types
-    for ct in cls_ct.child_content_types.prefetch_related('dab_permissions'):
-        for permission in ct.dab_permissions.prefetch_related('content_type__child_content_types'):
-            permissions_by_model[ct.model_class()].append(permission.codename)
-            # Process grandchild models
-            for grandchild_ct in permission.content_type.child_content_types.all():
-                for grandchild_perm in grandchild_ct.dab_permissions.all():
-                    permissions_by_model[grandchild_ct.model_class()].append(grandchild_perm.codename)
+    for ct in get_descendent_models_from_db(cls_ct):
+        for child_permission in ct.dab_permissions.all():
+            # Include add permissions for child models
+            permissions_by_model[ct.model_class()].append(child_permission.codename)
+
     return permissions_by_model
 
 
