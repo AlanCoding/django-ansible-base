@@ -79,14 +79,6 @@ class TeamType(SharedResourceTypeSerializer):
     )
 
 
-class RoleDefinitionPermissionsSerializer(serializers.Serializer):
-    permissions = serializers.SlugRelatedField(
-        slug_field='api_slug',
-        read_only=True,
-        many=True,
-    )
-
-
 class LenientPermissionSlugListField(serializers.ListField):
     child = serializers.CharField()
 
@@ -100,7 +92,6 @@ class LenientPermissionSlugListField(serializers.ListField):
 
 class RoleDefinitionType(SharedResourceTypeSerializer):
     RESOURCE_TYPE = "roledefinition"
-    ADDITIONAL_DATA_SERIALIZER = RoleDefinitionPermissionsSerializer
     UNIQUE_FIELDS = ("name",)
 
     name = serializers.CharField()
