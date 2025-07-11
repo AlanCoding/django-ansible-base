@@ -27,6 +27,13 @@ def migrate_content_type(apps, schema_editor):
         cls = apps.get_model('dab_rbac', model_name)
         cls.objects.all().delete()
 
+    # DABPermission model had api_slug added in last migration
+    # if records existed before this point, it needs to be filled in
+    permission_cls = apps.get_model('dab_rbac', 'DABPermission')
+    for permission in permission_cls.objects.all():
+        permission.api_slug = f'{permission.new_content_type.service}.{permission.codename}'
+        permission.save()
+
 
 class Migration(migrations.Migration):
 
