@@ -1,3 +1,4 @@
+from django.db import transaction
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -59,10 +60,8 @@ class ServiceRoleUserAssignmentViewSet(
 
         existing = serializer.find_existing_assignment(self.get_queryset())
         if existing:
-            return Response(
-                {"detail": "This assignment already exists."},
-                status=status.HTTP_409_CONFLICT,
-            )
+            output_serializer = self.get_serializer(existing)
+            return Response(output_serializer.data, status=status.HTTP_200_OK)
 
         instance = serializer.save()
         output_serializer = self.get_serializer(instance)
@@ -75,14 +74,20 @@ class ServiceRoleUserAssignmentViewSet(
 
         existing = serializer.find_existing_assignment(self.get_queryset())
         if not existing:
-            return Response(
-                {"detail": "No such assignment exists."},
-                status=status.HTTP_409_CONFLICT,
-            )
+            output_serializer = self.get_serializer(existing)
+            return Response(output_serializer.data, status=status.HTTP_200_OK)
 
         # Use standard DRF delete logic
         self.perform_destroy(existing)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    def perform_destroy(self, instance):
+        if instance.content_type_id:
+            with transaction.atomic():
+                instance.role_definition.remove_permission(instance.actor, instance.content_object)
+        else:
+            with transaction.atomic():
+                instance.role_definition.remove_global_permission(instance.actor)
 
 
 class ServiceRoleTeamAssignmentViewSet(
