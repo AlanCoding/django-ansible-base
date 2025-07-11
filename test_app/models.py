@@ -269,7 +269,7 @@ class ManualExtraUUIDModel(models.Model):
     """Extra-uniquene UUID made by manually feeding in a prior UUIDModel
 
     An example would be:
-    ManualExtraUUIDModel.objects.create(organization=org)
+    ManualExtraUUIDModel.objects.create(uuidmodel_ptr=AutoExtraUUIDModel.objects.create(organization=org))
     """
 
     uuidmodel_ptr = models.OneToOneField(UUIDModel, on_delete=models.CASCADE, editable=False, related_name="+", primary_key=True)
