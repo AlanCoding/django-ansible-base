@@ -1,4 +1,7 @@
+from crum import impersonate
 from django.apps import apps
+from django.db import transaction
+from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
 
 from ..models import DABContentType, DABPermission, RoleDefinition, RoleTeamAssignment, RoleUserAssignment
@@ -35,6 +38,26 @@ class ActorAnsibleIDField(serializers.Field):
         return resource.content_object
 
 
+class ObjectIDAnsibleIDField(serializers.Field):
+    "This is an ansible_id field intended to be used with source pointing to object_id, so, does conversion"
+
+    def to_representation(self, value):
+        "The source for this field is object_id, which is ignored, use content_object instead"
+        assignment = self.parent.instance
+        content_object = assignment.content_object
+        if isinstance(content_object, RemoteObject):
+            return None
+        if hasattr(content_object, 'resource'):
+            return str(content_object.resource.ansible_id)
+        return None
+
+    def to_internal_value(self, value):
+        "Targeting object_id, this converts ansible_id into object_id"
+        resource_cls = apps.get_model('dab_resource_registry', 'Resource')
+        resource = resource_cls.objects.get(ansible_id=value)
+        return resource.object_id
+
+
 assignment_common_fields = ('created', 'created_by_ansible_id', 'object_id', 'object_ansible_id', 'content_type', 'role_definition')
 
 
@@ -42,26 +65,69 @@ class BaseAssignmentSerializer(serializers.ModelSerializer):
     content_type = serializers.SlugRelatedField(read_only=True, slug_field='api_slug')
     role_definition = serializers.SlugRelatedField(slug_field='name', queryset=RoleDefinition.objects.all())
     created_by_ansible_id = ActorAnsibleIDField(source='created_by', required=False)
-    object_ansible_id = serializers.SerializerMethodField()
+    object_ansible_id = ObjectIDAnsibleIDField(source='object_id', required=False)
     # TODO: use the from_service to control what we sync back to
     from_service = serializers.CharField(write_only=True)
 
     def get_created_by_ansible_id(self, obj):
         return str(obj.created_by.resource.ansible_id)
 
-    def get_object_ansible_id(self, obj):
-        content_object = obj.content_object
-        if isinstance(content_object, RemoteObject):
-            return None
-        if hasattr(content_object, 'resource'):
-            return str(content_object.resource.ansible_id)
-        return None
+    def validate(self, attrs):
+        """The object_id vs ansible_id is the only dual-write case, where we have to accept either
+
+        So this does the mutual validation to assure we have sufficient data.
+        """
+        has_oid = 'object_id' in self.initial_data
+        has_oaid = 'object_ansible_id' in self.initial_data
+
+        if not self.partial and not has_oid and not has_oaid:
+            raise serializers.ValidationError("You must provide either 'object_id' or 'object_ansible_id'.")
+
+        # NOTE: right now not enforcing the case you provide both, could check for consistency later
+
+        return attrs
 
     def find_existing_assignment(self, queryset):
         actor = self.validated_data[self.actor_field]
-        object_id = self.validated_data['object_id']
         role_definition = self.validated_data['role_definition']
-        return queryset.filter(object_id=object_id, role_definition=role_definition, **{self.actor_field: actor}).first()
+        object_id = self.validated_data['object_id']
+        filter_kwargs = {self.actor_field: actor}
+        return queryset.filter(role_definition=role_definition, object_id=object_id, **filter_kwargs).first()
+
+    def create(self, validated_data):
+        rd = validated_data['role_definition']
+        actor = validated_data[self.actor_field]
+
+        as_user = None
+        if 'created_by' in validated_data:
+            as_user = validated_data['created_by']
+
+        # Unlike the public view, the action is attributed to the specified user in data
+        with impersonate(as_user):
+
+            object_id = validated_data['object_id']
+            obj = None
+            if object_id:
+                model = rd.content_type.model_class()
+                try:
+                    obj = model.objects.get(pk=object_id)
+                except model.DoesNotExist as exc:
+                    raise serializers.ValidationError({'object_id': str(exc)})
+
+            # Validators not ran, because this should be an internal action
+
+            if rd.content_type:
+                # Object role assignment
+                if not obj:
+                    raise serializers.ValidationError({'object_id': _('Object must be specified for this role assignment')})
+
+                with transaction.atomic():
+                    assignment = rd.give_permission(actor, obj)
+            else:
+                with transaction.atomic():
+                    assignment = rd.give_global_permission(actor)
+
+            return assignment
 
 
 class RoleUserAssignmentSerializer(BaseAssignmentSerializer):
