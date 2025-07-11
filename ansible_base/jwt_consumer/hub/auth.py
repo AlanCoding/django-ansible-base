@@ -65,7 +65,10 @@ class HubJWTAuth(JWTAuthentication):
         for roledef_name, teams in [('Team Admin', admin_teams), ('Team Member', member_teams)]:
 
             # the "shared" "non-local" definition ...
-            roledef = RoleDefinition.objects.get(name=roledef_name)
+            try:
+                roledef = RoleDefinition.objects.get(name=roledef_name)
+            except RoleDefinition.DoesNotExist:
+                raise RoleDefinition.DoesNotExist(f'Expected JWT role {roledef_name} does not exist locally')
 
             # pks for filtering ...
             team_pks = [team.pk for team in teams]
