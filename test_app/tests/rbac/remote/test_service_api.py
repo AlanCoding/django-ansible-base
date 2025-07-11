@@ -49,11 +49,12 @@ def test_role_definition_listed_as_resource(admin_api_client, org_admin_rd):
     org_admin_data = rd_data['Organization Admin']
 
     detail = admin_api_client.get(org_admin_data['url'], format="json")
+    assert detail.status_code == 200, detail.data
     resource_data = detail.data['resource_data']
     assert resource_data['managed'] is True
     assert resource_data['content_type'] == 'shared.organization'
-    assert 'permissions' in detail.data['additional_data']
-    assert 'aap.add_inventory' in detail.data['additional_data']['permissions']
+    assert 'permissions' in detail.data['resource_data']
+    assert 'aap.add_inventory' in detail.data['resource_data']['permissions']
 
 
 @pytest.mark.django_db
