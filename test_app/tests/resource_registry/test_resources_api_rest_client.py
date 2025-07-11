@@ -183,6 +183,40 @@ def test_list_role_permissions_all_pages(resource_client):
     assert resp.json()["count"] > 25
 
 
+def _assert_assignment_matches_data(assignment, data, organization, user):
+    assert 'created' in data, data
+    # assert DateTimeField().to_representation(assignment.created) == data['created']  # TODO
+    assert str(assignment.created_by.resource.ansible_id) == data['created_by_ansible_id']
+    assert assignment.object_id == organization.id
+    assert str(assignment.object_id) == str(data['object_id'])
+    assert str(organization.resource.ansible_id) == data['object_ansible_id']
+    assert 'shared.organization' == data['content_type']
+    assert 'Organization Admin' == data['role_definition']
+    assert str(user.resource.ansible_id) == data['user_ansible_id']
+
+
+@pytest.mark.django_db
+def test_sync_assignment(resource_client, org_admin_rd, user, organization):
+    assignment = org_admin_rd.give_permission(user, organization)
+    resp = resource_client.sync_assignment(assignment)
+
+    assert resp.status_code == 200, resp.text
+
+    data = resp.json()
+    # Existing assignment should be this current assignment
+    _assert_assignment_matches_data(assignment, data, organization, user)
+
+    org_admin_rd.remove_permission(user, organization)
+
+    resp = resource_client.sync_assignment(assignment)  # assignment not actually here locally
+
+    assert resp.status_code == 201, resp.text  # created
+
+    data = resp.json()
+    # All the data, on the remote system, should match our original assignment
+    _assert_assignment_matches_data(assignment, data, organization, user)
+
+
 @pytest.mark.django_db
 def test_get_resource_404(resource_client):
     resource_client.raise_if_bad_request = True
@@ -214,7 +248,7 @@ def test_additional_data_read(resource_client, django_user_model, github_authent
 @pytest.mark.django_db
 @pytest.mark.parametrize('partial', [True, False])
 def test_additional_data_write(resource_client, partial):
-    "Will remove a permission from a role definition using the additional_data field."
+    "Will remove a permission from a role definition."
     rd = RoleDefinition.objects.create_from_permissions(
         permissions=['aap.change_inventory', 'aap.view_inventory'],
         name='change-inv-for-now',
