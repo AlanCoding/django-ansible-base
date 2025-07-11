@@ -43,7 +43,9 @@ class ObjectIDAnsibleIDField(serializers.Field):
 
     def to_representation(self, value):
         "The source for this field is object_id, which is ignored, use content_object instead"
-        assignment = self.parent.instance
+        assignment = getattr(self, "_this_assignment", None)
+        if not assignment:
+            return None
         content_object = assignment.content_object
         if isinstance(content_object, RemoteObject):
             return None
@@ -68,6 +70,11 @@ class BaseAssignmentSerializer(serializers.ModelSerializer):
     object_ansible_id = ObjectIDAnsibleIDField(source='object_id', required=False)
     # TODO: use the from_service to control what we sync back to
     from_service = serializers.CharField(write_only=True)
+
+    def to_representation(self, instance):
+        # hack to surface content_object for ObjectIDAnsibleIDField
+        self.fields["object_ansible_id"]._this_assignment = instance
+        return super().to_representation(instance)
 
     def get_created_by_ansible_id(self, obj):
         return str(obj.created_by.resource.ansible_id)
