@@ -1,4 +1,5 @@
 import logging
+from collections import defaultdict
 
 from django.apps import apps as global_apps
 from django.db import DEFAULT_DB_ALIAS, connection, router
@@ -94,8 +95,14 @@ def sync_DAB_permissions(verbosity=2, using=DEFAULT_DB_ALIAS, apps=global_apps):
             perms.append(permission)
 
     Permission.objects.using(using).bulk_create(perms)
+
+    # This is all just for nice logging
+    perms_by_model_name = defaultdict(list)
     for perm in perms:
-        logger.debug("Adding permission '%s'" % perm)
+        perms_by_model_name[perm.content_type.model].append(perm.codename)
+    for model_name, codenames in perms_by_model_name.items():
+        codename_prnt = ', '.join(codenames)
+        logger.debug(f"Added DAB permissions for model {model_name}: {codename_prnt}")
 
     # Reset the sequence to avoid PK collision later
     if connection.vendor == 'postgresql':
