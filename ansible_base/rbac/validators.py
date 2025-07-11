@@ -71,10 +71,14 @@ def permissions_allowed_for_role(cls) -> dict[Union[Type[Model], Type[RemoteObje
         if not is_add_perm(permission.codename):
             permissions_by_model[cls].append(permission.codename)
 
-    # Add permissions for all child types, although this is probably relatively uncommon for remote models
+    # Add permissions for all child types
     for ct in cls_ct.child_content_types.prefetch_related('dab_permissions'):
-        for permission in ct.dab_permissions.all():
+        for permission in ct.dab_permissions.prefetch_related('content_type__child_content_types'):
             permissions_by_model[ct.model_class()].append(permission.codename)
+            # Process grandchild models
+            for grandchild_ct in permission.content_type.child_content_types.all():
+                for grandchild_perm in grandchild_ct.dab_permissions.all():
+                    permissions_by_model[grandchild_ct.model_class()].append(grandchild_perm.codename)
     return permissions_by_model
 
 
