@@ -128,11 +128,11 @@ def test_apply_role_assignment(admin_api_client, rando, inv_rd, inventory):
     assert not rando.has_obj_perm(inventory, 'change')
     response = admin_api_client.post(url, data=data)
     assert response.status_code == 201, response.data
-    assert not rando.has_obj_perm(inventory, 'change')
+    assert rando.has_obj_perm(inventory, 'change')
 
     # Second try, response code indicates assignment already exists
     response = admin_api_client.post(url, data=data)
-    assert response.status_code == 409, response.data
+    assert response.status_code == 200, response.data
 
 
 @pytest.mark.django_db
