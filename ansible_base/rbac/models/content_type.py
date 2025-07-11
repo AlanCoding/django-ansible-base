@@ -188,6 +188,14 @@ class DABContentTypeManager(django_models.Manager[django_models.Model]):
                 ct.parent_content_type = DABContentType.objects.get(api_slug=pct_slug)
                 ct.save()
 
+    def warm_cache(self, queryset=None):
+        "Put objects from the given queryset into the cache, or all objects"
+        if queryset is None:
+            queryset = self.all()
+
+        for ct in queryset:
+            self._add_to_cache(self.db, ct)
+
 
 class DABContentType(django_models.Model):
     """Like Django ContentType model but scoped by service."""
