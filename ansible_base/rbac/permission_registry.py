@@ -1,3 +1,4 @@
+import inspect
 import logging
 from typing import Optional, Type, Union
 
@@ -9,6 +10,8 @@ from django.db.models.signals import post_delete, post_migrate
 from django.utils.functional import cached_property
 
 from ansible_base.rbac.managed import ManagedRoleConstructor, get_managed_role_constructors
+
+from .remote import RemoteObject
 
 """
 This will record the models that the RBAC system in this app will follow
@@ -205,8 +208,10 @@ class PermissionRegistry:
     def all_registered_models(self):
         return list(self._registry)
 
-    def is_registered(self, obj: Union[ModelBase, Model]) -> bool:
+    def is_registered(self, obj: Union[ModelBase, Model, RemoteObject, Type[RemoteObject]]) -> bool:
         """Tells if the given object or class is a type tracked by DAB RBAC"""
+        if isinstance(obj, RemoteObject) or (inspect.isclass(obj) and issubclass(obj, RemoteObject)):
+            return True  # Pretty much the only way we can create these is via a registered type
         return any((obj._meta.model_name == cls._meta.model_name and obj._meta.app_label == cls._meta.app_label) for cls in self._registry)
 
     def get_model_by_name(self, model_name: str) -> Optional[Type[Model]]:
