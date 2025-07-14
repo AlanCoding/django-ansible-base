@@ -228,7 +228,7 @@ def validate_codename_for_model(codename: str, model: Union[Model, Type[Model], 
         return name
 
     for rel, child_cls in permission_registry.get_child_models(model):
-        child_ct = permission_registry.content_type_model.objects.get_for_model(model)
+        child_ct = permission_registry.content_type_model.objects.get_for_model(child_cls)
         if name in codenames_for_content_type(child_ct):
             return name
     raise RuntimeError(f'The permission {name} is not valid for model {model._meta.model_name}')
