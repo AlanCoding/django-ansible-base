@@ -1,4 +1,5 @@
 import inspect
+import uuid
 from typing import Type, Union
 
 from django.apps import apps
@@ -19,6 +20,25 @@ This module will be the source of truth for things like the projet name.
 """
 
 
+class StandInPK:
+    def __init__(self, ct: models.Model):
+        self.pk_field_type = ct.pk_field_type
+
+    def get_prep_value(self, value: Union[str, int, uuid.UUID]) -> Union[str, int]:
+        if self.pk_field_type == "uuid":
+            if isinstance(value, uuid.UUID):
+                return str(value)
+            return str(uuid.UUID(value))
+        return int(value)
+
+    def to_python(self, value: Union[str, int, uuid.UUID]) -> Union[int, uuid.UUID]:
+        if self.pk_field_type == "uuid":
+            if isinstance(value, uuid.UUID):
+                return value
+            return uuid.UUID(value)
+        return int(value)
+
+
 class StandinMeta:
     def __init__(self, ct: models.Model, abstract=False):
         self.service = ct.service
@@ -26,19 +46,7 @@ class StandinMeta:
         self.app_label = ct.app_label
         self.abstract = abstract
 
-        class PK:
-            def __init__(self, pk_field_type):
-                self.pk_field_type = pk_field_type
-
-            def get_prep_value(self, value):
-                # TODO: handle uuid fields based on
-                # if self.pk_field_type:
-                return int(value)
-
-            def to_python(self, value):
-                return int(value)
-
-        self.pk = PK(ct.pk_field_type)
+        self.pk = StandInPK(ct)
 
 
 class RemoteObject:
@@ -53,6 +61,12 @@ class RemoteObject:
         else:
             if content_type.model != self._meta.model_name:
                 raise RuntimeError(f'RemoteObject created with type {content_type} but with type for {self._meta.model_name}')
+
+        # Raise an early error if the primary key is obviously not valid for the model type
+        try:
+            self._meta.pk.to_python(object_id)
+        except (ValueError, TypeError, AttributeError) as e:
+            raise ValueError(f"Invalid primary key value {object_id} for type {content_type.pk_field_type}, error: {e}")
 
     def __repr__(self):
         return f"<RemoteObject {self.content_type} id={self.object_id}>"
