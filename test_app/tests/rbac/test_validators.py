@@ -144,7 +144,7 @@ def test_no_change_permission_without_view(enabled):
 
 
 @pytest.mark.django_db
-@pytest.mark.parametrize('cls', permission_registry.all_registered_models)
+@pytest.mark.parametrize('cls', sorted(permission_registry.all_registered_models, key=lambda cls: cls._meta.model_name))
 def test_db_model_validators_match(cls):
     "This is a code transition test, making sure new DB-backed methods match model-backed methods"
 
