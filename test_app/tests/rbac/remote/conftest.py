@@ -1,12 +1,15 @@
 import pytest
 
-from ansible_base.rbac.models import DABContentType, DABPermission, RoleDefinition
+from ansible_base.rbac import permission_registry
+from ansible_base.rbac.models import DABPermission, RoleDefinition
+from test_app.models import Organization
 
 
 @pytest.fixture
 def foo_type():
     "Idea is that this is a remote type, in this case, the foo type"
-    return DABContentType.objects.create(service='foo', model='foo', app_label='foo')
+    org_ct = permission_registry.content_type_model.objects.get_for_model(Organization)
+    return permission_registry.content_type_model.objects.create(service='foo', model='foo', app_label='foo', parent_content_type=org_ct)
 
 
 @pytest.fixture
@@ -23,7 +26,7 @@ def foo_rd(foo_type, foo_permission):
 
 @pytest.fixture
 def foo_type_uuid():
-    return DABContentType.objects.create(service='foo', model='foo_uuid', app_label='foo', pk_field_type='uuid')
+    return permission_registry.content_type_model.objects.create(service='foo', model='foo_uuid', app_label='foo', pk_field_type='uuid')
 
 
 @pytest.fixture
