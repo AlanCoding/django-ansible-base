@@ -16,6 +16,7 @@ from ansible_base.rbac.policies import check_content_obj_permission, visible_use
 from ansible_base.rbac.validators import check_locally_managed, validate_permissions_for_model
 
 from ..models import DABContentType, DABPermission, get_evaluation_model
+from ..remote import RemoteObject
 
 
 class RoleDefinitionSerializer(CommonModelSerializer):
@@ -129,6 +130,8 @@ class BaseAssignmentSerializer(CommonModelSerializer):
             if not role_definition.content_type:
                 raise ValidationError({'object_id': _('System role does not allow for object assignment')})
             model = role_definition.content_type.model_class()
+            if issubclass(model, RemoteObject):
+                return model(content_type=role_definition.content_type, object_id=validated_data['object_id'])
             try:
                 obj = serializers.PrimaryKeyRelatedField(queryset=model.access_qs(requesting_user)).to_internal_value(validated_data['object_id'])
             except ValidationError as exc:
