@@ -332,7 +332,7 @@ class RoleDefinition(CommonModel):
         if 'ansible_base.resource_registry' in settings.INSTALLED_APPS:
             from ansible_base.resource_registry.registry import get_registry
 
-            if 'dab_rbac.RoleDefinition' in get_registry().registry:
+            if 'dab_rbac.RoleDefinition' not in get_registry().registry:
                 return self._base_ignore_relations + ['resource']
 
         return self._base_ignore_relations
