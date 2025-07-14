@@ -170,7 +170,7 @@ class RoleDefinition(CommonModel):
 
     objects = RoleDefinitionManager()
     router_basename = 'roledefinition'
-    ignore_relations = ['permissions', 'object_roles', 'content_type', 'teams', 'users']
+    _base_ignore_relations = ['permissions', 'object_roles', 'content_type', 'teams', 'users']
 
     def __str__(self):
         managed_str = ''
@@ -325,6 +325,17 @@ class RoleDefinition(CommonModel):
             perm_qs = permission_qs.filter(role_definitions__in=rd_qs)
             perm_set.update(perm_qs)
         return perm_set
+
+    @property
+    def ignore_relations(self):
+        "If the RoleDefinition model is not registered with resource registry then do not reference related resource"
+        if 'ansible_base.resource_registry' in settings.INSTALLED_APPS:
+            from ansible_base.resource_registry.registry import get_registry
+
+            if 'dab_rbac.RoleDefinition' in get_registry().registry:
+                return self._base_ignore_relations + ['resource']
+
+        return self._base_ignore_relations
 
     def summary_fields(self):
         return {'id': self.id, 'name': self.name, 'description': self.description, 'managed': self.managed}
