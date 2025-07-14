@@ -5,6 +5,8 @@ import pytest
 from ansible_base.lib.utils.response import get_relative_url
 from ansible_base.rbac.remote import RemoteObject
 
+# Role Definitions
+
 
 @pytest.mark.django_db
 def test_role_definition_list_remote_and_local(admin_api_client, inv_rd, foo_rd):
@@ -30,6 +32,20 @@ def test_create_remote_role_definition_for_remote(admin_api_client, foo_type, fo
     assert response.status_code == 201, response.data
     assert response.data['name'] == 'foo-foo-foo-custom'
     assert response.data['permissions'] == ['foo.foo_foo']
+
+
+@pytest.mark.django_db
+def test_create_remote_role_definition_global(admin_api_client, foo_type, foo_permission):
+    "Test creation of a system-wide role definition for a remote model"
+    url = get_relative_url("roledefinition-list")
+    data = dict(name='foo-foo-foo-global', description='bar', permissions=[foo_permission.api_slug], content_type=None)
+    response = admin_api_client.post(url, data=data, format="json")
+    assert response.status_code == 201, response.data
+    assert response.data['name'] == 'foo-foo-foo-global'
+    assert response.data['permissions'] == ['foo.foo_foo']
+
+
+# Role User Assignments
 
 
 @pytest.mark.django_db

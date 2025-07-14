@@ -1,4 +1,3 @@
-import inspect
 import re
 from collections import defaultdict
 from typing import Optional, Type, Union
@@ -28,28 +27,17 @@ def prnt_codenames(codename_set: set[str]) -> str:
     return ', '.join(codename_set)
 
 
-def codenames_for_remote_cls(cls: Union[Type[RemoteObject], RemoteObject]) -> list[str]:
-    """For remote objects, we have to use the database to get its known permissions"""
-    if inspect.isclass(cls):
-        ct = cls.get_ct_from_type()
-    else:
-        ct = cls.content_type
+def codenames_for_content_type(ct: Model):
     return [permission.codename for permission in ct.dab_permissions.all()]
-
-
-def codenames_for_cls(cls: Union[Model, Type[Model], Type[RemoteObject], RemoteObject]) -> list[str]:
-    "Helper method that gives the Django permission codenames for a given class"
-    if (inspect.isclass(cls) and issubclass(cls, RemoteObject)) or isinstance(cls, RemoteObject):
-        return codenames_for_remote_cls(cls)
-    return [t[0] for t in cls._meta.permissions] + [f'{act}_{cls._meta.model_name}' for act in cls._meta.default_permissions]
 
 
 def permissions_allowed_for_system_role() -> dict[Type[Model], list[str]]:
     "Permission codenames useable in system-wide roles, which have content_type set to None"
     permissions_by_model = defaultdict(list)
-    for cls in sorted(permission_registry.all_registered_models, key=lambda cls: cls._meta.model_name):
-        is_team = bool(cls._meta.model_name == 'team')
-        for codename in codenames_for_cls(cls):
+    for ct in permission_registry.content_type_model.objects.all():
+        is_team = bool(ct.model == 'team')
+        cls = ct.model_class()
+        for codename in codenames_for_content_type(ct):
             if is_team and (not codename.startswith('view')):
                 continue  # special exclusion of team object permissions from system-wide roles
             permissions_by_model[cls].append(codename)
@@ -169,9 +157,8 @@ def check_has_change_with_delete(codename_set: set[str], permissions_by_model: d
 
 
 def validate_permissions_for_model(permissions, content_type: Optional[Model], managed: bool = False) -> None:
-    """Validation for creating a RoleDefinition
+    """Validation for creating a RoleDefinition, called by serializer for public API
 
-    This is called by the RoleDefinitionSerializer so clients will get these errors.
     It is also called by manager helper methods like RoleDefinition.objects.create_from_permissions
     which is done as an aid to tests and other apps integrating this library.
     """
@@ -221,7 +208,9 @@ def validate_codename_for_model(codename: str, model: Union[Model, Type[Model], 
     assuming obj is an inventory.
     It also tries to protect the user by throwing an error if the permission does not work.
     """
-    valid_codenames = codenames_for_cls(model)
+    # Calls to get_for_model should be efficient, if problem caller should call warm_cache
+    model_ct = permission_registry.content_type_model.objects.get_for_model(model)
+    valid_codenames = codenames_for_content_type(model_ct)
     if (not codename.startswith('add')) and codename in valid_codenames:
         return codename
     if re.match(r'^[a-z]+$', codename):
@@ -239,7 +228,8 @@ def validate_codename_for_model(codename: str, model: Union[Model, Type[Model], 
         return name
 
     for rel, child_cls in permission_registry.get_child_models(model):
-        if name in codenames_for_cls(child_cls):
+        child_ct = permission_registry.content_type_model.objects.get_for_model(model)
+        if name in codenames_for_content_type(child_ct):
             return name
     raise RuntimeError(f'The permission {name} is not valid for model {model._meta.model_name}')
 
@@ -300,3 +290,35 @@ def check_locally_managed(rd: Model) -> None:
         return
     if rd.name in settings.ANSIBLE_BASE_JWT_MANAGED_ROLES:
         raise ValidationError('Not managed locally, use the resource server instead')
+
+
+class LocalValidators:
+    """This keeps functioning validators that use model data from permission_registry as opposed to DB
+
+    These are only valid if you do not track permissions for remote models,
+    but they can still be used in those cases.
+    """
+
+    @staticmethod
+    def codenames_for_cls(cls: Union[Model, Type[Model]]) -> list[str]:
+        "Helper method that gives the Django permission codenames for a given class"
+        return [t[0] for t in cls._meta.permissions] + [f'{act}_{cls._meta.model_name}' for act in cls._meta.default_permissions]
+
+    @staticmethod
+    def permissions_allowed_for_role(cls) -> dict[Type[Model], list[str]]:
+        "Permission codenames valid for a RoleDefinition of given class, organized by permission class"
+        if cls is None:
+            return permissions_allowed_for_system_role()
+
+        if not permission_registry.is_registered(cls):
+            raise ValidationError(f'Django-ansible-base RBAC does not track permissions for model {cls._meta.model_name}')
+
+        # Include direct model permissions (except for add permission)
+        permissions_by_model = defaultdict(list)
+        permissions_by_model[cls] = [codename for codename in LocalValidators.codenames_for_cls(cls) if not is_add_perm(codename)]
+
+        # Include model permissions for all child models, including the add permission
+        for rel, child_cls in permission_registry.get_child_models(cls):
+            permissions_by_model[child_cls] += LocalValidators.codenames_for_cls(child_cls)
+
+        return permissions_by_model
