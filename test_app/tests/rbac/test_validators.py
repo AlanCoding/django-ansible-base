@@ -1,4 +1,5 @@
 import contextlib
+from copy import deepcopy
 
 import pytest
 from django.test.utils import override_settings
@@ -7,6 +8,7 @@ from rest_framework.exceptions import ValidationError
 from ansible_base.lib.utils.response import get_relative_url
 from ansible_base.rbac.models import RoleDefinition
 from ansible_base.rbac.permission_registry import permission_registry
+from ansible_base.rbac.validators import LocalValidators, permissions_allowed_for_role
 from test_app.models import Credential, Inventory, Organization
 
 
@@ -138,3 +140,19 @@ def test_no_change_permission_without_view(enabled):
             )
     if enabled:
         assert 'needs to include view, got:' in str(exc)
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize('cls', permission_registry.all_registered_models)
+def test_db_model_validators_match(cls):
+    "This is a code transition test, making sure new DB-backed methods match model-backed methods"
+    db_perms = permissions_allowed_for_role(cls)
+    model_perms = LocalValidators.permissions_allowed_for_role(cls)
+
+    # convert data structure into sets because this test does not care about ordering
+    for perms_structure in (db_perms, model_perms):
+        tmp_structure = deepcopy(perms_structure)
+        for main_model, codenames_list in tmp_structure.items():
+            perms_structure[main_model] = set(codenames_list)
+
+    assert db_perms == model_perms
