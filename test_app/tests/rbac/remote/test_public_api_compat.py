@@ -3,7 +3,9 @@ import uuid
 import pytest
 
 from ansible_base.lib.utils.response import get_relative_url
+from ansible_base.rbac import permission_registry
 from ansible_base.rbac.remote import RemoteObject
+from test_app.models import Organization
 
 # Role Definitions
 
@@ -35,7 +37,7 @@ def test_create_remote_role_definition_for_remote(admin_api_client, foo_type, fo
 
 
 @pytest.mark.django_db
-def test_create_remote_role_definition_global(admin_api_client, foo_type, foo_permission):
+def test_create_remote_role_definition_global(admin_api_client, foo_permission):
     "Test creation of a system-wide role definition for a remote model"
     url = get_relative_url("roledefinition-list")
     data = dict(name='foo-foo-foo-global', description='bar', permissions=[foo_permission.api_slug], content_type=None)
@@ -43,6 +45,18 @@ def test_create_remote_role_definition_global(admin_api_client, foo_type, foo_pe
     assert response.status_code == 201, response.data
     assert response.data['name'] == 'foo-foo-foo-global'
     assert response.data['permissions'] == ['foo.foo_foo']
+
+
+@pytest.mark.django_db
+def test_create_remote_role_definition_organization(admin_api_client, foo_permission):
+    "Test creation of an organization-wide role definition for a remote model"
+    url = get_relative_url("roledefinition-list")
+    org_ct = permission_registry.content_type_model.objects.get_for_model(Organization)
+    data = dict(name='foo-foo-foo-org', description='bar', permissions=[foo_permission.api_slug, 'shared.view_organization'], content_type=org_ct.api_slug)
+    response = admin_api_client.post(url, data=data, format="json")
+    assert response.status_code == 201, response.data
+    assert response.data['name'] == 'foo-foo-foo-org'
+    assert set(response.data['permissions']) == {'foo.foo_foo', 'shared.view_organization'}
 
 
 # Role User Assignments
