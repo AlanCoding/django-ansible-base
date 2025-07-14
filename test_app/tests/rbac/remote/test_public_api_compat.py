@@ -1,3 +1,5 @@
+import uuid
+
 import pytest
 
 from ansible_base.lib.utils.response import get_relative_url
@@ -53,3 +55,31 @@ def test_user_role_assignment_remote_and_local(admin_api_client, rando, foo_type
     sf = item['summary_fields']
     assert 'content_object' in sf
     assert sf['content_object'] == {'<remote_object_placeholder>': True, 'model_name': 'foo', 'service': 'foo', 'pk': 42}
+
+
+@pytest.mark.django_db
+def test_give_permission_to_remote_object(admin_api_client, rando, foo_type, foo_rd):
+    a_foo = RemoteObject(content_type=foo_type, object_id=42)
+    assert not rando.has_obj_perm(a_foo, 'foo')
+
+    url = get_relative_url('roleuserassignment-list')
+    # NOTE: at this point the object_id is made up, cross-server coordination is not running here
+    data = {"role_definition": foo_rd.id, "user": rando.pk, "object_id": 42}
+    response = admin_api_client.post(path=url, data=data)
+    assert response.status_code == 201, response.data
+
+    assert rando.has_obj_perm(a_foo, 'foo')
+
+
+@pytest.mark.django_db
+def test_give_permission_to_remote_object_uuid(admin_api_client, rando, foo_type_uuid, foo_rd_uuid):
+    pk_value = str(uuid.uuid4())
+    a_foo = RemoteObject(content_type=foo_type_uuid, object_id=pk_value)
+    assert not rando.has_obj_perm(a_foo, 'foo')
+
+    url = get_relative_url('roleuserassignment-list')
+    data = {"role_definition": foo_rd_uuid.id, "user": rando.pk, "object_id": pk_value}
+    response = admin_api_client.post(path=url, data=data)
+    assert response.status_code == 201, response.data
+
+    assert rando.has_obj_perm(a_foo, 'foo')

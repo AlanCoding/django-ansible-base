@@ -24,7 +24,7 @@ from ansible_base.rbac.prefetch import TypesPrefetch
 from ansible_base.rbac.validators import validate_assignment, validate_permissions_for_model
 from ansible_base.resource_registry.fields import AnsibleResourceField
 
-from ..remote import RemoteObject
+from ..remote import RemoteObject, StandInPK
 from .content_type import DABContentType
 from .fields import FederatedForeignKey
 from .permission import DABPermission
@@ -531,7 +531,7 @@ class ObjectRole(ObjectRoleFields):
             descendents.update(set(target_team.has_roles.all()))
         return descendents
 
-    def expected_direct_permissions(self, types_prefetch=None) -> set[tuple[str, int, Union[int, str, UUID]]]:
+    def expected_direct_permissions(self, types_prefetch=None) -> set[tuple[str, int, Union[int, UUID]]]:
         """The expected permissions that holding this ObjectRole confers to the holder
 
         This is given in the form of tuples, which represent RoleEvaluation entries.
@@ -546,7 +546,8 @@ class ObjectRole(ObjectRoleFields):
         role_content_type = types_prefetch.get_content_type(self.content_type_id)
         role_model = role_content_type.model_class()
         if role_content_type.is_remote:
-            object_id = self.object_id
+            pk_field = StandInPK(role_content_type)  # remote, mock, field
+            object_id = pk_field.to_python(self.object_id)
         else:
             # ObjectRole.object_id is stored as text, we convert it to the model pk native type
             object_id = role_model._meta.pk.to_python(self.object_id)
