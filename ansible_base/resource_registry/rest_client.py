@@ -20,7 +20,7 @@ urllib3.disable_warnings()
 logger = logging.getLogger('ansible_base.resources_api.rest_client')
 
 
-def get_resource_server_client(service_path, **kwargs):
+def get_resource_server_client(service_path, **kwargs) -> "ResourceAPIClient":
     config = get_resource_server_config()
 
     return ResourceAPIClient(
