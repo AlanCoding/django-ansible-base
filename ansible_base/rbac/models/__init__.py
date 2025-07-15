@@ -41,4 +41,7 @@ def get_evaluation_model(cls):
     if pk_db_type in ('bigint', 'integer', 'integer unsigned'):
         return RoleEvaluation
 
+    if connection.vendor == 'sqlite' and pk_db_type == 'uuid':
+        return RoleEvaluationUUID
+
     raise RuntimeError(f'Model {cls._meta.model_name} primary key type of {type(cls._meta.pk)} (db type {pk_db_type}) is not supported')
