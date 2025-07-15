@@ -13,6 +13,8 @@ for url_type in url_types:
 installed_apps = getattr(settings, 'INSTALLED_APPS', [])
 for app in installed_apps:
     if app.startswith('ansible_base.'):
+        if app in getattr(settings, 'ANSIBLE_BASE_APPS_EXCLUDE_VIEW_LIST', []):
+            continue
         if not importlib.util.find_spec(f'{app}.urls'):
             logger.debug(f'Module {app} does not specify urls.py')
             continue
