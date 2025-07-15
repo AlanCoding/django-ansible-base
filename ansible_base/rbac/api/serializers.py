@@ -306,6 +306,7 @@ class RoleUserAssignmentSerializer(BaseAssignmentSerializer):
     actor_field = 'user'
     user_ansible_id = serializers.UUIDField(
         required=False,
+        write_only=True,
         help_text=_('The resource ID of the user who will receive permissions from this assignment. An alternative to user field.'),
         allow_null=True,  # for ease of use of the browseable API
     )
@@ -322,6 +323,7 @@ class RoleTeamAssignmentSerializer(BaseAssignmentSerializer):
     actor_field = 'team'
     team_ansible_id = serializers.UUIDField(
         required=False,
+        write_only=True,
         help_text=_('The resource ID of the team who will receive permissions from this assignment. An alternative to team field.'),
     )
 
