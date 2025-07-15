@@ -7,9 +7,58 @@ from django.utils.translation import gettext_lazy as _
 from rest_framework.exceptions import ValidationError
 
 from ansible_base.resource_registry.models import Resource, service_id
-from ansible_base.resource_registry.rest_client import ResourceRequestBody, get_resource_server_client
+from ansible_base.resource_registry.rest_client import ResourceAPIClient, ResourceRequestBody, get_resource_server_client
 
 logger = logging.getLogger('ansible_base.resource_registry.utils.sync_to_resource_server')
+
+
+def get_current_user_resource_client() -> ResourceAPIClient:
+    "Returns resource client for the current requesting user from CRUM"
+    user_ansible_id = None
+    user = get_current_user()
+    if user:
+        # If we have a user, try to get their ansible_id and sync as them.
+        # If they don't have one some how, or if we don't have a user, sync with None and
+        # let the resource server decide what to do.
+        try:
+            user_resource = Resource.get_resource_for_object(user)
+            user_ansible_id = user_resource.ansible_id
+        except (Resource.DoesNotExist, AttributeError):
+            logger.error(f"User {user} does not have a resource")
+            pass
+    else:
+        logger.error("No user found, syncing to resource server with jwt_user_id=None")
+
+    return get_resource_server_client(
+        settings.RESOURCE_SERVICE_PATH,
+        jwt_user_id=user_ansible_id,
+        raise_if_bad_request=True,
+    )
+
+
+def should_skip_reverse_sync(instance) -> bool:
+    """For a given Django model object, return True and log if reverse sync should be skipped
+
+    This accounts for 2 cases
+    - environment variable set to skip sync
+    - instance has set flag to skip sync
+
+    This does not account for other skip conditions, like the no_reverse_sync context manager
+    """
+    sync_disabled = os.environ.get('ANSIBLE_REVERSE_RESOURCE_SYNC', 'true').lower() == 'false'
+    if sync_disabled:
+        logger.info(f"Skipping sync of resource {instance} because $ANSIBLE_REVERSE_RESOURCE_SYNC is 'false'")
+        return True
+
+    # This gets set in in signals.handlers.decide_to_sync_update() sometimes.
+    skip_sync = getattr(instance, '_skip_reverse_resource_sync', False)
+    if skip_sync:
+        # Avoid an infinite loop by not syncing resources that came from the resource server.
+        # Or avoid syncing unnecessarily, when a synced field hasn't changed.
+        logger.info(f"Skipping sync of resource {instance}")
+        return True
+
+    return False
 
 
 def sync_to_resource_server(instance, action, ansible_id=None):
@@ -25,18 +74,7 @@ def sync_to_resource_server(instance, action, ansible_id=None):
     object. (For create, the resource is expected to exist before calling this
     function.)
     """
-
-    sync_disabled = os.environ.get('ANSIBLE_REVERSE_RESOURCE_SYNC', 'true').lower() == 'false'
-    if sync_disabled:
-        logger.info(f"Skipping sync of resource {instance} because $ANSIBLE_REVERSE_RESOURCE_SYNC is 'false'")
-        return
-
-    # This gets set in in signals.handlers.decide_to_sync_update() sometimes.
-    skip_sync = getattr(instance, '_skip_reverse_resource_sync', False)
-    if skip_sync:
-        # Avoid an infinite loop by not syncing resources that came from the resource server.
-        # Or avoid syncing unnecessarily, when a synced field hasn't changed.
-        logger.info(f"Skipping sync of resource {instance}")
+    if should_skip_reverse_sync(instance):
         return
 
     if action != "delete" and ansible_id is not None:
@@ -55,26 +93,7 @@ def sync_to_resource_server(instance, action, ansible_id=None):
         logger.info(f"Skipping sync of resource {instance} because its service_id is local")
         return
 
-    user_ansible_id = None
-    user = get_current_user()
-    if user:
-        # If we have a user, try to get their ansible_id and sync as them.
-        # If they don't have one some how, or if we don't have a user, sync with None and
-        # let the resource server decide what to do.
-        try:
-            user_resource = Resource.get_resource_for_object(user)
-            user_ansible_id = user_resource.ansible_id
-        except (Resource.DoesNotExist, AttributeError):
-            logger.error(f"User {user} does not have a resource")
-            pass
-    else:
-        logger.error("No user found, syncing to resource server with jwt_user_id=None")
-
-    client = get_resource_server_client(
-        settings.RESOURCE_SERVICE_PATH,
-        jwt_user_id=user_ansible_id,
-        raise_if_bad_request=True,
-    )
+    client = get_current_user_resource_client()
 
     if action != "delete":
         ansible_id = resource.ansible_id
