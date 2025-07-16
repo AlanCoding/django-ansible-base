@@ -174,7 +174,7 @@ def test_unassign_endpoint(rando, org_inv_rd, inventory, admin_api_client):
     data = {
         "role_definition": org_inv_rd.name,
         "user_ansible_id": str(rando.resource.ansible_id),
-        "object_ansible_id": str(inventory.organization.resource.ansible_id)
+        "object_ansible_id": str(inventory.organization.resource.ansible_id),
     }
     response = admin_api_client.post(url, data)
     assert response.status_code == 204, response.data
