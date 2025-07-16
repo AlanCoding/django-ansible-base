@@ -1,6 +1,6 @@
 import pytest
 
-from ansible_base.rbac.models import RoleUserAssignment
+from ansible_base.rbac.models import DABContentType, DABPermission, RoleDefinition, RoleUserAssignment
 from ansible_base.rbac.remote import RemoteObject
 from test_app.models import User
 
@@ -46,3 +46,29 @@ def test_prefetch_related_objects(foo_type, foo_rd, inv_rd, inventory):
     assert {assignment.content_object for assignment in RoleUserAssignment.objects.all()} == {a_foo, inventory}
     assert {assignment.content_object for assignment in RoleUserAssignment.objects.all()} == {a_foo, inventory}
     assert {assignment.content_object for assignment in RoleUserAssignment.objects.prefetch_related('content_object')} == {a_foo, inventory}
+
+
+@pytest.mark.django_db
+def test_organization_permission_remote_object(rando, foo_type, organization):
+    """If the remote object is a child of a shared organization object, org roles should evaluate that users have permission
+
+    This is supported by loading a reference to the parent in the RemoteObject.
+    """
+    permissions = []
+    for codename in ('view_foo', 'change_foo', 'foo_foo'):
+        permissions.append(DABPermission.objects.create(codename=codename, content_type=foo_type))
+    view_foo_rd = RoleDefinition.objects.create_from_permissions(
+        name='Foo fooers for the foos in foo service', permissions=[permissions[0].api_slug], content_type=foo_type
+    )
+    a_foo = RemoteObject(content_type=foo_type, object_id=42, parent_reference=organization.pk)
+    assignment = view_foo_rd.give_permission(rando, a_foo)
+    assert str(assignment.object_role.parent_reference) == str(organization.pk)
+    assert not rando.has_obj_perm(a_foo, 'change_foo')
+
+    org_ct = DABContentType.objects.get_for_model(organization)
+    org_foo_rd = RoleDefinition.objects.create_from_permissions(
+        name='Org level foo role', permissions=['view_foo', 'change_foo', 'foo_foo', 'shared.view_organization'], content_type=org_ct
+    )
+    org_foo_rd.give_permission(rando, organization)
+
+    assert rando.has_obj_perm(a_foo, 'foo')
