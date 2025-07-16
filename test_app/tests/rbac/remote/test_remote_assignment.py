@@ -72,3 +72,74 @@ def test_organization_permission_remote_object(rando, foo_type, organization):
     org_foo_rd.give_permission(rando, organization)
 
     assert rando.has_obj_perm(a_foo, 'foo')
+
+
+@pytest.mark.django_db
+def test_object_roles_same_type_different_service(rando):
+    cts = {}
+    rds = {}
+    foos = {}
+    for service_name in ('barland', 'fooland'):
+        # same-named model in both services
+        ct = DABContentType.objects.create(service=service_name, model='foo', app_label='foo')
+        cts[service_name] = ct
+        permissions = []
+        for codename in ('view_foo', 'change_foo', 'foo_foo'):
+            permissions.append(DABPermission.objects.create(codename=codename, content_type=ct))
+        # NOTE: obviously we have to use the full api_slug of permission, as codename would be ambiguous
+        rd = RoleDefinition.objects.create_from_permissions(
+            name=f'The foo role for {service_name} service', permissions=[perm.api_slug for perm in permissions], content_type=ct
+        )
+        rds[service_name] = rd
+        foos[service_name] = RemoteObject(content_type=ct, object_id=4)
+
+    for service_name in ('barland', 'fooland'):
+        # Nothing assigned yet, rando has no permission to fooland or barland
+        assert [rando.has_obj_perm(foos[this_service_name], 'change') for this_service_name in ('barland', 'fooland')] == [False, False]
+
+        rds[service_name].give_permission(rando, foos[service_name])
+
+        # Just has permission to either fooland or barland, according to loop
+        assert [rando.has_obj_perm(foos[this_service_name], 'change') for this_service_name in ('barland', 'fooland')] == [
+            bool(this_service_name == service_name) for this_service_name in ('barland', 'fooland')
+        ]
+
+        rds[service_name].remove_permission(rando, foos[service_name])
+
+
+@pytest.mark.django_db
+def test_org_roles_same_type_different_service(rando, organization):
+    org_ct = DABContentType.objects.get_for_model(organization)
+    cts = {}
+    rds = {}
+    foos = {}
+    for service_name in ('barland', 'fooland'):
+        ct = DABContentType.objects.create(service=service_name, model='foo', app_label='foo', parent_content_type=org_ct)
+        cts[service_name] = ct
+        permissions = []
+        for codename in ('view_foo', 'change_foo', 'foo_foo'):
+            permissions.append(DABPermission.objects.create(codename=codename, content_type=ct))
+
+        rd = RoleDefinition.objects.create_from_permissions(
+            name=f'The organization-level foo role for {service_name} service',
+            permissions=[perm.api_slug for perm in permissions],
+            content_type=org_ct,  # difference from last test
+        )
+        obj_rd = RoleDefinition.objects.create_from_permissions(
+            name=f'Object-level view permission for {service_name} service', permissions=[f'{service_name}.view_foo'], content_type=ct
+        )
+        rds[service_name] = rd
+        foos[service_name] = RemoteObject(content_type=ct, object_id=4, parent_reference=organization.pk)
+        obj_rd.give_permission(rando, foos[service_name])
+
+    for service_name in ('barland', 'fooland'):
+        assert [rando.has_obj_perm(foos[this_service_name], 'change') for this_service_name in ('barland', 'fooland')] == [False, False]
+
+        rds[service_name].give_permission(rando, organization)
+
+        # Has permission to either fooland or barland stuff via organization
+        assert [rando.has_obj_perm(foos[this_service_name], 'change') for this_service_name in ('barland', 'fooland')] == [
+            bool(this_service_name == service_name) for this_service_name in ('barland', 'fooland')
+        ], f'User should have permission to exactly {service_name} resource'
+
+        rds[service_name].remove_permission(rando, organization)
