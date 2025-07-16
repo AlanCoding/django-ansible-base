@@ -227,7 +227,7 @@ class RoleDefinition(CommonModel):
     def remove_permission(self, actor, content_object):
         return self.give_or_remove_permission(actor, content_object, giving=False)
 
-    def get_or_create_object_role(self, **kwargs):
+    def get_or_create_object_role(self, kwargs, defaults):
         """Transaction-safe method to create ObjectRole
 
         The UI will assign many permissions concurrently.
@@ -238,13 +238,13 @@ class RoleDefinition(CommonModel):
         if transaction.get_connection().in_atomic_block:
             try:
                 with transaction.atomic():
-                    object_role = ObjectRole.objects.create(**kwargs)
+                    object_role = ObjectRole.objects.create(**kwargs, **defaults)
                     return (object_role, True)
             except IntegrityError:
                 object_role = ObjectRole.objects.get(**kwargs)
                 return (object_role, False)
         else:
-            object_role = ObjectRole.objects.create(**kwargs)
+            object_role = ObjectRole.objects.create(**kwargs, **defaults)
             return (object_role, True)
 
     def give_or_remove_permission(self, actor, content_object, giving=True, sync_action=False):
@@ -260,13 +260,19 @@ class RoleDefinition(CommonModel):
             object_id = content_object._meta.pk.get_db_prep_value(content_object.pk, connection)
 
         kwargs = dict(role_definition=self, content_type=obj_ct, object_id=object_id)
+        defaults = {}
+
+        # For remote objects, add parent reference so we can do evaluations if needed
+        if isinstance(content_object, RemoteObject):
+            if content_object.parent_reference:
+                defaults['parent_reference'] = content_object.parent_reference
 
         created = False
         object_role = ObjectRole.objects.filter(**kwargs).first()
         if object_role is None:
             if not giving:
                 return  # nothing to do
-            object_role, created = self.get_or_create_object_role(**kwargs)
+            object_role, created = self.get_or_create_object_role(kwargs, defaults)
 
         from ansible_base.rbac.triggers import needed_updates_on_assignment, update_after_assignment
 
@@ -564,28 +570,38 @@ class ObjectRole(ObjectRoleFields):
             object_id = role_model._meta.pk.to_python(self.object_id)
         for permission in types_prefetch.permissions_for_object_role(self):
             permission_content_type = types_prefetch.get_content_type(permission.content_type_id)
+            permission_model = permission_content_type.model_class()
 
             # direct object permission
             if permission.content_type_id == self.content_type_id:
                 expected_evaluations.add((permission.codename, self.content_type_id, object_id))
                 continue
 
-            # add child permission on the parent object, usually only for add permission
+            # Add evaluation for the parent object, usually only for add permission
             if is_add_perm(permission.codename) or settings.ANSIBLE_BASE_CACHE_PARENT_PERMISSIONS:
                 expected_evaluations.add((permission.codename, self.content_type_id, object_id))
 
-            # add child object permission on child objects
-            # Only propogate add permission to children which are parents of the permission model
+            # Add evaluations for child objects, where this role gives permission to child objects
             filter_path = None
             child_model = None
             if is_add_perm(permission.codename):
-                for path, model in permission_registry.get_child_models(role_model):
-                    if '__' in path and model._meta.model_name == permission_content_type.model:
-                        path_to_parent, filter_path = path.split('__', 1)
-                        child_model = permission_content_type.model_class()._meta.get_field(path_to_parent).related_model
-                        eval_ct = DABContentType.objects.get_for_model(child_model).id
-                if not child_model:
-                    continue
+                # Add evaluations for add permission to children which are parents of the permission model
+                # this only matters when for multi-layer inheritance (grandchildren)
+                if issubclass(permission_model, RemoteObject):
+                    eval_ct = permission_content_type.parent_content_type
+                    if eval_ct == role_content_type:
+                        continue  # this permission is for a direct child model
+                else:
+                    for path, model in permission_registry.get_child_models(role_model):
+                        if '__' in path and model._meta.model_name == permission_content_type.model:
+                            path_to_parent, filter_path = path.split('__', 1)
+                            child_model = permission_model._meta.get_field(path_to_parent).related_model
+                            eval_ct = DABContentType.objects.get_for_model(child_model).id
+                            break
+                    if not child_model:
+                        continue  # this permission is for a direct child model
+            elif issubclass(permission_model, RemoteObject):
+                eval_ct = permission.content_type_id
             else:
                 for path, model in permission_registry.get_child_models(role_model):
                     if model._meta.model_name == permission_content_type.model:
@@ -603,8 +619,15 @@ class ObjectRole(ObjectRoleFields):
             if eval_ct in cached_id_lists:
                 id_list = cached_id_lists[eval_ct]
             else:
-                # TODO: build id_list from ObjectRole objects it is remote object
-                id_list = child_model.objects.filter(**{filter_path: object_id}).values_list('pk', flat=True)
+                if issubclass(permission_model, RemoteObject):
+                    # Build id_list from ObjectRole objects if it is remote object
+                    id_list = (
+                        ObjectRole.objects.filter(parent_reference=object_id, content_type=eval_ct)
+                        .values_list(Cast('object_id', output_field=permission_model._meta.pk.django_field()), flat=True)
+                        .distinct()
+                    )
+                else:
+                    id_list = child_model.objects.filter(**{filter_path: object_id}).values_list('pk', flat=True)
                 cached_id_lists[eval_ct] = list(id_list)
 
             for id in id_list:

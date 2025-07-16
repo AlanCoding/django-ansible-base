@@ -38,6 +38,12 @@ class StandInPK:
             return uuid.UUID(value)
         return int(value)
 
+    def django_field(self):
+        "This gives a mock Django field like what it mimics"
+        if self.pk_field_type == "uuid":
+            return models.UUIDField()
+        return models.IntegerField()
+
 
 class StandinMeta:
     def __init__(self, ct: models.Model, abstract=False):
@@ -52,9 +58,11 @@ class StandinMeta:
 class RemoteObject:
     """Placeholder for objects that live in another project."""
 
-    def __init__(self, content_type: models.Model, object_id: Union[int, str]):
+    def __init__(self, content_type: models.Model, object_id: Union[int, str], parent_reference=None):
         self.content_type = content_type
         self.object_id = object_id
+        # Since object is remote, we do not have its properties here, so a pointer to the parent can be specified here
+        self.parent_reference = parent_reference
         if not hasattr(self, '_meta'):
             # If object is created without a type-specific subclass, do the best we can
             self._meta = StandinMeta(content_type, abstract=True)
