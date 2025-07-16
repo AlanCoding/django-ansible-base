@@ -163,3 +163,24 @@ def test_filter_assignment_list(admin_api_client, rando, inv_rd, view_inv_rd, or
     )
     assert response.status_code == 200, response.data
     assert response.data['count'] == 2
+
+
+@pytest.mark.django_db
+def test_unassign_endpoint(rando, org_inv_rd, inventory, admin_api_client):
+    org_inv_rd.give_permission(rando, inventory.organization)
+    assert rando.has_obj_perm(inventory, 'change')
+
+    url = get_relative_url('serviceuserassignment-unassign')
+    data = {
+        "role_definition": org_inv_rd.name,
+        "user_ansible_id": str(rando.resource.ansible_id),
+        "object_ansible_id": str(inventory.organization.resource.ansible_id)
+    }
+    response = admin_api_client.post(url, data)
+    assert response.status_code == 204, response.data
+    assert not rando.has_obj_perm(inventory, 'change')
+
+    # second gets a 200 code
+    response = admin_api_client.post(url, data)
+    assert response.status_code == 200, response.data
+    assert not rando.has_obj_perm(inventory, 'change')

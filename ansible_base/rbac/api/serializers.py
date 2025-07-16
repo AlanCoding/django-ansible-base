@@ -247,14 +247,13 @@ class RoleMetadataSerializer(serializers.Serializer):
     allowed_permissions = serializers.DictField(help_text=_('A List of permissions allowed for a role definition, given its content type.'))
 
 
-class AccessListMixin(AbstractCommonModelSerializer):
-    role_assignments = serializers.SerializerMethodField()
+class AccessListMixin:
 
     @staticmethod
     def summarize_role_definition(role_definition):
         return {"name": role_definition.name, "url": get_url_for_object(role_definition)}
 
-    def get_role_assignments(self, actor):
+    def get_object_role_assignments(self, actor):
         obj = self.context.get("related_object")
         permission = self.context.get("permission")
         ct = self.context.get("content_type")
@@ -292,9 +291,13 @@ class AccessListMixin(AbstractCommonModelSerializer):
         return assignment_list
 
 
-class UserAccessListMixin(AccessListMixin):
-    _expected_fields = ['username', 'role_assignments']
+class UserAccessListMixin(AccessListMixin, serializers.ModelSerializer):
+    "controller uses auth.User model so this needs to be as compatible as possible, thus ModelSerializer"
+    object_role_assignments = serializers.SerializerMethodField()
+    _expected_fields = ['id', 'username', 'summary_fields', 'object_role_assignments']
 
 
-class TeamAccessListMixin(AccessListMixin):
-    _expected_fields = ['name', 'organization', 'role_assignments']
+
+class TeamAccessListMixin(AccessListMixin, AbstractCommonModelSerializer):
+    object_role_assignments = serializers.SerializerMethodField()
+    _expected_fields = ['id', 'name', 'organization', 'summary_fields', 'object_role_assignments']
