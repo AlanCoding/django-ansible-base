@@ -586,7 +586,6 @@ class ObjectRole(ObjectRoleFields):
 
         return (eval_ct, child_model, filter_path)
 
-
     def expected_direct_permissions(self, types_prefetch=None) -> set[tuple[str, int, Union[int, UUID]]]:
         """The expected permissions that holding this ObjectRole confers to the holder
 
