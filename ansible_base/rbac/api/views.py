@@ -33,6 +33,7 @@ from ansible_base.rest_filters.rest_framework import ansible_id_backend
 from ..models import DABContentType, DABPermission, get_evaluation_model
 from ..policies import check_content_obj_permission
 from ..remote import RemoteObject, get_resource_prefix
+from ..sync import maybe_reverse_sync_assignment, maybe_reverse_sync_unassignment
 
 
 def list_combine_values(data: dict[Type[Model], list[str]]) -> list[str]:
@@ -148,12 +149,26 @@ class BaseAssignmentViewSet(AnsibleBaseDjangoAppApiView, ModelViewSet):
             new_qs = model.visible_items(self.request.user, qs)
         return super().filter_queryset(new_qs)
 
+    def remote_sync_assignment(self, assignment):
+        "Intermediary for sync method so that child classes can modify it purely in viewset"
+        maybe_reverse_sync_assignment(assignment)
+
+    def remote_sync_unassignment(self, role_definition, actor, content_object):
+        maybe_reverse_sync_unassignment(role_definition, actor, content_object)
+
     def perform_create(self, serializer):
-        return super().perform_create(serializer)
+        ret = super().perform_create(serializer)
+        self.remote_sync_assignment(serializer.instance)
+        return ret
 
     def perform_destroy(self, instance):
         check_can_remove_assignment(self.request.user, instance)
         check_locally_managed(instance.role_definition)
+
+        # Save properties for sync after it is done locally (at which point assignment will not exist)
+        role_definition = instance.role_definition
+        actor = instance.actor
+        content_object = instance.content_object
 
         if instance.content_type_id:
             with transaction.atomic():
@@ -161,6 +176,8 @@ class BaseAssignmentViewSet(AnsibleBaseDjangoAppApiView, ModelViewSet):
         else:
             with transaction.atomic():
                 instance.role_definition.remove_global_permission(instance.actor)
+
+        self.remote_sync_unassignment(role_definition, actor, content_object)
 
 
 class RoleTeamAssignmentViewSet(BaseAssignmentViewSet):
