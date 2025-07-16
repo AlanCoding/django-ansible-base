@@ -190,7 +190,7 @@ class ResourceAPIClient:
             if ct.service == 'shared':
                 data['object_ansible_id'] = str(content_object.resource.ansible_id)
             else:
-                data['object_id'] = content_object.object_id
+                data['object_id'] = content_object.pk
 
         return self._sync_assignment(data, giving=False)
 
