@@ -1,5 +1,3 @@
-from ansible_base.resource_registry.utils.settings import resource_server_defined  # safe import
-
 """
 Module is a parallel to resource_registry
 
@@ -19,10 +17,11 @@ def reverse_sync_enabled_all_conditions(assignment):
     3. context manager to disable sync
     4. RESOURCE_SERVER setting not actually set
     """
+    from ansible_base.resource_registry.apps import _should_reverse_sync
     from ansible_base.resource_registry.signals.handlers import reverse_sync_enabled
     from ansible_base.resource_registry.utils.sync_to_resource_server import should_skip_reverse_sync
 
-    if not resource_server_defined():
+    if not _should_reverse_sync():
         return False
 
     if not reverse_sync_enabled.enabled:
