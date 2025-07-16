@@ -183,38 +183,59 @@ def test_list_role_permissions_all_pages(resource_client):
     assert resp.json()["count"] > 25
 
 
-def _assert_assignment_matches_data(assignment, data, organization, user):
+def _assert_assignment_matches_data(assignment, data, obj, user):
     assert 'created' in data, data
     # assert DateTimeField().to_representation(assignment.created) == data['created']  # TODO
     assert str(assignment.created_by.resource.ansible_id) == data['created_by_ansible_id']
-    assert assignment.object_id == organization.id
+    assert assignment.object_id == obj.id
     assert str(assignment.object_id) == str(data['object_id'])
-    assert str(organization.resource.ansible_id) == data['object_ansible_id']
-    assert 'shared.organization' == data['content_type']
-    assert 'Organization Admin' == data['role_definition']
+    if hasattr(obj, 'resource'):
+        assert str(obj.resource.ansible_id) == data['object_ansible_id']
+        assert 'shared.organization' == data['content_type']
+        assert 'Organization Admin' == data['role_definition']
+    else:
+        assert 'aap.inventory' == data['content_type']
+        assert 'change-inv' == data['role_definition']
     assert str(user.resource.ansible_id) == data['user_ansible_id']
 
 
 @pytest.mark.django_db
-def test_sync_assignment(resource_client, org_admin_rd, user, organization):
+def test_sync_org_assignment(resource_client, org_admin_rd, user, organization):
     assignment = org_admin_rd.give_permission(user, organization)
     resp = resource_client.sync_assignment(assignment)
-
     assert resp.status_code == 200, resp.text
-
     data = resp.json()
     # Existing assignment should be this current assignment
     _assert_assignment_matches_data(assignment, data, organization, user)
 
     org_admin_rd.remove_permission(user, organization)
-
     resp = resource_client.sync_assignment(assignment)  # assignment not actually here locally
-
     assert resp.status_code == 201, resp.text  # created
-
     data = resp.json()
     # All the data, on the remote system, should match our original assignment
     _assert_assignment_matches_data(assignment, data, organization, user)
+
+
+@pytest.mark.django_db
+def test_sync_obj_assignment(resource_client, user, inventory):
+    inv_rd = RoleDefinition.objects.create_from_permissions(
+        permissions=['change_inventory', 'view_inventory'],
+        name='change-inv',
+        content_type=permission_registry.content_type_model.objects.get_for_model(Inventory),
+    )
+    assignment = inv_rd.give_permission(user, inventory)
+    resp = resource_client.sync_assignment(assignment)
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    # Existing assignment should be this current assignment
+    _assert_assignment_matches_data(assignment, data, inventory, user)
+
+    inv_rd.remove_permission(user, inventory)
+    resp = resource_client.sync_assignment(assignment)  # assignment not actually here locally
+    assert resp.status_code == 201, resp.text  # created
+    data = resp.json()
+    # All the data, on the remote system, should match our original assignment
+    _assert_assignment_matches_data(assignment, data, inventory, user)
 
 
 @pytest.mark.django_db

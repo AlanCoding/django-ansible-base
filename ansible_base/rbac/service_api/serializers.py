@@ -67,8 +67,8 @@ class BaseAssignmentSerializer(serializers.ModelSerializer):
     content_type = serializers.SlugRelatedField(read_only=True, slug_field='api_slug')
     role_definition = serializers.SlugRelatedField(slug_field='name', queryset=RoleDefinition.objects.all())
     created_by_ansible_id = ActorAnsibleIDField(source='created_by', required=False)
-    object_ansible_id = ObjectIDAnsibleIDField(source='object_id', required=False)
-    # TODO: use the from_service to control what we sync back to
+    object_ansible_id = ObjectIDAnsibleIDField(source='object_id', required=False, allow_null=True)
+    object_id = serializers.CharField(allow_blank=True)
     from_service = serializers.CharField(write_only=True)
 
     def to_representation(self, instance):
@@ -84,15 +84,18 @@ class BaseAssignmentSerializer(serializers.ModelSerializer):
 
         So this does the mutual validation to assure we have sufficient data.
         """
-        has_oid = 'object_id' in self.initial_data
-        has_oaid = 'object_ansible_id' in self.initial_data
+        has_oid = bool(self.initial_data.get('object_id'))
+        has_oaid = bool(self.initial_data.get('object_ansible_id'))
 
         if not self.partial and not has_oid and not has_oaid:
             raise serializers.ValidationError("You must provide either 'object_id' or 'object_ansible_id'.")
+        elif not has_oaid:
+            # need to remove blank and null fields or else it can overwrite the non-null non-blank field
+            attrs['object_id'] = self.initial_data['object_id']
 
         # NOTE: right now not enforcing the case you provide both, could check for consistency later
 
-        return attrs
+        return super().validate(attrs)
 
     def find_existing_assignment(self, queryset):
         actor = self.validated_data[self.actor_field]
@@ -116,10 +119,14 @@ class BaseAssignmentSerializer(serializers.ModelSerializer):
             obj = None
             if object_id:
                 model = rd.content_type.model_class()
-                try:
-                    obj = model.objects.get(pk=object_id)
-                except model.DoesNotExist as exc:
-                    raise serializers.ValidationError({'object_id': str(exc)})
+
+                if issubclass(model, RemoteObject):
+                    obj = model(content_type=rd.content_type, object_id=object_id)
+                else:
+                    try:
+                        obj = model.objects.get(pk=object_id)
+                    except model.DoesNotExist as exc:
+                        raise serializers.ValidationError({'object_id': str(exc)})
 
             # Validators not ran, because this should be an internal action
 

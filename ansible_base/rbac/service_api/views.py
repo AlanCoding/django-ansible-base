@@ -53,6 +53,16 @@ class ServiceRoleUserAssignmentViewSet(
         ansible_id_backend.RoleAssignmentFilterBackend,
     ]
 
+    def remote_secondary_sync_assignment(self, assignment, from_service=None):
+        """To allow service-specific sync when getting assignment from /service-index/ endpoint
+
+        Will get a None value for from_service is the superuser is manually testing this endpoint.
+        """
+        pass
+
+    def remote_secondary_sync_unassignment(self, role_definition, actor, content_object, from_service=None):
+        pass
+
     @action(detail=False, methods=['post'], url_path='assign')
     def assign(self, request):
         serializer = self.get_serializer(data=request.data)
@@ -64,6 +74,7 @@ class ServiceRoleUserAssignmentViewSet(
             return Response(output_serializer.data, status=status.HTTP_200_OK)
 
         instance = serializer.save()
+        self.remote_secondary_sync_assignment(serializer.instance, from_service=serializer.validated_data.get('from_service'))
         output_serializer = self.get_serializer(instance)
         return Response(output_serializer.data, status=status.HTTP_201_CREATED)
 
@@ -77,8 +88,14 @@ class ServiceRoleUserAssignmentViewSet(
             output_serializer = self.get_serializer(existing)
             return Response(output_serializer.data, status=status.HTTP_200_OK)
 
+        # Save properties for sync after it is done locally (at which point assignment will not exist)
+        role_definition = existing.role_definition
+        actor = existing.actor
+        content_object = existing.content_object
+
         # Use standard DRF delete logic
         self.perform_destroy(existing)
+        self.remote_secondary_sync_unassignment(role_definition, actor, content_object, from_service=serializer.validated_data.get('from_service'))
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     def perform_destroy(self, instance):
