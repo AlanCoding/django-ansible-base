@@ -548,6 +548,45 @@ class ObjectRole(ObjectRoleFields):
             descendents.update(set(target_team.has_roles.all()))
         return descendents
 
+    def get_child_filters(self, permission, role_content_type, types_prefetch):
+        "Given a permission that a certain object role grants, returns child object filter instructions"
+        filter_path = None
+        child_model = None
+        role_model = role_content_type.model_class()
+        permission_content_type = types_prefetch.get_content_type(permission.content_type_id)
+        permission_model = permission_content_type.model_class()
+        if is_add_perm(permission.codename):
+            # Add evaluations for add permission to children which are parents of the permission model
+            # this only matters when for multi-layer inheritance (grandchildren)
+            if issubclass(permission_model, RemoteObject):
+                eval_ct = permission_content_type.parent_content_type
+                if eval_ct == role_content_type:
+                    return (None, None, None)  # this permission is for a direct child model
+            else:
+                for path, model in permission_registry.get_child_models(role_model):
+                    if '__' in path and model._meta.model_name == permission_content_type.model:
+                        path_to_parent, filter_path = path.split('__', 1)
+                        child_model = permission_model._meta.get_field(path_to_parent).related_model
+                        eval_ct = DABContentType.objects.get_for_model(child_model).id
+                        break
+                if not child_model:
+                    return (None, None, None)  # this permission is for a direct child model
+        elif issubclass(permission_model, RemoteObject):
+            eval_ct = permission.content_type_id
+        else:
+            for path, model in permission_registry.get_child_models(role_model):
+                if model._meta.model_name == permission_content_type.model:
+                    filter_path = path
+                    child_model = model
+                    eval_ct = permission.content_type_id
+                    break
+            else:
+                logger.warning(f'{self.role_definition} listed {permission.codename} but model is not a child, ignoring')
+                return (None, None, None)
+
+        return (eval_ct, child_model, filter_path)
+
+
     def expected_direct_permissions(self, types_prefetch=None) -> set[tuple[str, int, Union[int, UUID]]]:
         """The expected permissions that holding this ObjectRole confers to the holder
 
@@ -569,8 +608,6 @@ class ObjectRole(ObjectRoleFields):
             # ObjectRole.object_id is stored as text, we convert it to the model pk native type
             object_id = role_model._meta.pk.to_python(self.object_id)
         for permission in types_prefetch.permissions_for_object_role(self):
-            permission_content_type = types_prefetch.get_content_type(permission.content_type_id)
-            permission_model = permission_content_type.model_class()
 
             # direct object permission
             if permission.content_type_id == self.content_type_id:
@@ -582,36 +619,9 @@ class ObjectRole(ObjectRoleFields):
                 expected_evaluations.add((permission.codename, self.content_type_id, object_id))
 
             # Add evaluations for child objects, where this role gives permission to child objects
-            filter_path = None
-            child_model = None
-            if is_add_perm(permission.codename):
-                # Add evaluations for add permission to children which are parents of the permission model
-                # this only matters when for multi-layer inheritance (grandchildren)
-                if issubclass(permission_model, RemoteObject):
-                    eval_ct = permission_content_type.parent_content_type
-                    if eval_ct == role_content_type:
-                        continue  # this permission is for a direct child model
-                else:
-                    for path, model in permission_registry.get_child_models(role_model):
-                        if '__' in path and model._meta.model_name == permission_content_type.model:
-                            path_to_parent, filter_path = path.split('__', 1)
-                            child_model = permission_model._meta.get_field(path_to_parent).related_model
-                            eval_ct = DABContentType.objects.get_for_model(child_model).id
-                            break
-                    if not child_model:
-                        continue  # this permission is for a direct child model
-            elif issubclass(permission_model, RemoteObject):
-                eval_ct = permission.content_type_id
-            else:
-                for path, model in permission_registry.get_child_models(role_model):
-                    if model._meta.model_name == permission_content_type.model:
-                        filter_path = path
-                        child_model = model
-                        eval_ct = permission.content_type_id
-                        break
-                else:
-                    logger.warning(f'{self.role_definition} listed {permission.codename} but model is not a child, ignoring')
-                    continue
+            eval_ct, child_model, filter_path = self.get_child_filters(permission, role_content_type, types_prefetch)
+            if not eval_ct:
+                continue
 
             # fetching child objects of an organization is very performance sensitive
             # for multiple permissions of same type, make sure to only do query once
@@ -619,6 +629,8 @@ class ObjectRole(ObjectRoleFields):
             if eval_ct in cached_id_lists:
                 id_list = cached_id_lists[eval_ct]
             else:
+                permission_content_type = types_prefetch.get_content_type(permission.content_type_id)
+                permission_model = permission_content_type.model_class()
                 if issubclass(permission_model, RemoteObject):
                     # Build id_list from ObjectRole objects if it is remote object
                     id_list = (
