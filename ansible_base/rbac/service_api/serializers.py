@@ -68,7 +68,7 @@ class BaseAssignmentSerializer(serializers.ModelSerializer):
     role_definition = serializers.SlugRelatedField(slug_field='name', queryset=RoleDefinition.objects.all())
     created_by_ansible_id = ActorAnsibleIDField(source='created_by', required=False)
     object_ansible_id = ObjectIDAnsibleIDField(source='object_id', required=False, allow_null=True)
-    object_id = serializers.CharField(allow_blank=True)
+    object_id = serializers.CharField(allow_blank=True, required=False)
     from_service = serializers.CharField(write_only=True)
 
     def to_representation(self, instance):

@@ -294,13 +294,24 @@ class UserAccessViewSet(
             actor_qs |= actor_qs.filter(is_superuser=True)
         return actor_qs
 
+    def get_serializer(self, *args, **kwargs):
+        """Awkwardly override this method, because eda-server uses a custom base viewset class.
+
+        Due to how that is structured, you can not go without defining the model unless overwriting this.
+        And we, here, can not give a serializer class at import time because the user model is unknown.
+        So this is the same as the DRF method.
+        """
+        serializer_class = self.get_serializer_class()
+        kwargs.setdefault('context', self.get_serializer_context())
+        return serializer_class(*args, **kwargs)
+
     def get_serializer_class(self):
         actor_cls = self.get_actor_model()
 
         class DynamicActorSerializer(self.serializer_mixin):
             class Meta:
                 model = actor_cls
-                fields = self.serializer_mixin.Meta.fields + self.serializer_mixin._expected_fields
+                fields = self.serializer_mixin._expected_fields
 
         return DynamicActorSerializer
 
