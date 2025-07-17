@@ -15,7 +15,7 @@ def test_user_access_list_remote_obj(admin_api_client, rando, foo_type, foo_rd):
     assert response.status_code == 200
     user_data = {}
     for user_detail in response.data['results']:
-        user_data[user_detail['username']] = user_detail['role_assignments']
+        user_data[user_detail['username']] = user_detail['object_role_assignments']
 
     # User is shown as having direct access to the remote object
     assert rando.username in user_data
