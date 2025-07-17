@@ -291,7 +291,7 @@ class UserAccessViewSet(
         assignment_qs = obj_assignment_qs | global_assignment_qs
         actor_qs = actor_cls.objects.filter(role_assignments__in=assignment_qs)
         if actor_cls._meta.model_name == 'user':
-            actor_qs |= actor_qs.filter(is_superuser=True)
+            actor_qs |= actor_cls.objects.filter(is_superuser=True)
         return actor_qs
 
     def get_serializer(self, *args, **kwargs):
