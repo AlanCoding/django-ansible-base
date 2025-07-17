@@ -24,7 +24,7 @@ def test_user_access_list(admin_api_client, inv_rd, org_inv_rd, inventory, membe
 
     user_data = {}
     for user_detail in response.data['results']:
-        user_data[user_detail['username']] = user_detail['role_assignments']
+        user_data[user_detail['username']] = user_detail['object_role_assignments']
 
     assert u1.username in user_data
     assert len(user_data[u1.username]) == 1
@@ -54,7 +54,7 @@ def test_team_access_list(admin_api_client, inv_rd, org_inv_rd, inventory, membe
 
     team_data = {}
     for team_detail in response.data['results']:
-        team_data[team_detail['name']] = team_detail['role_assignments']
+        team_data[team_detail['name']] = team_detail['object_role_assignments']
 
     assert t1.name in team_data
     assert len(team_data[t1.name]) == 1
