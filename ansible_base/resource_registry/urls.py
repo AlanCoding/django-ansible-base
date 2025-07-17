@@ -3,7 +3,6 @@ import logging
 from django.urls import include, path
 from rest_framework import routers
 
-from ansible_base.rbac.service_api.urls import rbac_service_urls
 from ansible_base.resource_registry import views
 
 logger = logging.getLogger('ansible_base.resource-urls')
@@ -22,5 +21,4 @@ service = [
 
 urlpatterns = [
     path('service-index/', include(service)),
-    path('service-index/', include(rbac_service_urls)),
 ]

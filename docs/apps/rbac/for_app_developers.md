@@ -205,6 +205,27 @@ class MyRemoteObject(RemoteObject):
 
 Then you would set `settings.RBAC_REMOTE_OBJECT_CLASS` to the import path for `MyRemoteObject`.
 
+#### Add the Resource API URLs
+
+```
+from ansible_base.rbac.service_api.urls import rbac_service_urls
+
+urlpatterns = [
+    ...,
+    path('service-index/', include(rbac_service_urls)),
+]
+```
+
+This will add the following paths:
+- `service-index/role-types/`
+- `service-index/role-permissions/`
+- `service-index/role-user-assignments/`
+- `service-index/role-team-assignments/`
+
+Both the role user & team assignment lists have a `assign/` and `unassign/` URL from that base.
+Those can be used to do one-shot synchronization of a single role assignment with
+global identifiers.
+
 ### Evaluating Permissions
 
 The ultimate goal of this system is to evaluate what objects a user
