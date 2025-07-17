@@ -5,6 +5,7 @@ from django.urls import include, path, re_path
 
 from ansible_base.authentication.views.ui_auth import UIAuth
 from ansible_base.lib.dynamic_config.dynamic_urls import api_urls, api_version_urls, root_urls
+from ansible_base.rbac.service_api.urls import rbac_service_urls
 from ansible_base.resource_registry.urls import urlpatterns as resource_api_urls
 from test_app import views
 from test_app.router import router as test_app_router
@@ -20,6 +21,7 @@ urlpatterns = [
     # Admin application
     re_path(r"^admin/", admin.site.urls, name="admin"),
     path('api/v1/', include(resource_api_urls)),
+    path('api/v1/', include(rbac_service_urls)),
     path('api/v1/', views.api_root),
     path('api/v1/timeout_view/', views.timeout_view, name='test-timeout-view'),
     path('login/', include('rest_framework.urls')),
