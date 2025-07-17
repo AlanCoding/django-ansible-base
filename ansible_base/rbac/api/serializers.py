@@ -291,14 +291,17 @@ class AccessListMixin:
 
         return assignment_list
 
+    def get_url(self, obj) -> str:
+        return get_url_for_object(obj)
+
 
 class UserAccessListMixin(AccessListMixin, serializers.ModelSerializer):
     "controller uses auth.User model so this needs to be as compatible as possible, thus ModelSerializer"
 
     object_role_assignments = serializers.SerializerMethodField()
-    _expected_fields = ['id', 'username', 'summary_fields', 'object_role_assignments']
+    _expected_fields = ['id', 'url', 'username', 'is_superuser', 'object_role_assignments']
 
 
 class TeamAccessListMixin(AccessListMixin, AbstractCommonModelSerializer):
     object_role_assignments = serializers.SerializerMethodField()
-    _expected_fields = ['id', 'name', 'organization', 'summary_fields', 'object_role_assignments']
+    _expected_fields = ['id', 'url', 'name', 'organization', 'object_role_assignments']
