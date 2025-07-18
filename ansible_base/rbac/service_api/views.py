@@ -41,24 +41,12 @@ class RolePermissionTypeViewSet(
 prefetch_related = ('created_by__resource', 'content_type', 'role_definition')
 
 
-class ServiceRoleUserAssignmentViewSet(
+class BaseSerivceRoleAssignmentViewSet(
     AnsibleBaseDjangoAppApiView,
     mixins.ListModelMixin,
     GenericViewSet,
 ):
     """List of assignments for cross-service communication"""
-
-    queryset = RoleUserAssignment.objects.prefetch_related('user__resource', *prefetch_related)
-    serializer_class = service_serializers.RoleUserAssignmentSerializer
-    filter_backends = AnsibleBaseDjangoAppApiView.filter_backends + [
-        ansible_id_backend.UserAnsibleIdAliasFilterBackend,
-        ansible_id_backend.RoleAssignmentFilterBackend,
-    ]
-    permission_classes = try_add_oauth2_scope_permission(
-        [
-            HasResourceRegistryPermissions,
-        ]
-    )
 
     def remote_secondary_sync_assignment(self, assignment, from_service=None):
         """To allow service-specific sync when getting assignment from /service-index/ endpoint
@@ -113,6 +101,20 @@ class ServiceRoleUserAssignmentViewSet(
         else:
             with transaction.atomic():
                 instance.role_definition.remove_global_permission(instance.actor)
+
+
+class ServiceRoleUserAssignmentViewSet(BaseSerivceRoleAssignmentViewSet):
+    queryset = RoleUserAssignment.objects.prefetch_related('user__resource', *prefetch_related)
+    serializer_class = service_serializers.RoleUserAssignmentSerializer
+    filter_backends = AnsibleBaseDjangoAppApiView.filter_backends + [
+        ansible_id_backend.UserAnsibleIdAliasFilterBackend,
+        ansible_id_backend.RoleAssignmentFilterBackend,
+    ]
+    permission_classes = try_add_oauth2_scope_permission(
+        [
+            HasResourceRegistryPermissions,
+        ]
+    )
 
 
 class ServiceRoleTeamAssignmentViewSet(
