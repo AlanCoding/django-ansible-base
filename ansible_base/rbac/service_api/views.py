@@ -59,8 +59,7 @@ class BaseSerivceRoleAssignmentViewSet(
         "To allow service-specific sync when removing an assignment via this viewset"
         pass
 
-    @action(detail=False, methods=['post'], url_path='assign')
-    def assign(self, request):
+    def _assign(self, request):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -74,8 +73,7 @@ class BaseSerivceRoleAssignmentViewSet(
         output_serializer = self.get_serializer(instance)
         return Response(output_serializer.data, status=status.HTTP_201_CREATED)
 
-    @action(detail=False, methods=['post'], url_path='unassign')
-    def unassign(self, request):
+    def _unassign(self, request):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -116,6 +114,14 @@ class ServiceRoleUserAssignmentViewSet(BaseSerivceRoleAssignmentViewSet):
         ]
     )
 
+    @action(detail=False, methods=['post'], url_path='assign')
+    def assign(self, request):
+        return self._assign(request)
+
+    @action(detail=False, methods=['post'], url_path='unassign')
+    def unassign(self, request):
+        return self._unassign(request)
+
 
 class ServiceRoleTeamAssignmentViewSet(
     AnsibleBaseDjangoAppApiView,
@@ -135,3 +141,11 @@ class ServiceRoleTeamAssignmentViewSet(
             HasResourceRegistryPermissions,
         ]
     )
+
+    @action(detail=False, methods=['post'], url_path='assign')
+    def assign(self, request):
+        return self._assign(request)
+
+    @action(detail=False, methods=['post'], url_path='unassign')
+    def unassign(self, request):
+        return self._unassign(request)
