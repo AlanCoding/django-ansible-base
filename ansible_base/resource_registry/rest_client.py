@@ -112,7 +112,16 @@ class ResourceAPIClient:
         logger.debug(f"Response status code from {url}: {resp.status_code}")
 
         if self.raise_if_bad_request:
-            resp.raise_for_status()
+            try:
+                resp.raise_for_status()
+            except requests.exceptions.HTTPError as e:
+                content = resp.text
+
+                # Re-raise with more context
+                raise requests.exceptions.HTTPError(
+                    f"{e}\nResponse content: {content}",
+                    response=resp
+                ) from None
         return resp
 
     def _get_request_dict(self, data: ResourceRequestBody):
