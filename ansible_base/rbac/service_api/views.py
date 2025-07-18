@@ -5,7 +5,9 @@ from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet, mixins
 
 from ansible_base.lib.utils.views.django_app_api import AnsibleBaseDjangoAppApiView
+from ansible_base.lib.utils.views.permissions import try_add_oauth2_scope_permission
 from ansible_base.rest_filters.rest_framework import ansible_id_backend
+from ansible_base.resource_registry.views import HasResourceRegistryPermissions
 
 from ..models import DABContentType, DABPermission, RoleTeamAssignment, RoleUserAssignment
 from . import serializers as service_serializers
@@ -52,6 +54,11 @@ class ServiceRoleUserAssignmentViewSet(
         ansible_id_backend.UserAnsibleIdAliasFilterBackend,
         ansible_id_backend.RoleAssignmentFilterBackend,
     ]
+    permission_classes = try_add_oauth2_scope_permission(
+        [
+            HasResourceRegistryPermissions,
+        ]
+    )
 
     def remote_secondary_sync_assignment(self, assignment, from_service=None):
         """To allow service-specific sync when getting assignment from /service-index/ endpoint
@@ -121,3 +128,8 @@ class ServiceRoleTeamAssignmentViewSet(
         ansible_id_backend.TeamAnsibleIdAliasFilterBackend,
         ansible_id_backend.RoleAssignmentFilterBackend,
     ]
+    permission_classes = try_add_oauth2_scope_permission(
+        [
+            HasResourceRegistryPermissions,
+        ]
+    )
