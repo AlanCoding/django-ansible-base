@@ -61,6 +61,7 @@ class ServiceRoleUserAssignmentViewSet(
         pass
 
     def remote_secondary_sync_unassignment(self, role_definition, actor, content_object, from_service=None):
+        "To allow service-specific sync when removing an assignment via this viewset"
         pass
 
     @action(detail=False, methods=['post'], url_path='assign')

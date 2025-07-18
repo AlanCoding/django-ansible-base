@@ -81,7 +81,7 @@ class RoleDefinitionManager(models.Manager):
         needed_actions = settings.ANSIBLE_BASE_CREATOR_DEFAULTS
 
         # User should get permissions to the object and any child objects under it
-        model_and_children = set(cls for rel, cls in permission_registry.get_child_models(obj))
+        model_and_children = {cls for rel, cls in permission_registry.get_child_models(obj)}
         model_and_children.add(type(obj))
         cts = DABContentType.objects.get_for_models(*model_and_children).values()
 
@@ -113,7 +113,7 @@ class RoleDefinitionManager(models.Manager):
         if permissions:
             permissions = set(permissions)
             for existing_rd in self.prefetch_related('permissions'):
-                existing_set = set(perm.codename for perm in existing_rd.permissions.all())
+                existing_set = {perm.codename for perm in existing_rd.permissions.all()}
                 if existing_set == permissions:
                     return (existing_rd, False)
             create_kwargs = kwargs.copy()
@@ -191,12 +191,12 @@ class RoleDefinition(CommonModel):
         if actor._meta.model_name == 'user':
             if giving and (not settings.ANSIBLE_BASE_ALLOW_SINGLETON_USER_ROLES):
                 raise ValidationError('Global roles are not enabled for users')
-            kwargs = dict(object_role=None, user=actor, role_definition=self)
+            kwargs = {'object_role': None, 'user': actor, 'role_definition': self}
             cls = RoleUserAssignment
         elif isinstance(actor, permission_registry.team_model):
             if not settings.ANSIBLE_BASE_ALLOW_SINGLETON_TEAM_ROLES:
                 raise ValidationError('Global roles are not enabled for teams')
-            kwargs = dict(object_role=None, team=actor, role_definition=self)
+            kwargs = {'object_role': None, 'team': actor, 'role_definition': self}
             cls = RoleTeamAssignment
         else:
             raise RuntimeError(f'Cannot {giving and "give" or "remove"} permission for {actor}, must be a user or team')
@@ -259,7 +259,7 @@ class RoleDefinition(CommonModel):
             # sanitize the object_id to its database version, practically, remove "-" chars from uuids
             object_id = content_object._meta.pk.get_db_prep_value(content_object.pk, connection)
 
-        kwargs = dict(role_definition=self, content_type=obj_ct, object_id=object_id)
+        kwargs = {'role_definition': self, 'content_type': obj_ct, 'object_id': object_id}
         defaults = {}
 
         # For remote objects, add parent reference so we can do evaluations if needed
@@ -379,7 +379,7 @@ class ObjectRoleFields(models.Model):
             qs = cls.objects.all()
 
         if user._singleton_permission_objs:
-            super_ct_ids = set(perm.content_type_id for perm in user._singleton_permission_objs)
+            super_ct_ids = {perm.content_type_id for perm in user._singleton_permission_objs}
             # content_type=None condition: A good-enough rule - you can see other global assignments if you have any yourself
             return qs.filter(obj_filter | models.Q(content_type__in=super_ct_ids) | models.Q(content_type=None))
         return qs.filter(obj_filter)
@@ -646,7 +646,7 @@ class ObjectRole(ObjectRoleFields):
         return expected_evaluations
 
     def needed_cache_updates(self, types_prefetch=None):
-        existing_partials = dict()
+        existing_partials = {}
         for permission_partial in self.permission_partials.all():
             existing_partials[permission_partial.obj_perm_id()] = permission_partial
         for permission_partial in self.permission_partials_uuid.all():
@@ -735,7 +735,7 @@ class RoleEvaluationFields(models.Model):
         """
         # We only have a content_types exception for multiple content types for polymorphic models
         # for normal models you should not need it, but AWX unified_ models need it to get by
-        filter_kwargs = dict(role__in=actor.has_roles.all(), codename=codename)
+        filter_kwargs = {'role__in': actor.has_roles.all(), 'codename': codename}
         if content_types:
             filter_kwargs['content_type_id__in'] = content_types
         else:
