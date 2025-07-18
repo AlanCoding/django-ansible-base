@@ -1,8 +1,8 @@
 import pytest
 
-from ansible_base.rbac.models import RoleDefinition
 from ansible_base.lib.utils.response import get_relative_url
 from ansible_base.rbac import permission_registry
+from ansible_base.rbac.models import RoleDefinition
 from test_app.models import Team, User
 
 

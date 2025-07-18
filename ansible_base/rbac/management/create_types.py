@@ -21,13 +21,15 @@ def create_DAB_contenttypes(
     verbosity=2,
     using=DEFAULT_DB_ALIAS,
     apps=global_apps,
-):
+) -> list:
     """Create DABContentType for models in the given app.
 
     This is significantly different from the ContentType post-migrate method,
     because that creates types for all apps, and so this is only called one app at a time.
     DAB RBAC runs its post_migration logic just once, because the model list
     comes from the permission registry.
+
+    Returns a list of the _new_ content types created
     """
     DABContentType = apps.get_model("dab_rbac", "DABContentType")
     ContentType = apps.get_model("contenttypes", "ContentType")
@@ -52,9 +54,12 @@ def create_DAB_contenttypes(
             real_ct = ContentType.objects.get_for_model(model)
             if not DABContentType.objects.filter(id=real_ct.id).exists():
                 ct_item_data['id'] = real_ct.id
+            else:
+                current_max_id = DABContentType.objects.order_by('-id').values_list('id', flat=True).first() or 0
+                ct_item_data['id'] = current_max_id + 1
             ct_data.append(ct_item_data)
     if not ct_data:
-        return
+        return []
 
     # To make usage earier in a transitional period, we will set the content type
     # of any new entries created here to the id of its corresponding ContentType
@@ -67,6 +72,7 @@ def create_DAB_contenttypes(
         for ct in cts:
             logger.debug("Adding DAB content type " f"'{ct.service}:{ct.app_label} | {ct.model}'")
 
+    updated_ct = 0
     for ct in DABContentType.objects.all():
         if not permission_registry.is_registered(ct.model_class()):
             logger.warning(f'{ct.model} is a stale content type in DAB RBAC')
@@ -76,3 +82,9 @@ def create_DAB_contenttypes(
             if ct.parent_content_type != parent_content_type:
                 ct.parent_content_type = parent_content_type
                 ct.save(update_fields=['parent_content_type'])
+                updated_ct += 1
+    if updated_ct:
+        # If this happens outside of the migration when the entries were created, that would be notable
+        logger.info(f'Updated the parent reference of {updated_ct} content types')
+
+    return cts

@@ -1,9 +1,12 @@
+from typing import Union
+
 from django.db.models import Model
 
 from ..models import DABContentType, get_evaluation_model
+from ..remote import RemoteObject
 
 
-def assignment_qs_user_to_obj(actor: Model, obj: Model):
+def assignment_qs_user_to_obj(actor: Model, obj: Union[Model, RemoteObject]):
     """Querset of assignments (team or user) that grants the actor any form of permission to obj"""
     evaluation_cls = get_evaluation_model(obj)
     ct = DABContentType.objects.get_for_model(obj)
@@ -18,7 +21,7 @@ def assignment_qs_user_to_obj(actor: Model, obj: Model):
     return (global_assignment_qs | obj_assignment_qs).distinct()
 
 
-def assignment_qs_user_to_obj_perm(actor: Model, obj: Model, permission: Model):
+def assignment_qs_user_to_obj_perm(actor: Model, obj: Union[Model, RemoteObject], permission: Model):
     """Queryset of assignments that grants this specific permission to this specific object"""
     evaluation_cls = get_evaluation_model(obj)
     ct = DABContentType.objects.get_for_model(obj)
