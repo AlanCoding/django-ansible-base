@@ -207,7 +207,7 @@ class ResourceAPIClient:
             sub_url = 'unassign'
 
         actor_type = 'user'
-        if 'team' in data:
+        if data.get('team_ansible_id'):
             actor_type = 'team'
 
         url = f'role-{actor_type}-assignments/{sub_url}/'
