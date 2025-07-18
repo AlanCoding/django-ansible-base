@@ -20,7 +20,9 @@ from ansible_base.rbac.api.serializers import (
     RoleMetadataSerializer,
     RoleTeamAssignmentSerializer,
     RoleUserAssignmentSerializer,
+    TeamAccessAssignmentSerializer,
     TeamAccessListMixin,
+    UserAccessAssignmentSerializer,
     UserAccessListMixin,
 )
 from ansible_base.rbac.evaluations import has_super_permission
@@ -34,6 +36,7 @@ from ..models import DABContentType, DABPermission, get_evaluation_model
 from ..policies import check_content_obj_permission
 from ..remote import RemoteObject, get_resource_prefix
 from ..sync import maybe_reverse_sync_assignment, maybe_reverse_sync_unassignment
+from .queries import assignment_qs_user_to_obj, assignment_qs_user_to_obj_perm
 
 
 def list_combine_values(data: dict[Type[Model], list[str]]) -> list[str]:
@@ -220,7 +223,61 @@ class RoleUserAssignmentViewSet(BaseAssignmentViewSet):
     ]
 
 
+class AccessURLMixin:
+    def get_actor_model(self):
+        return get_user_model()
+
+    def get_url_permission(self):
+        model_name = self.kwargs.get("model_name")
+        # Prefer treating the URL as requesting for some permission
+        return DABPermission.objects.filter(api_slug=model_name).first()
+
+    def get_url_content_type(self):
+        if getattr(self, 'permission', None):
+            # Access list will be all permissions for the given object
+            return self.permission.content_type
+
+        model_name = self.kwargs.get("model_name")
+        content_type = DABContentType.objects.filter(api_slug=model_name).first()
+        if not content_type:
+            raise NotFound(f'The slug {model_name} is not a valid permission or type identifier')
+
+        return content_type
+
+    def get_url_obj(self):
+        model_cls = self.content_type.model_class()
+        object_id = self.kwargs.get("pk")
+        if not issubclass(model_cls, RemoteObject):
+            try:
+                return model_cls.objects.get(pk=object_id)
+            except model_cls.DoesNotExist:
+                raise NotFound(f'The primary key {object_id} was not found for model {model_cls}')
+        else:
+            return model_cls(content_type=self.content_type, object_id=object_id)
+
+    def check_permission_to_object(self, obj):
+        try:
+            if not self.request.user.has_obj_perm(obj, 'view'):
+                raise NotFound
+        except RuntimeError:
+            check_content_obj_permission(self.request.user, obj)
+
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        self.get_data_from_url()
+
+        ctx.update(
+            {
+                "permission": self.permission,
+                "related_object": self.related_object,
+                "content_type": self.content_type,
+            }
+        )
+        return ctx
+
+
 class UserAccessViewSet(
+    AccessURLMixin,
     AnsibleBaseDjangoAppApiView,
     mixins.ListModelMixin,
     GenericViewSet,
@@ -232,40 +289,12 @@ class UserAccessViewSet(
 
     serializer_mixin = UserAccessListMixin
 
-    def get_actor_model(self):
-        return get_user_model()
-
     def get_data_from_url(self):
         if not hasattr(self, 'related_object'):
-            model_name = self.kwargs.get("model_name")
-            object_id = self.kwargs.get("pk")
-
-            # Prefer treating the URL as requesting for some permission
-            self.permission = DABPermission.objects.filter(api_slug=model_name).first()
-
-            if not self.permission:
-                self.content_type = DABContentType.objects.filter(api_slug=model_name).first()
-                if not self.content_type:
-                    raise NotFound(f'The slug {model_name} is not a valid permission or type identifier')
-            else:
-                # Access list will be all permissions for the given object
-                self.content_type = self.permission.content_type
-
-            model_cls = self.content_type.model_class()
-            if not issubclass(model_cls, RemoteObject):
-                try:
-                    self.related_object = model_cls.objects.get(pk=object_id)
-                except model_cls.DoesNotExist:
-                    raise NotFound
-            else:
-                self.related_object = model_cls(content_type=self.content_type, object_id=object_id)
-
-            try:
-                if not self.request.user.has_obj_perm(self.related_object, 'view'):
-                    raise NotFound
-            except RuntimeError:
-                check_content_obj_permission(self.request.user, self.related_object)
-
+            self.permission = self.get_url_permission()
+            self.content_type = self.get_url_content_type()
+            self.related_object = self.get_url_obj()
+            self.check_permission_to_object(self.related_object)
         return (self.permission, self.content_type, self.related_object)
 
     def get_queryset(self):
@@ -315,22 +344,55 @@ class UserAccessViewSet(
 
         return DynamicActorSerializer
 
-    def get_serializer_context(self):
-        ctx = super().get_serializer_context()
-        permission, ct, obj = self.get_data_from_url()
-
-        ctx.update(
-            {
-                "permission": permission,
-                "related_object": obj,
-                "content_type": ct,
-            }
-        )
-        return ctx
-
 
 class TeamAccessViewSet(UserAccessViewSet):
     serializer_mixin = TeamAccessListMixin
+
+    def get_actor_model(self):
+        return get_team_model()
+
+
+class UserAccessAssignmentViewSet(
+    AccessURLMixin,
+    AnsibleBaseDjangoAppApiView,
+    mixins.ListModelMixin,
+    GenericViewSet,
+):
+    """
+    This gives drill-down information about the means of inheritance
+    for all the permissions show in the higher-level view of the access list
+    """
+
+    serializer_class = UserAccessAssignmentSerializer
+
+    def get_url_actor(self):
+        actor_pk = self.kwargs.get("actor_pk")
+        actor_cls = self.get_actor_model()
+        try:
+            return actor_cls.objects.get(pk=actor_pk)
+        except actor_cls.DoesNotExist:
+            raise NotFound(f'The {actor_cls._meta.model_name} with pk={actor_pk} can not be found')
+
+    def get_data_from_url(self):
+        if not hasattr(self, 'related_object'):
+            self.permission = self.get_url_permission()
+            self.content_type = self.get_url_content_type()
+            self.related_object = self.get_url_obj()
+            self.actor = self.get_url_actor()
+            self.check_permission_to_object(self.related_object)
+        return (self.permission, self.content_type, self.related_object, self.actor)
+
+    def get_queryset(self):
+        permission, ct, obj, actor = self.get_data_from_url()
+
+        if permission:
+            return assignment_qs_user_to_obj_perm(actor, obj, permission)
+        else:
+            return assignment_qs_user_to_obj(actor, obj)
+
+
+class TeamAccessAssignmentViewSet(UserAccessAssignmentViewSet):
+    serializer_class = TeamAccessAssignmentSerializer
 
     def get_actor_model(self):
         return get_team_model()
