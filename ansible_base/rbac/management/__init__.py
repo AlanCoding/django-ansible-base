@@ -45,7 +45,7 @@ def create_dab_permissions(app_config, verbosity=2, interactive=True, using=DEFA
 
 def is_safe_identifier(name: str) -> bool:
     """Returns True or False, name is a valid identifier in postgres, just for safety"""
-    return re.match(r'^[A-Za-z_][A-Za-z0-9_]*$', name) is not None
+    return re.match(r'^[A-Za-z_]\w*$', name) is not None
 
 
 def reset_ct_sequence(ct_cls):
@@ -130,6 +130,5 @@ def sync_dab_permissions(verbosity=2, using=DEFAULT_DB_ALIAS, apps=global_apps):
         logger.debug(f"Added DAB permissions for model {model_name}: {codename_prnt}")
 
     # Reset the sequence to avoid PK collision later
-    if connection.vendor == 'postgresql':
-        if new_cts:
-            reset_ct_sequence(dab_ct_cls)
+    if connection.vendor == 'postgresql' and new_cts:
+        reset_ct_sequence(dab_ct_cls)
