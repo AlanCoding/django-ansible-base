@@ -6,8 +6,8 @@ from rest_framework.viewsets import GenericViewSet, mixins
 
 from ansible_base.lib.utils.views.django_app_api import AnsibleBaseDjangoAppApiView
 from ansible_base.lib.utils.views.permissions import try_add_oauth2_scope_permission
-from ansible_base.rest_filters.rest_framework import ansible_id_backend
 from ansible_base.resource_registry.views import HasResourceRegistryPermissions
+from ansible_base.rest_filters.rest_framework import ansible_id_backend
 
 from ..models import DABContentType, DABPermission, RoleTeamAssignment, RoleUserAssignment
 from . import serializers as service_serializers
