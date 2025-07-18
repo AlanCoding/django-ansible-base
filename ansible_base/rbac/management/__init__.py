@@ -31,16 +31,16 @@ def create_dab_permissions(app_config, verbosity=2, interactive=True, using=DEFA
         return
 
     try:
-        DABContentType = apps.get_model("dab_rbac", "DABContentType")
+        dab_ct_cls = apps.get_model("dab_rbac", "DABContentType")
     except LookupError:
         logger.warning('Skipping DAB RBAC type and permission creation since models are not available')
         return
 
-    if not router.allow_migrate_model(using, DABContentType):
+    if not router.allow_migrate_model(using, dab_ct_cls):
         # Uncommon case, code logic is using a replica database or something, unlikely to be relevant
         return
 
-    sync_DAB_permissions(verbosity=verbosity, using=using, apps=global_apps)
+    sync_dab_permissions(verbosity=verbosity, using=using, apps=global_apps)
 
 
 def is_safe_identifier(name: str) -> bool:
@@ -67,13 +67,13 @@ def reset_ct_sequence(ct_cls):
         )
 
 
-def sync_DAB_permissions(verbosity=2, using=DEFAULT_DB_ALIAS, apps=global_apps):
+def sync_dab_permissions(verbosity=2, using=DEFAULT_DB_ALIAS, apps=global_apps):
     """Idepotent method to set database types and permissions for DAB RBAC
 
     This should make the database content reflect the model Meta data and
     registrations in the permission_registry for that app.
     """
-    DABContentType = apps.get_model("dab_rbac", "DABContentType")
+    dab_ct_cls = apps.get_model("dab_rbac", "DABContentType")
     Permission = apps.get_model("dab_rbac", "DABPermission")
 
     new_cts = create_DAB_contenttypes(verbosity=verbosity, using=using, apps=apps)
@@ -86,7 +86,7 @@ def sync_DAB_permissions(verbosity=2, using=DEFAULT_DB_ALIAS, apps=global_apps):
         # Force looking up the content types in the current database
         # before creating foreign keys to them.
         service = get_resource_prefix(klass)
-        ctype = DABContentType.objects.db_manager(using).get_for_model(klass, service=service, for_concrete_model=False)
+        ctype = dab_ct_cls.objects.db_manager(using).get_for_model(klass, service=service, for_concrete_model=False)
 
         ctypes.add(ctype)
 
@@ -132,4 +132,4 @@ def sync_DAB_permissions(verbosity=2, using=DEFAULT_DB_ALIAS, apps=global_apps):
     # Reset the sequence to avoid PK collision later
     if connection.vendor == 'postgresql':
         if new_cts:
-            reset_ct_sequence(DABContentType)
+            reset_ct_sequence(dab_ct_cls)

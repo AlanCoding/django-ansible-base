@@ -62,18 +62,21 @@ class DABContentTypeManager(django_models.Manager[django_models.Model]):
             return ct
 
         if service is None:
-            service = get_resource_prefix(model)
+            query_service = get_resource_prefix(model)
+        else:
+            query_service = service
+
         opts = self._get_opts(model, for_concrete_model)
         try:
-            return self._get_from_cache(opts, service)
+            return self._get_from_cache(opts, query_service)
         except KeyError:
             pass
 
         try:
-            ct = self.get(service=service, app_label=opts.app_label, model=opts.model_name)
+            ct = self.get(service=query_service, app_label=opts.app_label, model=opts.model_name)
         except self.model.DoesNotExist:
             raise RuntimeError(
-                f'Could not find content type for {(service, opts.app_label, opts.model_name)}, '
+                f'Could not find content type for {(query_service, opts.app_label, opts.model_name)}, '
                 'and creating new objects via get_for_model is not allowed for DAB RBAC'
             )
         self._add_to_cache(self.db, ct)
@@ -147,9 +150,8 @@ class DABContentTypeManager(django_models.Manager[django_models.Model]):
             kwargs = {'service__in': [get_local_resource_prefix(), 'shared'], 'app_label': app_label, 'model': model}
             # This ask here is actually ambiguous, so we try this extra lookup
             shared_key = ('shared', app_label, model)
-            if self.db in self._cache:
-                if shared_key in self._cache[self.db]:
-                    return self._cache[self.db][shared_key]
+            if shared_key in self._cache.get(self.db, ()):
+                return self._cache[self.db][shared_key]
         else:
             service, app_label, model = args
             kwargs = {'service': service, 'app_label': app_label, 'model': model}
