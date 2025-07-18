@@ -267,6 +267,23 @@ class AccessListMixin:
     def summarize_role_definition(role_definition):
         return {"name": role_definition.name, "url": get_url_for_object(role_definition)}
 
+    @staticmethod
+    def summarize_assignment_list(assignment_qs, obj_ct):
+        assignment_list = []
+        team_ct = DABContentType.objects.get_for_model(get_team_model())
+        for assignment in assignment_qs.distinct():
+            if assignment.content_type_id is None:
+                perm_type = "global"
+            elif assignment.content_type_id == team_ct.pk:
+                perm_type = "team"
+            elif assignment.content_type_id == obj_ct.pk:
+                perm_type = "direct"
+            else:
+                perm_type = "indirect"
+            assignment_list.append({"type": perm_type, "role_definition": AccessListMixin.summarize_role_definition(assignment.role_definition)})
+
+        return assignment_list
+
     def get_object_role_assignments(self, actor):
         obj = self.context.get("related_object")
         permission = self.context.get("permission")
@@ -277,21 +294,7 @@ class AccessListMixin:
         else:
             assignment_qs = assignment_qs_user_to_obj(actor, obj)
 
-        team_ct = DABContentType.objects.get_for_model(get_team_model())
-
-        assignment_list = []
-        for assignment in assignment_qs.distinct():
-            if assignment.content_type_id is None:
-                perm_type = "global"
-            elif assignment.content_type_id == team_ct.pk:
-                perm_type = "team"
-            elif assignment.content_type_id == ct.pk:
-                perm_type = "direct"
-            else:
-                perm_type = "indirect"
-            assignment_list.append({"type": perm_type, "role_definition": self.summarize_role_definition(assignment.role_definition)})
-
-        return assignment_list
+        return self.summarize_assignment_list(assignment_qs, ct)
 
     def get_url(self, obj) -> str:
         return get_url_for_object(obj)
@@ -312,7 +315,26 @@ class TeamAccessListMixin(AccessListMixin, AbstractCommonModelSerializer):
 
 
 class UserAccessAssignmentSerializer(RoleUserAssignmentSerializer):
-    pass
+    intermediary_roles = serializers.SerializerMethodField()
+
+    class Meta(RoleUserAssignmentSerializer.Meta):
+        fields = RoleUserAssignmentSerializer.Meta.fields + ['intermediary_roles']
+
+    def get_intermediary_roles(self, assignment):
+        team_ct = DABContentType.objects.get_for_model(get_team_model())
+
+        permission = self.context.get("permission")
+        if assignment.content_type != team_ct:
+            return []
+        team = assignment.content_object
+        obj = self.context.get("related_object")
+
+        if permission:
+            assignment_qs = assignment_qs_user_to_obj_perm(team, obj, permission)
+        else:
+            assignment_qs = assignment_qs_user_to_obj(team, obj)
+
+        return AccessListMixin.summarize_assignment_list(assignment_qs, self.context.get("content_type"))
 
 
 class TeamAccessAssignmentSerializer(RoleTeamAssignmentSerializer):
