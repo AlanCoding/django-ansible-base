@@ -81,7 +81,7 @@ def test_team_access_list(admin_api_client, inv_rd, org_inv_rd, inventory):
 
 
 @pytest.mark.django_db
-def test_intermediary_role_display(admin_api_client, inv_rd, inventory, organization, member_rd, rando):
+def test_intermediary_role_display(admin_api_client, inventory, organization, member_rd, rando):
     team = Team.objects.create(name='has_org_roles', organization=inventory.organization)
 
     org_admin_inv_rd = RoleDefinition.objects.create_from_permissions(
@@ -98,3 +98,17 @@ def test_intermediary_role_display(admin_api_client, inv_rd, inventory, organiza
     org_admin_inv_rd.give_permission(team, inventory.organization)
     org_view_inv_rd.give_permission(team, inventory.organization)
     member_rd.give_permission(rando, team)
+
+    url = get_relative_url('role-user-access-assignments', kwargs={'pk': inventory.pk, 'model_name': 'aap.inventory', 'actor_pk': rando.pk})
+    response = admin_api_client.get(url)
+    assert response.status_code == 200, response.data
+
+    assert response.data['count'] == 1
+    assignment = response.data['results'][0]
+
+    assert 'intermediary_roles' in assignment
+    intermediary = assignment['intermediary_roles']
+    assert len(intermediary) == 2
+    intermediary_names = [entry['role_definition']['name'] for entry in intermediary]
+    assert org_admin_inv_rd.name in intermediary_names
+    assert org_view_inv_rd.name in intermediary_names
