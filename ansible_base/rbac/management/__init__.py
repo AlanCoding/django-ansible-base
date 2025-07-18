@@ -1,4 +1,5 @@
 import logging
+import re
 from collections import defaultdict
 
 from django.apps import apps as global_apps
@@ -42,6 +43,30 @@ def create_dab_permissions(app_config, verbosity=2, interactive=True, using=DEFA
     sync_DAB_permissions(verbosity=verbosity, using=using, apps=global_apps)
 
 
+def is_safe_identifier(name: str) -> bool:
+    """Returns True or False, name is a valid identifier in postgres, just for safety"""
+    return re.match(r'^[A-Za-z_][A-Za-z0-9_]*$', name) is not None
+
+
+def reset_ct_sequence(ct_cls):
+    table = ct_cls._meta.db_table
+    pk_column = ct_cls._meta.pk.column
+    # This case should never be hit, but for database safety we have this
+    if not is_safe_identifier(table) or not is_safe_identifier(pk_column):
+        raise ValueError(f"Unsafe identifier: {table}.{pk_column}")
+
+    logger.info('Updating the serial sequence of DABContentType model')
+    with connection.cursor() as cursor:
+        cursor.execute(
+            f"""
+            SELECT setval(
+                pg_get_serial_sequence(%s, %s),
+                (SELECT MAX({pk_column}) FROM {table})
+            )""",
+            [table, pk_column],
+        )
+
+
 def sync_DAB_permissions(verbosity=2, using=DEFAULT_DB_ALIAS, apps=global_apps):
     """Idepotent method to set database types and permissions for DAB RBAC
 
@@ -51,7 +76,7 @@ def sync_DAB_permissions(verbosity=2, using=DEFAULT_DB_ALIAS, apps=global_apps):
     DABContentType = apps.get_model("dab_rbac", "DABContentType")
     Permission = apps.get_model("dab_rbac", "DABPermission")
 
-    create_DAB_contenttypes(verbosity=verbosity, using=using, apps=apps)
+    new_cts = create_DAB_contenttypes(verbosity=verbosity, using=using, apps=apps)
 
     # This will hold the permissions we're looking for as (content_type, (codename, name))
     searched_perms = []
@@ -106,15 +131,5 @@ def sync_DAB_permissions(verbosity=2, using=DEFAULT_DB_ALIAS, apps=global_apps):
 
     # Reset the sequence to avoid PK collision later
     if connection.vendor == 'postgresql':
-        table = DABContentType._meta.db_table
-        pk_column = DABContentType._meta.pk.column
-        with connection.cursor() as cursor:
-            cursor.execute(
-                f"""
-                SELECT setval(
-                    pg_get_serial_sequence(%s, %s),
-                    (SELECT MAX({pk_column}) FROM {table})
-                )
-            """,
-                [table, pk_column],
-            )
+        if new_cts:
+            reset_ct_sequence(DABContentType)
