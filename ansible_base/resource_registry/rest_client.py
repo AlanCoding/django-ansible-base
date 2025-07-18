@@ -118,10 +118,7 @@ class ResourceAPIClient:
                 content = resp.text
 
                 # Re-raise with more context
-                raise requests.exceptions.HTTPError(
-                    f"{e}\nResponse content: {content}",
-                    response=resp
-                ) from None
+                raise requests.exceptions.HTTPError(f"{e}\nResponse content: {content}", response=resp) from None
         return resp
 
     def _get_request_dict(self, data: ResourceRequestBody):

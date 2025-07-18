@@ -8,6 +8,7 @@ from django.db import DEFAULT_DB_ALIAS, connection, router
 from ansible_base.rbac import permission_registry
 from ansible_base.rbac.remote import get_resource_prefix
 
+from ._old import create_permissions_as_operation
 from .create_types import create_DAB_contenttypes
 
 logger = logging.getLogger(__name__)
@@ -31,9 +32,16 @@ def create_dab_permissions(app_config, verbosity=2, interactive=True, using=DEFA
         return
 
     try:
+        dab_ct_cls = apps.get_model("dab_rbac", "RoleDefinition")
+    except LookupError:
+        logger.warning('Skipping DAB RBAC type and permission creation initial migration has not happened')
+        return
+
+    try:
         dab_ct_cls = apps.get_model("dab_rbac", "DABContentType")
     except LookupError:
-        logger.warning('Skipping DAB RBAC type and permission creation since models are not available')
+        logger.info('Running historical permission creation method')
+        create_permissions_as_operation(apps, None)
         return
 
     if not router.allow_migrate_model(using, dab_ct_cls):
