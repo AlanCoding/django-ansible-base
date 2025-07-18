@@ -184,3 +184,27 @@ def test_unassign_endpoint(rando, org_inv_rd, inventory, admin_api_client):
     response = admin_api_client.post(url, data)
     assert response.status_code == 200, response.data
     assert not rando.has_obj_perm(inventory, 'change')
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    'reverse_name,normal_case,unauth_case',
+    [
+        ('dabcontenttype-list', 200, 401),  # could change unauthenticated case, depends on need
+        ('dabpermission-list', 200, 401),
+        ('resource-list', 403, 401),
+        ('serviceuserassignment-list', 403, 401),
+        ('serviceteamassignment-list', 403, 401)
+    ]
+)
+def test_service_api_permissions(reverse_name, normal_case, unauth_case, admin_api_client, user_api_client, unauthenticated_api_client):
+    url = get_relative_url(reverse_name)
+
+    admin_response = admin_api_client.get(url)
+    assert admin_response.status_code == 200, admin_response.data
+
+    normal_response = user_api_client.get(url)
+    assert normal_response.status_code == normal_case, normal_response.data
+
+    unauth_response = unauthenticated_api_client.get(url)
+    assert unauth_response.status_code == unauth_case, unauth_response.data
