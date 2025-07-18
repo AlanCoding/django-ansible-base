@@ -10,7 +10,7 @@ from ansible_base.rbac.remote import get_resource_prefix
 logger = logging.getLogger(__name__)
 
 
-def get_local_DAB_contenttypes(using: str, ct_model: Type[models.Model]) -> dict[tuple[str, str], models.Model]:
+def get_local_dab_contenttypes(using: str, ct_model: Type[models.Model]) -> dict[tuple[str, str], models.Model]:
     # This should work in migration scenarios, but other code checks for existence of it on manager
     ct_model.objects.clear_cache()
 
@@ -34,7 +34,7 @@ def create_DAB_contenttypes(
     dab_ct_cls = apps.get_model("dab_rbac", "DABContentType")
     ct_cls = apps.get_model("contenttypes", "ContentType")
 
-    content_types = get_local_DAB_contenttypes(using, dab_ct_cls)
+    content_types = get_local_dab_contenttypes(using, dab_ct_cls)
 
     ct_data = []
     for model in permission_registry.all_registered_models:

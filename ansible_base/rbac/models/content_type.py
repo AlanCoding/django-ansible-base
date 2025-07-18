@@ -86,7 +86,6 @@ class DABContentTypeManager(django_models.Manager[django_models.Model]):
         self,
         *model_list: Union[Type[django_models.Model], django_models.Model],
         for_concrete_models: bool = True,
-        service: Optional[str] = None,
     ) -> Dict[Type[django_models.Model], django_models.Model]:
         """Return ``DABContentType`` objects for each model in ``model_list``.
 
@@ -104,12 +103,12 @@ class DABContentTypeManager(django_models.Manager[django_models.Model]):
         for model in model_list:
             opts = self._get_opts(model, for_concrete_models)
             # For local models, this will give the local service name of "shared" for shared models
-            service = get_resource_prefix(model)
+            model_service = get_resource_prefix(model)
             try:
-                ct = self._get_from_cache(opts, service)
+                ct = self._get_from_cache(opts, model_service)
             except KeyError:
-                needed_models[(service, opts.app_label)].add(opts.model_name)
-                needed_opts[(service, opts.app_label, opts.model_name)].append(model)
+                needed_models[(model_service, opts.app_label)].add(opts.model_name)
+                needed_opts[(model_service, opts.app_label, opts.model_name)].append(model)
             else:
                 results[model] = ct
 
