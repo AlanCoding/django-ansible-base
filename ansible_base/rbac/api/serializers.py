@@ -10,13 +10,15 @@ from rest_framework.serializers import ValidationError
 from ansible_base.lib.abstract_models.common import get_url_for_object
 from ansible_base.lib.serializers.common import AbstractCommonModelSerializer, CommonModelSerializer, ImmutableCommonModelSerializer
 from ansible_base.lib.utils.auth import get_team_model
+from ansible_base.lib.utils.response import get_relative_url
 from ansible_base.rbac.models import RoleDefinition, RoleTeamAssignment, RoleUserAssignment
 from ansible_base.rbac.permission_registry import permission_registry  # careful for circular imports
 from ansible_base.rbac.policies import check_content_obj_permission, visible_users
 from ansible_base.rbac.validators import check_locally_managed, validate_permissions_for_model
 
-from ..models import DABContentType, DABPermission, get_evaluation_model
+from ..models import DABContentType, DABPermission
 from ..remote import RemoteObject
+from .queries import assignment_qs_user_to_obj, assignment_qs_user_to_obj_perm
 
 
 class RoleDefinitionSerializer(CommonModelSerializer):
@@ -249,6 +251,17 @@ class RoleMetadataSerializer(serializers.Serializer):
 
 class AccessListMixin:
 
+    def _get_related(self, obj) -> dict[str, str]:
+        if obj is None:
+            return {}
+        related_fields = {}
+        actor_cls = self.Meta.model
+        related_fields['details'] = get_relative_url(
+            f'role-{actor_cls._meta.model_name}-access-assignments',
+            kwargs={'model_name': self.context.get("content_type").api_slug, 'pk': self.context.get("related_object").pk, 'actor_pk': obj.pk},
+        )
+        return related_fields
+
     @staticmethod
     def summarize_role_definition(role_definition):
         return {"name": role_definition.name, "url": get_url_for_object(role_definition)}
@@ -258,35 +271,24 @@ class AccessListMixin:
         permission = self.context.get("permission")
         ct = self.context.get("content_type")
 
-        assignment_list = []
-
-        evaluation_cls = get_evaluation_model(obj)
-        reverse_name = evaluation_cls._meta.get_field('role').remote_field.name
         if permission:
-            obj_eval_qs = evaluation_cls.objects.filter(codename=permission.codename, object_id=obj.pk, content_type_id=ct.id)
+            assignment_qs = assignment_qs_user_to_obj_perm(actor, obj, permission)
         else:
-            # All relevant assignments for the object
-            obj_eval_qs = evaluation_cls.objects.filter(object_id=obj.pk, content_type_id=ct.id)
-        obj_assignment_qs = actor.role_assignments.filter(**{f'object_role__{reverse_name}__in': obj_eval_qs})
+            assignment_qs = assignment_qs_user_to_obj(actor, obj)
 
         team_ct = DABContentType.objects.get_for_model(get_team_model())
 
-        for assignment in obj_assignment_qs.distinct():
-            if assignment.content_type_id == team_ct.pk:
+        assignment_list = []
+        for assignment in assignment_qs.distinct():
+            if assignment.content_type_id is None:
+                perm_type = "global"
+            elif assignment.content_type_id == team_ct.pk:
                 perm_type = "team"
             elif assignment.content_type_id == ct.pk:
                 perm_type = "direct"
             else:
                 perm_type = "indirect"
             assignment_list.append({"type": perm_type, "role_definition": self.summarize_role_definition(assignment.role_definition)})
-
-        if permission:
-            global_assignment_qs = actor.role_assignments.filter(content_type=None, role_definition__permissions=permission)
-        else:
-            global_assignment_qs = actor.role_assignments.filter(content_type=None, role_definition__permissions__content_type=ct)
-
-        for assignment in global_assignment_qs.distinct():
-            assignment_list.append({"type": "global", "role_definition": self.summarize_role_definition(assignment.role_definition)})
 
         return assignment_list
 
@@ -298,9 +300,19 @@ class UserAccessListMixin(AccessListMixin, serializers.ModelSerializer):
     "controller uses auth.User model so this needs to be as compatible as possible, thus ModelSerializer"
 
     object_role_assignments = serializers.SerializerMethodField()
-    _expected_fields = ['id', 'url', 'username', 'is_superuser', 'object_role_assignments']
+    related = serializers.SerializerMethodField('_get_related')
+    _expected_fields = ['id', 'url', 'related', 'username', 'is_superuser', 'object_role_assignments']
 
 
 class TeamAccessListMixin(AccessListMixin, AbstractCommonModelSerializer):
     object_role_assignments = serializers.SerializerMethodField()
-    _expected_fields = ['id', 'url', 'name', 'organization', 'object_role_assignments']
+    related = serializers.SerializerMethodField('_get_related')
+    _expected_fields = ['id', 'url', 'related', 'name', 'organization', 'object_role_assignments']
+
+
+class UserAccessAssignmentSerializer(RoleUserAssignmentSerializer):
+    pass
+
+
+class TeamAccessAssignmentSerializer(RoleTeamAssignmentSerializer):
+    pass
