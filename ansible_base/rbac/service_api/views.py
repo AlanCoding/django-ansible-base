@@ -48,6 +48,12 @@ class BaseSerivceRoleAssignmentViewSet(
 ):
     """List of assignments for cross-service communication"""
 
+    permission_classes = try_add_oauth2_scope_permission(
+        [
+            HasResourceRegistryPermissions,
+        ]
+    )
+
     def remote_secondary_sync_assignment(self, assignment, from_service=None):
         """To allow service-specific sync when getting assignment from /service-index/ endpoint
 
@@ -102,17 +108,14 @@ class BaseSerivceRoleAssignmentViewSet(
 
 
 class ServiceRoleUserAssignmentViewSet(BaseSerivceRoleAssignmentViewSet):
+    """List of user assignments for cross-service communication"""
+
     queryset = RoleUserAssignment.objects.prefetch_related('user__resource', *prefetch_related)
     serializer_class = service_serializers.RoleUserAssignmentSerializer
     filter_backends = AnsibleBaseDjangoAppApiView.filter_backends + [
         ansible_id_backend.UserAnsibleIdAliasFilterBackend,
         ansible_id_backend.RoleAssignmentFilterBackend,
     ]
-    permission_classes = try_add_oauth2_scope_permission(
-        [
-            HasResourceRegistryPermissions,
-        ]
-    )
 
     @action(detail=False, methods=['post'], url_path='assign')
     def assign(self, request):
@@ -123,11 +126,7 @@ class ServiceRoleUserAssignmentViewSet(BaseSerivceRoleAssignmentViewSet):
         return self._unassign(request)
 
 
-class ServiceRoleTeamAssignmentViewSet(
-    AnsibleBaseDjangoAppApiView,
-    mixins.ListModelMixin,
-    GenericViewSet,
-):
+class ServiceRoleTeamAssignmentViewSet(BaseSerivceRoleAssignmentViewSet):
     """List of team role assignments for cross-service communication"""
 
     queryset = RoleTeamAssignment.objects.prefetch_related('team__resource', *prefetch_related)
@@ -136,11 +135,6 @@ class ServiceRoleTeamAssignmentViewSet(
         ansible_id_backend.TeamAnsibleIdAliasFilterBackend,
         ansible_id_backend.RoleAssignmentFilterBackend,
     ]
-    permission_classes = try_add_oauth2_scope_permission(
-        [
-            HasResourceRegistryPermissions,
-        ]
-    )
 
     @action(detail=False, methods=['post'], url_path='assign')
     def assign(self, request):
