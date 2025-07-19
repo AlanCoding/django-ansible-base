@@ -21,12 +21,8 @@ def create_dab_permissions(app_config, verbosity=2, interactive=True, using=DEFA
 
     The core logic is mainly in the other method, and this is to adhere to the post_migrate contract
     """
-    if app_config.label != 'dab_rbac':
-        return
-
     # NOTE: similar methods, like for contenttypes checks app models_module
     # but we know this is for dab_rbac, and we know it has models, so that is irrelevant
-
     if not permission_registry._registry:
         logger.warning('DAB RBAC app is installed but no models are registered')
         return
@@ -42,6 +38,9 @@ def create_dab_permissions(app_config, verbosity=2, interactive=True, using=DEFA
     except LookupError:
         logger.info('Running historical permission creation method')
         old_create_dab_permissions(app_config, apps=apps)
+        return
+
+    if app_config.label != 'dab_rbac':
         return
 
     if not router.allow_migrate_model(using, dab_ct_cls):
