@@ -20,9 +20,10 @@ def migrate_content_type(apps, schema_editor):
         cls = apps.get_model('dab_rbac', model_name)
         for obj in cls.objects.all():
             old_ct = obj.content_type
-            # NOTE: could give duplicate normally, but that is impossible in migration path
-            obj.new_content_type = ct_cls.objects.get_by_natural_key(old_ct.app_label, old_ct.model)
-            obj.save()
+            if old_ct:
+                # NOTE: could give duplicate normally, but that is impossible in migration path
+                obj.new_content_type = ct_cls.objects.get_by_natural_key(old_ct.app_label, old_ct.model)
+                obj.save()
     for model_name in ('roleevaluation', 'roleevaluationuuid'):
         cls = apps.get_model('dab_rbac', model_name)
         cls.objects.all().delete()
