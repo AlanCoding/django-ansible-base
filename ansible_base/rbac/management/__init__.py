@@ -8,7 +8,7 @@ from django.db import DEFAULT_DB_ALIAS, connection, router
 from ansible_base.rbac import permission_registry
 from ansible_base.rbac.remote import get_resource_prefix
 
-from ._old import create_dab_permissions
+from ._old import create_dab_permissions as old_create_dab_permissions
 from .create_types import create_DAB_contenttypes
 
 logger = logging.getLogger(__name__)
@@ -41,7 +41,7 @@ def create_dab_permissions(app_config, verbosity=2, interactive=True, using=DEFA
         dab_ct_cls = apps.get_model("dab_rbac", "DABContentType")
     except LookupError:
         logger.info('Running historical permission creation method')
-        create_dab_permissions(app_config, apps=apps)
+        old_create_dab_permissions(app_config, apps=apps)
         return
 
     if not router.allow_migrate_model(using, dab_ct_cls):
