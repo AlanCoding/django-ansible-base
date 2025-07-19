@@ -264,6 +264,11 @@ class AccessURLMixin:
 
     def get_serializer_context(self):
         ctx = super().get_serializer_context()
+
+        # To satisfy AWX schema generator
+        if getattr(self, 'swagger_fake_view', False):
+            return ctx
+
         self.get_data_from_url()
 
         ctx.update(
@@ -298,11 +303,16 @@ class UserAccessViewSet(
         return (self.permission, self.content_type, self.related_object)
 
     def get_queryset(self):
+        actor_cls = self.get_actor_model()
+
+        # To satisfy AWX schema generator
+        if getattr(self, 'swagger_fake_view', False):
+            return actor_cls.objects.none()
+
         permission, ct, obj = self.get_data_from_url()
 
         evaluation_cls = get_evaluation_model(obj)
         reverse_name = evaluation_cls._meta.get_field('role').remote_field.name
-        actor_cls = self.get_actor_model()
         assignment_cls = actor_cls._meta.get_field('role_assignments').related_model
 
         if permission:
@@ -383,6 +393,10 @@ class UserAccessAssignmentViewSet(
         return (self.permission, self.content_type, self.related_object, self.actor)
 
     def get_queryset(self):
+        # To satisfy AWX schema generator
+        if getattr(self, 'swagger_fake_view', False):
+            return self.serializer_class.Meta.model.objects.none()
+
         permission, ct, obj, actor = self.get_data_from_url()
 
         if permission:
