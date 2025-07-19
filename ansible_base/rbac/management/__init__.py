@@ -47,7 +47,7 @@ def create_dab_permissions(app_config, verbosity=2, interactive=True, using=DEFA
         # Uncommon case, code logic is using a replica database or something, unlikely to be relevant
         return
 
-    sync_dab_permissions(verbosity=verbosity, using=using, apps=global_apps)
+    sync_dab_permissions(verbosity=verbosity, using=using, apps=apps)
 
 
 def is_safe_identifier(name: str) -> bool:
