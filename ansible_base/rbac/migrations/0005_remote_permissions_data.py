@@ -21,8 +21,13 @@ def migrate_content_type(apps, schema_editor):
         for obj in cls.objects.all():
             old_ct = obj.content_type
             if old_ct:
-                # NOTE: could give duplicate normally, but that is impossible in migration path
-                obj.new_content_type = ct_cls.objects.get_by_natural_key(old_ct.app_label, old_ct.model)
+                try:
+                    # NOTE: could give duplicate normally, but that is impossible in migration path
+                    obj.new_content_type = ct_cls.objects.get_by_natural_key(old_ct.app_label, old_ct.model)
+                except Exception as e:
+                    raise RuntimeError(
+                        f"Failed to get new content type for a {model_name} pk={obj.pk}, obj={obj.__dict__}"
+                    ) from e
                 obj.save()
     for model_name in ('roleevaluation', 'roleevaluationuuid'):
         cls = apps.get_model('dab_rbac', model_name)
