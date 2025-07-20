@@ -80,8 +80,8 @@ def sync_dab_permissions(verbosity=2, using=DEFAULT_DB_ALIAS, apps=global_apps):
     This should make the database content reflect the model Meta data and
     registrations in the permission_registry for that app.
     """
-    dab_ct_cls = apps.get_model("dab_rbac", "DABContentType")
     Permission = apps.get_model("dab_rbac", "DABPermission")
+    dab_ct_cls = Permission._meta.get_field('content_type').related_model
 
     new_cts = create_DAB_contenttypes(verbosity=verbosity, using=using, apps=apps)
 

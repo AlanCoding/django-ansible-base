@@ -5,7 +5,7 @@ from django.apps import apps as global_apps
 from django.db import DEFAULT_DB_ALIAS, connection, models
 
 from ansible_base.rbac import permission_registry
-from ansible_base.rbac.remote import get_resource_prefix
+from ansible_base.rbac.remote import get_resource_prefix, get_local_resource_prefix, get_remote_standin_class
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +15,14 @@ def get_local_dab_contenttypes(using: str, ct_model: Type[models.Model]) -> dict
     ct_model.objects.clear_cache()
 
     return {(ct.service, ct.model): ct for ct in ct_model.objects.using(using)}
+
+
+def model_class(apps, ct):
+    "Model methods normally can not be used in migrations so this is a safer utility method"
+    if ct.service not in ("shared", get_local_resource_prefix()):
+        return get_remote_standin_class(ct)
+
+    return apps.get_model(ct.app_label, ct.model)
 
 
 def create_DAB_contenttypes(
@@ -74,10 +82,11 @@ def create_DAB_contenttypes(
 
     updated_ct = 0
     for ct in dab_ct_cls.objects.all():
-        if not permission_registry.is_registered(ct.model_class()):
+        ct_model_class = model_class(apps, ct)
+        if not permission_registry.is_registered(ct_model_class):
             logger.warning(f'{ct.model} is a stale content type in DAB RBAC')
             continue
-        if parent_model := permission_registry.get_parent_model(ct.model_class()):
+        if parent_model := permission_registry.get_parent_model(ct_model_class):
             parent_content_type = dab_ct_cls.objects.get_for_model(parent_model)
             if ct.parent_content_type != parent_content_type:
                 ct.parent_content_type = parent_content_type
