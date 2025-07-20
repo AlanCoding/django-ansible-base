@@ -175,12 +175,12 @@ class ResourceAPIClient:
         return self._make_request("get", "role-permissions/", params=filters)
 
     def sync_assignment(self, assignment):
-        from ansible_base.rbac.service_api.serializers import RoleTeamAssignmentSerializer, RoleUserAssignmentSerializer
+        from ansible_base.rbac.service_api.serializers import ServiceRoleTeamAssignmentSerializer, ServiceRoleUserAssignmentSerializer
 
         if assignment._meta.model_name == 'roleuserassignment':
-            serializer = RoleUserAssignmentSerializer(assignment)
+            serializer = ServiceRoleUserAssignmentSerializer(assignment)
         else:
-            serializer = RoleTeamAssignmentSerializer(assignment)
+            serializer = ServiceRoleTeamAssignmentSerializer(assignment)
 
         return self._sync_assignment(serializer.data)
 
