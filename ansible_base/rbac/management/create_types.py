@@ -66,8 +66,6 @@ def create_DAB_contenttypes(
                 current_max_id = dab_ct_cls.objects.order_by('-id').values_list('id', flat=True).first() or 0
                 ct_item_data['id'] = current_max_id + 1
             ct_data.append(ct_item_data)
-    if not ct_data:
-        return []
 
     # Create the items here
     cts = []
@@ -78,6 +76,7 @@ def create_DAB_contenttypes(
         for ct in cts:
             logger.debug("Adding DAB content type " f"'{ct.service}:{ct.app_label} | {ct.model}'")
 
+    # Update, or set for the first time, the parent type reference
     updated_ct = 0
     for ct in dab_ct_cls.objects.all():
         ct_model_class = model_class(apps, ct)

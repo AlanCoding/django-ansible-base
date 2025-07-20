@@ -10,7 +10,7 @@ def create_types_if_needed(apps, schema_editor):
     Only needed in the upgrade case, otherwise better to run at true post-migrate.
     """
     permission_cls = apps.get_model('dab_rbac', 'DABPermission')
-    rd_cls = permission_cls = apps.get_model('dab_rbac', 'RoleDefinition')
+    rd_cls = apps.get_model('dab_rbac', 'RoleDefinition')
     if permission_cls.objects.exists() or rd_cls.objects.exists():
         from ansible_base.rbac.management.create_types import create_DAB_contenttypes
 
