@@ -3,14 +3,18 @@
 from django.db import migrations
 
 
-def create_types_and_permissions(apps, schema_editor):
+def create_types_if_needed(apps, schema_editor):
     """Before we can migrate to the new DABContentType, entries in that table must be created.
 
     This method runs what is ordinarily the post_migrate logic, but in the migration case here.
+    Only needed in the upgrade case, otherwise better to run at true post-migrate.
     """
-    from ansible_base.rbac.management import create_dab_permissions
+    permission_cls = apps.get_model('dab_rbac', 'DABPermission')
+    rd_cls = permission_cls = apps.get_model('dab_rbac', 'RoleDefinition')
+    if permission_cls.objects.exists() or rd_cls.objects.exists():
+        from ansible_base.rbac.management.create_types import create_DAB_contenttypes
 
-    create_dab_permissions(apps.get_app_config('dab_rbac'), apps=apps)
+        create_DAB_contenttypes(apps=apps)
 
 
 def migrate_content_type(apps, schema_editor):
@@ -48,6 +52,6 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunPython(create_types_and_permissions, migrations.RunPython.noop),
+        migrations.RunPython(create_types_if_needed, migrations.RunPython.noop),
         migrations.RunPython(migrate_content_type, migrations.RunPython.noop),
     ]
