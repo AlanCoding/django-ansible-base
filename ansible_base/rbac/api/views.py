@@ -351,6 +351,7 @@ class UserAccessViewSet(
             class Meta:
                 model = actor_cls
                 fields = self.serializer_mixin._expected_fields
+                ref_name = f"{self.__class__.__name__}_{actor_cls.__name__}_Serializer"
 
         return DynamicActorSerializer
 

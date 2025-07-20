@@ -5,7 +5,7 @@ from django.apps import apps as global_apps
 from django.db import DEFAULT_DB_ALIAS, connection, models
 
 from ansible_base.rbac import permission_registry
-from ansible_base.rbac.remote import get_local_resource_prefix, get_remote_standin_class, get_resource_prefix
+from ansible_base.rbac.remote import RemoteObject, get_local_resource_prefix, get_remote_standin_class, get_resource_prefix
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +80,8 @@ def create_DAB_contenttypes(
     updated_ct = 0
     for ct in dab_ct_cls.objects.all():
         ct_model_class = model_class(apps, ct)
+        if issubclass(ct_model_class, RemoteObject):
+            continue  # remote types not managed here
         if not permission_registry.is_registered(ct_model_class):
             logger.warning(f'{ct.model} is a stale content type in DAB RBAC')
             continue
