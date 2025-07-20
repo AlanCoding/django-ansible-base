@@ -144,7 +144,7 @@ class BaseAssignmentSerializer(serializers.ModelSerializer):
             return assignment
 
 
-class RoleUserAssignmentSerializer(BaseAssignmentSerializer):
+class ServiceRoleUserAssignmentSerializer(BaseAssignmentSerializer):
     user_ansible_id = ActorAnsibleIDField(source='user', required=True)
     actor_field = 'user'
 
@@ -153,7 +153,7 @@ class RoleUserAssignmentSerializer(BaseAssignmentSerializer):
         fields = assignment_common_fields + ('user_ansible_id',)
 
 
-class RoleTeamAssignmentSerializer(BaseAssignmentSerializer):
+class ServiceRoleTeamAssignmentSerializer(BaseAssignmentSerializer):
     team_ansible_id = ActorAnsibleIDField(source='team', required=True)
     actor_field = 'team'
 
