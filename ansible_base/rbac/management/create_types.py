@@ -5,7 +5,7 @@ from django.apps import apps as global_apps
 from django.db import DEFAULT_DB_ALIAS, connection, models
 
 from ansible_base.rbac import permission_registry
-from ansible_base.rbac.remote import get_resource_prefix, get_local_resource_prefix, get_remote_standin_class
+from ansible_base.rbac.remote import get_local_resource_prefix, get_remote_standin_class, get_resource_prefix
 
 logger = logging.getLogger(__name__)
 
@@ -69,9 +69,7 @@ def create_DAB_contenttypes(
     if not ct_data:
         return []
 
-    # To make usage earier in a transitional period, we will set the content type
-    # of any new entries created here to the id of its corresponding ContentType
-    # from the actual contenttypes app, allowing many filters to work
+    # Create the items here
     cts = []
     for ct_item_data in ct_data:
         cts.append(dab_ct_cls.objects.create(**ct_item_data))
