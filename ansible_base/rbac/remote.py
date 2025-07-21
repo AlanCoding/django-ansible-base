@@ -163,7 +163,7 @@ def get_resource_prefix(model: Union[Type[models.Model], models.Model, Type[Remo
     """
     if isinstance(model, RemoteObject) or (inspect.isclass(model) and issubclass(model, RemoteObject)):
         # If it is a remote object, it was only ever created from this to begin with
-        return model._meta.model_name
+        return model._meta.service
 
     if registry := get_resource_registry():
         # duplicates logic in ansible_base/resource_registry/apps.py

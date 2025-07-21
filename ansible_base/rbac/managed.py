@@ -46,6 +46,51 @@ class ManagedRoleConstructor:
             content_type_cls = apps.get_model('contenttypes', 'ContentType')
         return content_type_cls.objects.get_for_model(model)
 
+    def refresh_permissions(self, rd, apps):
+        """Make role permissions equal what the managed definition specifies"""
+        permission_cls = apps.get_model('dab_rbac', 'DABPermission')
+
+        # Desired permission codenames from managed source
+        desired_codenames = set(self.get_permissions(apps))
+
+        # Resolve to actual permission objects or error
+        desired_permissions = []
+        for codename in desired_codenames:
+            try:
+                if '.' in codename:
+                    perm = permission_cls.objects.get(api_slug=codename)
+                else:
+                    perm = permission_cls.objects.get(codename=codename)
+                desired_permissions.append(perm)
+            except permission_cls.DoesNotExist:
+                db_codenames = list(permission_cls.objects.values_list('codename', flat=True))
+                raise permission_cls.DoesNotExist(
+                    f'Permission codename "{codename}" does not exist.\n'
+                    f'Managed role: {self}\nExpected: {sorted(desired_codenames)}\n'
+                    f'Available in DB: {sorted(db_codenames)}'
+                )
+
+        desired_set = set(desired_permissions)
+        current_set = set(rd.permissions.all())
+
+        to_add = desired_set - current_set
+        to_remove = current_set - desired_set
+
+        if not to_add and not to_remove:
+            logger.info(f'No permission changes needed for role "{self.name}"')
+        else:
+            if to_add:
+                rd.permissions.add(*to_add)
+                added_codenames = sorted(p.codename for p in to_add)
+                logger.info(f'Added permissions to role "{self.name}": {added_codenames}')
+
+            if to_remove:
+                rd.permissions.remove(*to_remove)
+                removed_codenames = sorted(p.codename for p in to_remove)
+                logger.info(f'Removed permissions from role "{self.name}": {removed_codenames}')
+
+        logger.debug(f'Final permissions for role "{self.name}": ' f'{sorted(p.codename for p in rd.permissions.all())}')
+
     def get_or_create(self, apps):
         "Create from a list of text-type permissions and do validation"
         role_definition_cls = apps.get_model('dab_rbac', 'RoleDefinition')
@@ -57,28 +102,25 @@ class ManagedRoleConstructor:
         rd, created = role_definition_cls.objects.get_or_create(name=self.name, defaults=defaults)
 
         if created:
-            permissions = self.get_permissions(apps)
-            permission_cls = apps.get_model('dab_rbac', 'DABPermission')
-            perm_list = []
-            for str_perm in permissions:
-                try:
-                    perm_list.append(permission_cls.objects.get(codename=str_perm))
-                except permission_cls.DoesNotExist:
-                    # Better error handling for debugging
-                    db_codenames = list(permission_cls.objects.values_list('codename', flat=True))
-                    raise permission_cls.DoesNotExist(
-                        f'Permission codename {str_perm} does not exist. Manged role {self}\n expected: {permissions}\n Database permissions: {db_codenames}'
-                    )
-            rd.permissions.add(*perm_list)
-            logger.info(f'Created {self.shortname} managed role definition, name={self.name}')
+            self.refresh_permissions(rd, apps=apps)
             logger.debug(f'Data of {self.name} role definition: {defaults}')
-            logger.debug(f'Permissions of {self.name} role definition: {permissions}')
         return rd, created
 
-    def allowed_permissions(self, model: Optional[Type[Model]]) -> set[str]:
-        from ansible_base.rbac.validators import combine_values, permissions_allowed_for_role
+    def allowed_permissions_by_model(self, model: Optional[Type[Model]]) -> dict[Type, list[str]]:
+        from ansible_base.rbac.validators import permissions_allowed_for_role
 
-        return combine_values(permissions_allowed_for_role(model))
+        return permissions_allowed_for_role(model)
+
+    def allowed_permissions_slug_list(self, model: Optional[Type[Model]]) -> set[str]:
+        "Returns all possible permissions for model in terms format of awx.change_inventory"
+        from ansible_base.rbac.remote import get_resource_prefix
+
+        slug_list = set()
+        for child_model, child_codenames in self.allowed_permissions_by_model(model).items():
+            prefix = get_resource_prefix(child_model)
+            for codename in child_codenames:
+                slug_list.add(f'{prefix}.{codename}')
+        return slug_list
 
 
 class ManagedAdminBase(ManagedRoleConstructor):
@@ -86,7 +128,7 @@ class ManagedAdminBase(ManagedRoleConstructor):
 
     def get_permissions(self, apps) -> set[str]:
         """All permissions possible for the associated model"""
-        return self.allowed_permissions(self.get_model(apps))
+        return self.allowed_permissions_slug_list(self.get_model(apps))
 
 
 class ManagedActionBase(ManagedRoleConstructor):
@@ -108,7 +150,7 @@ class ManagedReadOnlyBase(ManagedRoleConstructor):
     description = gettext_noop("Has all viewing related permissions that can be delegated via {model_name_verbose}")
 
     def get_permissions(self, apps) -> set[str]:
-        return {codename for codename in self.allowed_permissions(self.get_model(apps)) if codename.startswith('view')}
+        return {api_slug for api_slug in self.allowed_permissions_slug_list(self.get_model(apps)) if '.view' in api_slug}
 
 
 class OrganizationMixin:

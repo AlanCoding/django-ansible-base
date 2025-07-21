@@ -108,7 +108,7 @@ class PermissionRegistry:
         for shortname, constructor in managed_defs.items():
             self.register_managed_role_constructor(shortname, constructor)
 
-    def create_managed_roles(self, apps) -> list[tuple[Model, bool]]:
+    def create_managed_roles(self, apps, update_perms=False) -> list[tuple[Model, bool]]:
         """Safe-ish method to create managed roles inside of a migration
 
         Returns a list with all the managed RoleDefinition objects and whether they were created
@@ -118,6 +118,8 @@ class PermissionRegistry:
         ret = []
         for managed_role in self._managed_roles.values():
             rd, created = managed_role.get_or_create(apps)
+            if update_perms and (not created):
+                managed_role.refresh_permissions(rd, apps)
             ret.append((rd, created))
         return ret
 
