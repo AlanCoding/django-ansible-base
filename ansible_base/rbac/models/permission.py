@@ -1,3 +1,4 @@
+from django.apps import apps
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
@@ -5,12 +6,17 @@ from .content_type import DABContentType
 
 
 class DABPermissionManager(models.Manager):
-    def load_remote_types(self, remote_data: list[dict]):
+    def load_remote_objects(self, remote_data: list[dict], update_managed=False):
         for remote_type in remote_data:
             codename = remote_type.pop('codename')
             ct_slug = remote_type.pop('content_type')
             ct = DABContentType.objects.get(api_slug=ct_slug)
             ct, _ = self.get_or_create(codename=codename, content_type=ct, defaults=remote_type)
+
+        if update_managed:
+            from ansible_base.rbac import permission_registry
+
+            permission_registry.create_managed_roles(apps, update_perms=True)
 
 
 class DABPermission(models.Model):

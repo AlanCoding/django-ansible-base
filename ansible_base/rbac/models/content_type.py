@@ -174,7 +174,7 @@ class DABContentTypeManager(django_models.Manager[django_models.Model]):
             self._add_to_cache(self.db, ct)
             return ct
 
-    def load_remote_types(self, remote_data: list[dict]):
+    def load_remote_objects(self, remote_data: list[dict]):
         parent_mapping: dict[django_models.Model, str] = {}
         for remote_type in remote_data:
             service = remote_type.pop('service')

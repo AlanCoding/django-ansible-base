@@ -68,7 +68,7 @@ def test_reload_types(admin_api_client):
 
     DABContentType.objects.all().delete()  # Delete all types, see if we get them back
 
-    DABContentType.objects.load_remote_types(type_list)
+    DABContentType.objects.load_remote_objects(type_list)
 
     response = admin_api_client.get(url + '?page_size=200', format="json")
     assert response.status_code == 200, response.data
@@ -78,7 +78,7 @@ def test_reload_types(admin_api_client):
 
 @pytest.mark.django_db
 def test_load_child_of_org():
-    DABContentType.objects.load_remote_types([{'service': 'fooland', 'app_label': 'foop', 'model': 'fooser', 'parent_content_type': 'shared.organization'}])
+    DABContentType.objects.load_remote_objects([{'service': 'fooland', 'app_label': 'foop', 'model': 'fooser', 'parent_content_type': 'shared.organization'}])
     ct = DABContentType.objects.get(api_slug='fooland.fooser')
     assert ct.parent_content_type.app_label == 'test_app'  # proves connection to existing
 
@@ -94,7 +94,7 @@ def test_reload_permissions(admin_api_client):
 
     DABPermission.objects.all().delete()  # Delete all permissions, see if we get them back
 
-    DABPermission.objects.load_remote_types(perm_list)
+    DABPermission.objects.load_remote_objects(perm_list)
 
     response = admin_api_client.get(url + '?page_size=200', format="json")
     assert response.status_code == 200, response.data
