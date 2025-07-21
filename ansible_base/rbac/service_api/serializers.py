@@ -87,11 +87,16 @@ class BaseAssignmentSerializer(serializers.ModelSerializer):
         has_oid = bool(self.initial_data.get('object_id'))
         has_oaid = bool(self.initial_data.get('object_ansible_id'))
 
-        if not self.partial and not has_oid and not has_oaid:
-            raise serializers.ValidationError("You must provide either 'object_id' or 'object_ansible_id'.")
-        elif not has_oaid:
-            # need to remove blank and null fields or else it can overwrite the non-null non-blank field
-            attrs['object_id'] = self.initial_data['object_id']
+        rd = attrs['role_definition']
+        if rd.content_type_id:
+            if not self.partial and not has_oid and not has_oaid:
+                raise serializers.ValidationError("You must provide either 'object_id' or 'object_ansible_id'.")
+            elif not has_oaid:
+                # need to remove blank and null fields or else it can overwrite the non-null non-blank field
+                attrs['object_id'] = self.initial_data['object_id']
+        else:
+            if has_oaid or has_oid:
+                raise serializers.ValidationError("Can not provide either 'object_id' or 'object_ansible_id' for system role")
 
         # NOTE: right now not enforcing the case you provide both, could check for consistency later
 
@@ -100,9 +105,12 @@ class BaseAssignmentSerializer(serializers.ModelSerializer):
     def find_existing_assignment(self, queryset):
         actor = self.validated_data[self.actor_field]
         role_definition = self.validated_data['role_definition']
-        object_id = self.validated_data['object_id']
-        filter_kwargs = {self.actor_field: actor}
-        return queryset.filter(role_definition=role_definition, object_id=object_id, **filter_kwargs).first()
+        filter_kwargs = {self.actor_field: actor, 'role_definition': role_definition}
+        if role_definition.content_type_id:
+            filter_kwargs['object_id'] = self.validated_data['object_id']
+        else:
+            filter_kwargs['object_id'] = None
+        return queryset.filter(**filter_kwargs).first()
 
     def create(self, validated_data):
         rd = validated_data['role_definition']
@@ -115,7 +123,7 @@ class BaseAssignmentSerializer(serializers.ModelSerializer):
         # Unlike the public view, the action is attributed to the specified user in data
         with impersonate(as_user):
 
-            object_id = validated_data['object_id']
+            object_id = validated_data.get('object_id')
             obj = None
             if object_id:
                 model = rd.content_type.model_class()

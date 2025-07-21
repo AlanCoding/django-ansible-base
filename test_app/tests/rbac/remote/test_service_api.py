@@ -3,7 +3,8 @@ from copy import deepcopy
 import pytest
 
 from ansible_base.lib.utils.response import get_relative_url
-from ansible_base.rbac.models import DABContentType, DABPermission
+from ansible_base.rbac.models import DABContentType, DABPermission, RoleDefinition
+from test_app.models import Team, User
 
 
 @pytest.mark.django_db
@@ -194,6 +195,44 @@ def test_unassign_endpoint_for_team(team, org_inv_rd, inventory, admin_api_clien
     response = admin_api_client.post(url, data)
     assert response.status_code == 200, response.data
     assert not rando.has_obj_perm(inventory, 'change')
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize('actor_type', ['user', 'team'])
+def test_assign_and_unassign_system_role(inventory, admin_api_client, actor_type, organization, member_rd):
+    if actor_type == 'user':
+        actor = User.objects.create(username='user1')
+        user = actor
+    else:
+        actor = Team.objects.create(name='random_team', organization=organization)
+        user = User.objects.create(username='user1')
+        member_rd.give_permission(user, actor)
+
+    rd = RoleDefinition.objects.managed.sys_auditor
+    assert 'view_inventory' in set(rd.permissions.values_list('codename', flat=True))
+    assert not user.has_obj_perm(inventory, 'view')
+
+    url = get_relative_url(f'service{actor_type}assignment-assign')
+    data = {"role_definition": rd.name, f"{actor_type}_ansible_id": str(actor.resource.ansible_id)}
+    response = admin_api_client.post(url, data)
+    assert response.status_code == 201, response.data
+    if hasattr(actor, '_singleton_permissions'):
+        delattr(actor, '_singleton_permissions')
+    assert user.has_obj_perm(inventory, 'view')  # gave system wide view permission
+
+    # Second try, response code indicates global assignment already exists
+    response = admin_api_client.post(url, data=data)
+    assert response.status_code == 200, response.data
+
+    unassign_url = get_relative_url(f'service{actor_type}assignment-unassign')
+    response = admin_api_client.post(unassign_url, data)
+    assert response.status_code == 204, response.data
+    if hasattr(actor, '_singleton_permissions'):
+        delattr(actor, '_singleton_permissions')
+    assert not user.has_obj_perm(inventory, 'view')  # permission removed
+
+    response = admin_api_client.post(unassign_url, data)
+    assert response.status_code == 200, response.data
 
 
 @pytest.mark.django_db
