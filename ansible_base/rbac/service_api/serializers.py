@@ -26,7 +26,12 @@ class DABPermissionSerializer(serializers.ModelSerializer):
 
 class ActorAnsibleIDField(serializers.Field):
     def to_representation(self, actor):
-        return str(actor.resource.ansible_id)
+        if actor is None:
+            return None
+        resource = actor.resource
+        if resource is None:
+            return None
+        return str(resource.ansible_id)
 
     def to_internal_value(self, data):
         resource_cls = apps.get_model('dab_resource_registry', 'Resource')
@@ -68,7 +73,7 @@ class BaseAssignmentSerializer(serializers.ModelSerializer):
     role_definition = serializers.SlugRelatedField(slug_field='name', queryset=RoleDefinition.objects.all())
     created_by_ansible_id = ActorAnsibleIDField(source='created_by', required=False)
     object_ansible_id = ObjectIDAnsibleIDField(source='object_id', required=False, allow_null=True)
-    object_id = serializers.CharField(allow_blank=True, required=False)
+    object_id = serializers.CharField(allow_blank=True, required=False, allow_null=True)
     from_service = serializers.CharField(write_only=True)
 
     def to_representation(self, instance):
