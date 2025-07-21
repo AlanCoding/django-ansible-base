@@ -7,6 +7,15 @@ from .content_type import DABContentType
 
 class DABPermissionManager(models.Manager):
     def load_remote_objects(self, remote_data: list[dict], update_managed=False):
+        """Load the permission list from a remote system, requires types are loaded first
+
+        The remote_data should be the results from the /service-index/role-permissions/ endpoint
+        of another system.
+        This will save those remote permissions into the local database so we can track remote RBAC.
+
+        update_managed being True will refresh the managed roles like Organization Admin
+        so that if the algorithm includes any new permissions, those are added.
+        """
         for remote_type in remote_data:
             codename = remote_type.pop('codename')
             ct_slug = remote_type.pop('content_type')
