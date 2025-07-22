@@ -79,7 +79,11 @@ def create_DAB_contenttypes(
     # Update, or set for the first time, the parent type reference
     updated_ct = 0
     for ct in dab_ct_cls.objects.all():
-        ct_model_class = model_class(apps, ct)
+        try:
+            ct_model_class = model_class(apps, ct)
+        except LookupError:
+            logger.warning(f'Model {ct.model} is in the permission_registry but not in the current app state. ' 'This could be okay in reverse migrations.')
+            continue
         if issubclass(ct_model_class, RemoteObject):
             continue  # remote types not managed here
         if not permission_registry.is_registered(ct_model_class):

@@ -14,7 +14,12 @@ def test_courtesy_roles_pass_validation():
         if '_base' in template_name:
             continue  # abstract, not intended to be used
         constructor = cls()
-        perm_list = [DABPermission.objects.get(codename=str_perm) for str_perm in constructor.get_permissions(apps)]
+        perm_list = []
+        for str_perm in constructor.get_permissions(apps):
+            if '.' in str_perm:
+                perm_list.append(DABPermission.objects.get(api_slug=str_perm))
+            else:
+                perm_list.append(DABPermission.objects.get(codename=str_perm))
         model_cls = constructor.get_model(apps)
         if model_cls is not None:
             ct = permission_registry.content_type_model.objects.get_for_model(constructor.get_model(apps))
