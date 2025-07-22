@@ -304,12 +304,14 @@ class UserAccessListMixin(AccessListMixin, serializers.ModelSerializer):
     "controller uses auth.User model so this needs to be as compatible as possible, thus ModelSerializer"
 
     object_role_assignments = serializers.SerializerMethodField()
+    url = serializers.SerializerMethodField()
     related = serializers.SerializerMethodField('_get_related')
     _expected_fields = ['id', 'url', 'related', 'username', 'is_superuser', 'object_role_assignments']
 
 
 class TeamAccessListMixin(AccessListMixin, AbstractCommonModelSerializer):
     object_role_assignments = serializers.SerializerMethodField()
+    url = serializers.SerializerMethodField()
     related = serializers.SerializerMethodField('_get_related')
     _expected_fields = ['id', 'url', 'related', 'name', 'organization', 'object_role_assignments']
 
