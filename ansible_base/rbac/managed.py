@@ -89,7 +89,7 @@ class ManagedRoleConstructor:
                 removed_codenames = sorted(p.codename for p in to_remove)
                 logger.info(f'Removed permissions from role "{self.name}": {removed_codenames}')
 
-        logger.debug(f'Final permissions for role "{self.name}": ' f'{sorted(p.codename for p in rd.permissions.all())}')
+        logger.debug(f'Final permissions for role "{self.name}": {sorted(p.codename for p in rd.permissions.all())}')
 
     def get_or_create(self, apps):
         "Create from a list of text-type permissions and do validation"
