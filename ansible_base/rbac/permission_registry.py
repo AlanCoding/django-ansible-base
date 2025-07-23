@@ -130,10 +130,6 @@ class PermissionRegistry:
 
         self.apps = apps
 
-        # Finish registering models
-        if self.team_model not in self._registry:
-            self.register(self.team_model)
-
         for model_name, kwargs in settings.ANSIBLE_BASE_RBAC_MODEL_REGISTRY.items():
             model = apps.get_model(model_name)
             if model not in self._registry:
