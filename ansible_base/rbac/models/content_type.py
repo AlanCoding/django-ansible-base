@@ -286,7 +286,7 @@ class DABContentType(django_models.Model):
             return apps.get_model(self.app_label, self.model)
         except LookupError as exc:
             raise LookupError(
-                f'Could not find ({self.app_label}, {self.model}), expected in local service={get_local_resource_prefix()} ' f'object service={self.service}'
+                f'Could not find ({self.app_label}, {self.model}), expected in local service={get_local_resource_prefix()} object service={self.service}'
             ) from exc
 
     def get_object_for_this_type(self, **kwargs: Any) -> Union[django_models.Model, RemoteObject]:
