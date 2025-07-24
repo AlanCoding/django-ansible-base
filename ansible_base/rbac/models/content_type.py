@@ -241,6 +241,7 @@ class DABContentType(django_models.Model):
             # that a single service can only continute a single model to the collective
             ("service", "model"),
         ]
+        ordering = ['id']
 
     def __str__(self) -> str:
         return self.app_labeled_name
