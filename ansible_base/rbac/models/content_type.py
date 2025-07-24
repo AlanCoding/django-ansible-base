@@ -176,7 +176,8 @@ class DABContentTypeManager(django_models.Manager[django_models.Model]):
 
     def load_remote_objects(self, remote_data: list[dict]):
         parent_mapping: dict[django_models.Model, str] = {}
-        for remote_type in remote_data:
+        for remote_type_raw in remote_data:
+            remote_type = remote_type_raw.copy()
             service = remote_type.pop('service')
             model = remote_type.pop('model')
             pct_slug = remote_type.pop('parent_content_type')
@@ -281,7 +282,12 @@ class DABContentType(django_models.Model):
 
             return get_remote_standin_class(self)
 
-        return apps.get_model(self.app_label, self.model)
+        try:
+            return apps.get_model(self.app_label, self.model)
+        except LookupError as exc:
+            raise LookupError(
+                f'Could not find ({self.app_label}, {self.model}), expected in local service={get_local_resource_prefix()} ' f'object service={self.service}'
+            ) from exc
 
     def get_object_for_this_type(self, **kwargs: Any) -> Union[django_models.Model, RemoteObject]:
         """Return the object referenced by this content type."""
