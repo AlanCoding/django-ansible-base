@@ -16,11 +16,12 @@ class DABPermissionManager(models.Manager):
         update_managed being True will refresh the managed roles like Organization Admin
         so that if the algorithm includes any new permissions, those are added.
         """
-        for remote_type in remote_data:
-            codename = remote_type.pop('codename')
-            ct_slug = remote_type.pop('content_type')
+        for remote_perm_raw in remote_data:
+            remote_perm = remote_perm_raw.copy()
+            codename = remote_perm.pop('codename')
+            ct_slug = remote_perm.pop('content_type')
             ct = DABContentType.objects.get(api_slug=ct_slug)
-            ct, _ = self.get_or_create(codename=codename, content_type=ct, defaults=remote_type)
+            ct, _ = self.get_or_create(codename=codename, content_type=ct, defaults=remote_perm)
 
         if update_managed:
             from ansible_base.rbac import permission_registry
