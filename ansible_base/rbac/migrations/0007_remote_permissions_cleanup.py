@@ -75,4 +75,17 @@ class Migration(migrations.Migration):
             name='content_type',
             field=models.ForeignKey(help_text='The content type this permission will apply to.', on_delete=models.deletion.CASCADE, related_name='dab_permissions', to='dab_rbac.dabcontenttype', verbose_name='content type'),
         ),
+        # Add ordering on all models for consistent view pagination
+        migrations.AlterModelOptions(
+            name='dabcontenttype',
+            options={'ordering': ['id']},
+        ),
+        migrations.AlterModelOptions(
+            name='roleevaluation',
+            options={'ordering': ['id'], 'verbose_name_plural': 'role_object_permissions'},
+        ),
+        migrations.AlterModelOptions(
+            name='roleevaluationuuid',
+            options={'ordering': ['id'], 'verbose_name_plural': 'role_object_permissions'},
+        ),
     ]

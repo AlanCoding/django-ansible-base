@@ -776,6 +776,7 @@ class RoleEvaluationFields(models.Model):
 class RoleEvaluation(RoleEvaluationFields):
     class Meta(RoleEvaluationMeta):
         constraints = [models.UniqueConstraint(name='one_entry_per_object_permission_and_role', fields=['object_id', 'content_type_id', 'codename', 'role'])]
+        ordering = ['id']
 
     role = models.ForeignKey(
         ObjectRole,
@@ -794,6 +795,7 @@ class RoleEvaluationUUID(RoleEvaluationFields):
         constraints = [
             models.UniqueConstraint(name='one_entry_per_object_permission_and_role_uuid', fields=['object_id', 'content_type_id', 'codename', 'role'])
         ]
+        ordering = ['id']
 
     role = models.ForeignKey(
         ObjectRole,
