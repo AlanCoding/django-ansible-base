@@ -30,13 +30,14 @@ def create_dab_permissions(app_config, verbosity=2, interactive=True, using=DEFA
     try:
         dab_ct_cls = apps.get_model("dab_rbac", "RoleDefinition")
     except LookupError:
-        logger.warning('Skipping DAB RBAC type and permission creation initial migration has not happened')
+        if app_config.label == 'dab_rbac':
+            logger.warning('Skipping DAB RBAC type and permission creation initial migration has not happened')
         return
 
     try:
         dab_ct_cls = apps.get_model("dab_rbac", "DABContentType")
     except LookupError:
-        logger.info('Running historical permission creation method')
+        logger.info(f'Running historical permission creation method for {app_config.label} app')
         old_create_dab_permissions(app_config, apps=apps)
         return
 
