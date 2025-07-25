@@ -175,4 +175,15 @@ class Migration(migrations.Migration):
             name='api_slug',
             field=models.CharField(default='', help_text='String to use for references to this type from other models in the API.', max_length=201),
         ),
+        # Make the content_type fields nullable so the reverse migrations are possible
+        migrations.AlterField(
+            model_name='dabpermission',
+            name='content_type',
+            field=models.ForeignKey(help_text='The content type this permission will apply to.', null=True, on_delete=models.deletion.CASCADE, to='contenttypes.contenttype', verbose_name='content type'),
+        ),
+        migrations.AlterField(
+            model_name='objectrole',
+            name='content_type',
+            field=models.ForeignKey(help_text='The content type of the subject of permission assignments. Duplicated from related RoleDefinition.', null=True, on_delete=models.deletion.CASCADE, to='contenttypes.contenttype'),
+        ),
     ]
