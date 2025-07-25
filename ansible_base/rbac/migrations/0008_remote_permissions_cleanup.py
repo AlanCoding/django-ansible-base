@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('dab_rbac', '0006_remote_permissions_removals'),
+        ('dab_rbac', '0007_remote_permissions_removals'),
     ]
 
     operations = [
