@@ -5,6 +5,7 @@ from typing import Any, Dict, Optional, Sequence, Tuple, Type, Union
 from django.apps import apps
 from django.db import models as django_models
 from django.db.models.options import Options
+from django.db.models import Max
 from django.utils.translation import gettext_lazy as _
 
 from ..remote import RemoteObject, get_local_resource_prefix, get_resource_prefix
@@ -176,12 +177,17 @@ class DABContentTypeManager(django_models.Manager[django_models.Model]):
 
     def load_remote_objects(self, remote_data: list[dict]):
         parent_mapping: dict[django_models.Model, str] = {}
+        # For test reasons, it can be very hard to assure the post_migrate logic runs in all cases
+        # so we just put in the id field manually which avoids any conflict with existing records
+        max_id = self.aggregate(Max('id'))['id__max'] or 0
         for remote_type_raw in remote_data:
-            remote_type = remote_type_raw.copy()
-            service = remote_type.pop('service')
-            model = remote_type.pop('model')
-            pct_slug = remote_type.pop('parent_content_type')
-            ct, _ = self.get_or_create(service=service, model=model, defaults=remote_type)
+            defaults = remote_type_raw.copy()
+            service = defaults.pop('service')
+            model = defaults.pop('model')
+            pct_slug = defaults.pop('parent_content_type')
+            max_id += 1
+            defaults['id'] = max_id
+            ct, _ = self.get_or_create(service=service, model=model, defaults=defaults)
             parent_mapping[ct] = pct_slug
 
         # The parent type link needs to be filled in via a second pass
