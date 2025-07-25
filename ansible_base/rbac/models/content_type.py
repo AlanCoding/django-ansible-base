@@ -4,8 +4,8 @@ from typing import Any, Dict, Optional, Sequence, Tuple, Type, Union
 
 from django.apps import apps
 from django.db import models as django_models
-from django.db.models.options import Options
 from django.db.models import Max
+from django.db.models.options import Options
 from django.utils.translation import gettext_lazy as _
 
 from ..remote import RemoteObject, get_local_resource_prefix, get_resource_prefix
