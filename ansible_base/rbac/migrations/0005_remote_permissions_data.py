@@ -54,4 +54,39 @@ class Migration(migrations.Migration):
     operations = [
         migrations.RunPython(create_types_if_needed, migrations.RunPython.noop),
         migrations.RunPython(migrate_content_type, migrations.RunPython.noop),
+        # Make the content_type fields nullable so the reverse migrations are possible
+        migrations.RemoveField(
+            model_name='dabpermission',
+            name='content_type',
+        ),
+        migrations.RemoveField(
+            model_name='objectrole',
+            name='content_type',
+        ),
+        migrations.RemoveField(
+            model_name='roledefinition',
+            name='content_type',
+        ),
+        migrations.RemoveField(
+            model_name='roleteamassignment',
+            name='content_type',
+        ),
+        migrations.RemoveField(
+            model_name='roleuserassignment',
+            name='content_type',
+        ),
+        migrations.RemoveField(
+            model_name='roleevaluation',
+            name='content_type_id',
+        ),
+        migrations.RemoveField(
+            model_name='roleevaluationuuid',
+            name='content_type_id',
+        ),
+
+        migrations.AlterField(
+            model_name='dabpermission',
+            name='content_type',
+            field=models.ForeignKey(help_text='The content type this permission will apply to.', null=True, on_delete=django.db.models.deletion.CASCADE, related_name='dab_permissions', to='dab_rbac.dabcontenttype', verbose_name='content type'),
+        ),
     ]
