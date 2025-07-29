@@ -6,6 +6,7 @@ from django.contrib.auth import get_user_model
 from django.db.models import Q
 from django.http import HttpResponseNotFound
 from django.shortcuts import get_object_or_404
+from django.urls.exceptions import NoReverseMatch
 from rest_framework import permissions
 from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
@@ -183,6 +184,14 @@ class ServiceIndexRootView(AnsibleBaseDjangoAppApiView):
         data['metadata'] = get_relative_url('service-metadata')
         data['resources'] = get_relative_url('resource-list')
         data['resource-types'] = get_relative_url('resourcetype-list')
+        if 'ansible_base.rbac' in settings.INSTALLED_APPS:
+            try:
+                data['role-types'] = get_relative_url('dabcontenttype-list')
+                data['role-permissions'] = get_relative_url('dabpermission-list')
+                data['role-user-assignments'] = get_relative_url('serviceuserassignment-list')
+                data['role-team-assignments'] = get_relative_url('serviceteamassignment-list')
+            except NoReverseMatch:
+                logger.info('DAB RBAC service-index views were not included, so not linked')
         return Response(data)
 
 

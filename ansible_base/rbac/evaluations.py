@@ -1,4 +1,5 @@
-from typing import Optional
+import inspect
+from typing import Iterable, Optional, Type
 
 from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
@@ -9,6 +10,8 @@ from rest_framework.serializers import ValidationError
 from ansible_base.rbac import permission_registry
 from ansible_base.rbac.models import DABPermission, RoleDefinition, get_evaluation_model
 from ansible_base.rbac.validators import validate_codename_for_model
+
+from .remote import RemoteObject
 
 """
 RoleEvaluation or RoleEvaluationUUID models are the authority for permission evaluations,
@@ -86,7 +89,7 @@ class AccessibleObjectsDescriptor(BaseEvaluationDescriptor):
 
 
 class AccessibleIdsDescriptor(BaseEvaluationDescriptor):
-    def __call__(self, actor, codename: str = 'view', content_types=None, cast_field=None) -> QuerySet:
+    def __call__(self, actor, codename: str = 'view', content_types: Optional[Iterable[int]] = None, cast_field=None) -> QuerySet:
         full_codename = validate_codename_for_model(codename, self.cls)
         if isinstance(actor, AnonymousUser):
             return self.cls.objects.none().values_list()
@@ -98,8 +101,29 @@ class AccessibleIdsDescriptor(BaseEvaluationDescriptor):
         return get_evaluation_model(self.cls).accessible_ids(self.cls, actor, full_codename, content_types=content_types, cast_field=cast_field)
 
 
+def remote_obj_id_qs(actor, remote_cls: Type[RemoteObject], codename: str = 'view', content_types: Optional[Iterable[int]] = None, cast_field=None) -> QuerySet:
+    """Returns a queryset of ids for a remote object"""
+    full_codename = validate_codename_for_model(codename, remote_cls)
+    evaluation_model = get_evaluation_model(remote_cls)
+    if isinstance(actor, AnonymousUser):
+        return evaluation_model.objects.none().values_list('object_id')
+    if actor._meta.model_name == 'user' and has_super_permission(actor, full_codename):
+        # Return all known objects on this server, some objects on remote server may not be known
+        if content_types:
+            filter_kwargs = {'content_type_id__in': content_types}
+        else:
+            filter_kwargs = {'content_type': remote_cls.get_ct_from_type()}
+        if cast_field is None:
+            return evaluation_model.objects.filter(**filter_kwargs).values_list('object_id').distinct()
+        else:
+            return evaluation_model.objects.filter(**filter_kwargs).values_list(Cast('object_id', output_field=cast_field)).distinct()
+    return evaluation_model.accessible_ids(remote_cls, actor, full_codename, content_types=content_types, cast_field=cast_field)
+
+
 def bound_has_obj_perm(self, obj, codename) -> bool:
-    if not permission_registry.is_registered(obj):
+    if (inspect.isclass(obj) and issubclass(obj, RemoteObject)) or isinstance(obj, RemoteObject):
+        pass  # no need to validate remote content type, assumed we have content type entry already
+    elif not permission_registry.is_registered(obj):
         raise ValidationError(f'Object of {obj._meta.model_name} type is not registered with DAB RBAC')
     full_codename = validate_codename_for_model(codename, obj)
     if has_super_permission(self, full_codename):

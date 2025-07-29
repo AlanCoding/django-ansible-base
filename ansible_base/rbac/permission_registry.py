@@ -1,3 +1,4 @@
+import inspect
 import logging
 from typing import Optional, Type, Union
 
@@ -9,6 +10,8 @@ from django.db.models.signals import post_delete, post_migrate
 from django.utils.functional import cached_property
 
 from ansible_base.rbac.managed import ManagedRoleConstructor, get_managed_role_constructors
+
+from .remote import RemoteObject
 
 """
 This will record the models that the RBAC system in this app will follow
@@ -24,7 +27,7 @@ logger = logging.getLogger('ansible_base.rbac.permission_registry')
 
 class PermissionRegistry:
     def __init__(self):
-        self._registry = set()  # model registry
+        self._registry: set[Model] = set()  # model registry
         self._name_to_model = dict()
         self._parent_fields = dict()
         self._managed_roles = dict()  # code-defined role definitions, managed=True
@@ -87,30 +90,6 @@ class PermissionRegistry:
                     child_filters.append((f'{next_parent_filter}__{parent_field_name}', grandchild_model))
         return child_filters
 
-    def get_resource_prefix(self, cls: Type[Model]) -> str:
-        """For a given model class, give the prefix like shared, of API naming like shared.team"""
-        if registry := self.get_resource_registry():
-            # duplicates logic in ansible_base/resource_registry/apps.py
-            try:
-                resource_config = registry.get_config_for_model(cls)
-                if resource_config.managed_serializer:
-                    return "shared"  # shared model
-            except KeyError:
-                pass  # unregistered model
-
-            # Fallback for unregistered and non-shared models
-            return registry.api_config.service_type
-        else:
-            return 'local'
-
-    def get_resource_registry(self):
-        if 'ansible_base.resource_registry' not in settings.INSTALLED_APPS:
-            return None
-
-        from ansible_base.resource_registry.registry import get_registry
-
-        return get_registry()
-
     def get_managed_role_constructor(self, shortname: str) -> Optional[ManagedRoleConstructor]:
         return self._managed_roles.get(shortname)
 
@@ -129,7 +108,7 @@ class PermissionRegistry:
         for shortname, constructor in managed_defs.items():
             self.register_managed_role_constructor(shortname, constructor)
 
-    def create_managed_roles(self, apps) -> list[tuple[Model, bool]]:
+    def create_managed_roles(self, apps, update_perms=False) -> list[tuple[Model, bool]]:
         """Safe-ish method to create managed roles inside of a migration
 
         Returns a list with all the managed RoleDefinition objects and whether they were created
@@ -139,6 +118,8 @@ class PermissionRegistry:
         ret = []
         for managed_role in self._managed_roles.values():
             rd, created = managed_role.get_or_create(apps)
+            if update_perms and (not created):
+                managed_role.refresh_permissions(rd, apps)
             ret.append((rd, created))
         return ret
 
@@ -148,10 +129,6 @@ class PermissionRegistry:
         from ansible_base.rbac.management import create_dab_permissions
 
         self.apps = apps
-
-        # Finish registering models
-        if self.team_model not in self._registry:
-            self.register(self.team_model)
 
         for model_name, kwargs in settings.ANSIBLE_BASE_RBAC_MODEL_REGISTRY.items():
             model = apps.get_model(model_name)
@@ -205,7 +182,7 @@ class PermissionRegistry:
 
     @property
     def content_type_model(self):
-        return self.apps.get_model('contenttypes.ContentType')
+        return self.apps.get_model('dab_rbac.DABContentType')
 
     @cached_property
     def org_ct_id(self):
@@ -214,15 +191,12 @@ class PermissionRegistry:
 
     @property
     def permission_qs(self):
-        """Return a queryset of the permission model restricted to the RBAC-tracked models
+        """Return a queryset of the permission model
 
-        Note that this should not be necessary, since the post_migrate signal for DABPermission
-        will only create entries for registered models.
-        However, removing permission entries after a model definition changes is still unsolved
-        and this is already problematic for auth.Permission.
+        This should already only have RBAC-tracked models,
+        but it may also include permissions for remote models.
         """
-        all_cts = self.content_type_model.objects.get_for_models(*self.all_registered_models)
-        return self.apps.get_model('dab_rbac.DABPermission').objects.filter(content_type__in=all_cts.values())
+        return self.apps.get_model('dab_rbac.DABPermission').objects.all()
 
     @property
     def team_permission(self):
@@ -232,8 +206,10 @@ class PermissionRegistry:
     def all_registered_models(self):
         return list(self._registry)
 
-    def is_registered(self, obj: Union[ModelBase, Model]) -> bool:
+    def is_registered(self, obj: Union[ModelBase, Model, RemoteObject, Type[RemoteObject]]) -> bool:
         """Tells if the given object or class is a type tracked by DAB RBAC"""
+        if isinstance(obj, RemoteObject) or (inspect.isclass(obj) and issubclass(obj, RemoteObject)):
+            return True  # Pretty much the only way we can create these is via a registered type
         return any((obj._meta.model_name == cls._meta.model_name and obj._meta.app_label == cls._meta.app_label) for cls in self._registry)
 
     def get_model_by_name(self, model_name: str) -> Optional[Type[Model]]:

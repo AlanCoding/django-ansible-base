@@ -9,6 +9,8 @@ from rest_framework.exceptions import ValidationError
 from ansible_base.lib.utils.models import is_add_perm
 from ansible_base.rbac.permission_registry import permission_registry
 
+from .remote import RemoteObject, get_resource_prefix
+
 
 def system_roles_enabled():
     return bool(
@@ -17,7 +19,7 @@ def system_roles_enabled():
     )
 
 
-def prnt_model_name(model: Optional[Type[Model]]) -> str:
+def prnt_model_name(model: Optional[Union[Type[Model], Type[RemoteObject]]]) -> str:
     return model._meta.model_name if model else 'global role'
 
 
@@ -25,24 +27,44 @@ def prnt_codenames(codename_set: set[str]) -> str:
     return ', '.join(codename_set)
 
 
-def codenames_for_cls(cls) -> list[str]:
-    "Helper method that gives the Django permission codenames for a given class"
-    return [t[0] for t in cls._meta.permissions] + [f'{act}_{cls._meta.model_name}' for act in cls._meta.default_permissions]
+def codenames_for_content_type(ct: Model):
+    return [permission.codename for permission in ct.dab_permissions.all()]
 
 
 def permissions_allowed_for_system_role() -> dict[Type[Model], list[str]]:
     "Permission codenames useable in system-wide roles, which have content_type set to None"
     permissions_by_model = defaultdict(list)
-    for cls in sorted(permission_registry.all_registered_models, key=lambda cls: cls._meta.model_name):
-        is_team = bool(cls._meta.model_name == 'team')
-        for codename in codenames_for_cls(cls):
+    for ct in permission_registry.content_type_model.objects.all():
+        is_team = bool(ct.model == 'team')
+        cls = ct.model_class()
+        for codename in codenames_for_content_type(ct):
             if is_team and (not codename.startswith('view')):
                 continue  # special exclusion of team object permissions from system-wide roles
             permissions_by_model[cls].append(codename)
     return permissions_by_model
 
 
-def permissions_allowed_for_role(cls) -> dict[Type[Model], list[str]]:
+def get_descendent_models_from_db(main_ct: Model):
+    """For a given content type, get all content types from the database that reference them as a parent
+
+    Including any content types that reference a content type that reference this content type as a parent.
+    """
+    seen_ids = set()
+    result = []
+    queue = [main_ct]
+
+    while queue:
+        current = queue.pop(0)
+        for child in current.child_content_types.all():
+            if child.pk not in seen_ids:
+                seen_ids.add(child.pk)
+                result.append(child)
+                queue.append(child)
+
+    return result
+
+
+def permissions_allowed_for_role(cls) -> dict[Union[Type[Model], Type[RemoteObject]], list[str]]:
     "Permission codenames valid for a RoleDefinition of given class, organized by permission class"
     if cls is None:
         return permissions_allowed_for_system_role()
@@ -50,18 +72,27 @@ def permissions_allowed_for_role(cls) -> dict[Type[Model], list[str]]:
     if not permission_registry.is_registered(cls):
         raise ValidationError(f'Django-ansible-base RBAC does not track permissions for model {cls._meta.model_name}')
 
-    # Include direct model permissions (except for add permission)
     permissions_by_model = defaultdict(list)
-    permissions_by_model[cls] = [codename for codename in codenames_for_cls(cls) if not is_add_perm(codename)]
 
-    # Include model permissions for all child models, including the add permission
-    for rel, child_cls in permission_registry.get_child_models(cls):
-        permissions_by_model[child_cls] += codenames_for_cls(child_cls)
+    # Warm cache to load all types and related permissions
+    permission_registry.content_type_model.objects.warm_cache(permission_registry.content_type_model.objects.prefetch_related('dab_permissions'))
+
+    # Add direct model permissions
+    cls_ct = permission_registry.content_type_model.objects.get_for_model(cls)
+    for permission in cls_ct.dab_permissions.all():
+        if not is_add_perm(permission.codename):
+            permissions_by_model[cls].append(permission.codename)
+
+    # Add permissions for all child types
+    for ct in get_descendent_models_from_db(cls_ct):
+        for child_permission in ct.dab_permissions.all():
+            # Include add permissions for child models
+            permissions_by_model[ct.model_class()].append(child_permission.codename)
 
     return permissions_by_model
 
 
-def combine_values(data: dict[Type[Model], list[str]]) -> set[str]:
+def combine_values(data: dict[Union[Type[Model], Type[RemoteObject]], list[str]]) -> set[str]:
     "Utility method to merge everything in .values() into a single set"
     ret = set()
     for this_list in data.values():
@@ -88,14 +119,16 @@ def validate_role_definition_enabled(permissions, content_type) -> None:
                 raise ValidationError('Creating custom roles that include team permissions is disabled')
 
 
-def check_view_permission_criteria(codename_set: set[str], permissions_by_model: dict[Type[Model], list[str]]) -> None:
+def check_view_permission_criteria(codename_set: set[str], permissions_by_model: dict[Union[Type[Model], Type[RemoteObject]], list[str]]) -> None:
     """Given a codename_set to be used in a role definition, enforce that view permission is included
 
     For example, a role can not give change permission to a thing without also giving view permission,
     because being able to change a thing without the ability to see it makes no sense.
     """
     for cls, valid_model_permissions in permissions_by_model.items():
-        if 'view' in cls._meta.default_permissions:
+        # NOTE: there is some concern about using valid_model_permissions here, as opposed to all model permissions
+        # however, no specific issue has yet been identified for this
+        if any('view' in codename for codename in valid_model_permissions):
             model_permissions = set(valid_model_permissions) & codename_set
             local_codenames = {codename for codename in model_permissions if not is_add_perm(codename)}
             if local_codenames and not any('view' in codename for codename in local_codenames):
@@ -104,7 +137,7 @@ def check_view_permission_criteria(codename_set: set[str], permissions_by_model:
                 )
 
 
-def check_has_change_with_delete(codename_set: set[str], permissions_by_model: dict[Type[Model], list[str]]):
+def check_has_change_with_delete(codename_set: set[str], permissions_by_model: dict[Union[Type[Model], Type[RemoteObject]], list[str]]):
     """Given a codename_set to be used in a role definition, include change if including delete
 
     We would like to get rid of this criteria eventually, but no harm in making it configurable.
@@ -113,7 +146,8 @@ def check_has_change_with_delete(codename_set: set[str], permissions_by_model: d
     If it has delete permission without change permission, throw an error.
     """
     for cls, valid_model_permissions in permissions_by_model.items():
-        if 'delete' in cls._meta.default_permissions and 'change' in cls._meta.default_permissions:
+        if any('delete' in codename for codename in valid_model_permissions) and any('change' in codename for codename in valid_model_permissions):
+            # if 'delete' in cls._meta.default_permissions and 'change' in cls._meta.default_permissions:
             model_permissions = set(valid_model_permissions) & codename_set
             local_codenames = {codename for codename in model_permissions if not is_add_perm(codename)}
             if any('delete' in codename for codename in local_codenames) and not any('change' in codename for codename in local_codenames):
@@ -123,9 +157,8 @@ def check_has_change_with_delete(codename_set: set[str], permissions_by_model: d
 
 
 def validate_permissions_for_model(permissions, content_type: Optional[Model], managed: bool = False) -> None:
-    """Validation for creating a RoleDefinition
+    """Validation for creating a RoleDefinition, called by serializer for public API
 
-    This is called by the RoleDefinitionSerializer so clients will get these errors.
     It is also called by manager helper methods like RoleDefinition.objects.create_from_permissions
     which is done as an aid to tests and other apps integrating this library.
     """
@@ -163,11 +196,11 @@ def validate_permissions_for_model(permissions, content_type: Optional[Model], m
             if content_type and perm.codename.startswith('view'):
                 continue
             model = perm.content_type.model_class()
-            if permission_registry.get_resource_prefix(model) == 'shared':
+            if get_resource_prefix(model) == 'shared':
                 raise ValidationError({'permissions', 'Local custom roles can only include view permission for shared models'})
 
 
-def validate_codename_for_model(codename: str, model: Union[Model, Type[Model]]) -> str:
+def validate_codename_for_model(codename: str, model: Union[Model, Type[Model], Type[RemoteObject], RemoteObject]) -> str:
     """Shortcut method and validation to allow action name, codename, or app_name.codename
 
     This institutes a shortcut for easier use of the evaluation methods
@@ -175,7 +208,9 @@ def validate_codename_for_model(codename: str, model: Union[Model, Type[Model]])
     assuming obj is an inventory.
     It also tries to protect the user by throwing an error if the permission does not work.
     """
-    valid_codenames = codenames_for_cls(model)
+    # Calls to get_for_model should be efficient, if problem caller should call warm_cache
+    model_ct = permission_registry.content_type_model.objects.get_for_model(model)
+    valid_codenames = codenames_for_content_type(model_ct)
     if (not codename.startswith('add')) and codename in valid_codenames:
         return codename
     if re.match(r'^[a-z]+$', codename):
@@ -193,7 +228,8 @@ def validate_codename_for_model(codename: str, model: Union[Model, Type[Model]])
         return name
 
     for rel, child_cls in permission_registry.get_child_models(model):
-        if name in codenames_for_cls(child_cls):
+        child_ct = permission_registry.content_type_model.objects.get_for_model(child_cls)
+        if name in codenames_for_content_type(child_ct):
             return name
     raise RuntimeError(f'The permission {name} is not valid for model {model._meta.model_name}')
 
@@ -254,3 +290,35 @@ def check_locally_managed(rd: Model) -> None:
         return
     if rd.name in settings.ANSIBLE_BASE_JWT_MANAGED_ROLES:
         raise ValidationError('Not managed locally, use the resource server instead')
+
+
+class LocalValidators:
+    """This keeps functioning validators that use model data from permission_registry as opposed to DB
+
+    These are only valid if you do not track permissions for remote models,
+    but they can still be used in those cases.
+    """
+
+    @staticmethod
+    def codenames_for_cls(cls: Union[Model, Type[Model]]) -> list[str]:
+        "Helper method that gives the Django permission codenames for a given class"
+        return [t[0] for t in cls._meta.permissions] + [f'{act}_{cls._meta.model_name}' for act in cls._meta.default_permissions]
+
+    @staticmethod
+    def permissions_allowed_for_role(cls) -> dict[Type[Model], list[str]]:
+        "Permission codenames valid for a RoleDefinition of given class, organized by permission class"
+        if cls is None:
+            return permissions_allowed_for_system_role()
+
+        if not permission_registry.is_registered(cls):
+            raise ValidationError(f'Django-ansible-base RBAC does not track permissions for model {cls._meta.model_name}')
+
+        # Include direct model permissions (except for add permission)
+        permissions_by_model = defaultdict(list)
+        permissions_by_model[cls] = [codename for codename in LocalValidators.codenames_for_cls(cls) if not is_add_perm(codename)]
+
+        # Include model permissions for all child models, including the add permission
+        for rel, child_cls in permission_registry.get_child_models(cls):
+            permissions_by_model[child_cls] += LocalValidators.codenames_for_cls(child_cls)
+
+        return permissions_by_model

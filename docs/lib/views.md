@@ -49,6 +49,18 @@ class DefaultAPIView(AnsibleBaseView):
     ...
 ```
 
+### Turning off views for an app
+
+It's possible you may want to use an app from DAB but not include views from that app.
+If you do not want any DAB views, that is relatively simple to do.
+However, to include views from all apps except for a certain list, you can use this setting, example:
+
+```
+ANSIBLE_BASE_APPS_EXCLUDE_VIEW_LIST = ['ansible_base.rbac']
+```
+
+This might be useful if you wanted to use the RBAC app at the ORM layer with your own views, in this example.
+
 
 ## Adding extra related fields
 

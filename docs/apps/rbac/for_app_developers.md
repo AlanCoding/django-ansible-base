@@ -181,6 +181,51 @@ you can give and remove permissions to all objects of that type "in" the organiz
 - `rd.give_permission(user, organization)` - give execute/view permissions to all job templates in that organization
 - `rd.remove_permission(user, organization)` - revoke permissions obtained from that particular role (other roles will still be in effect)
 
+### Remote Content
+
+You can track permissions of objects in another system.
+
+To do this, you need to load the types and permissions of the other system.
+TODO: export and import utility to accomplish this.
+Once you have done this, the permissions (from the remote system) can be added to a `RoleDefinition`.
+
+The objects do not exist locally, so referencing `assignment.content_object`,
+or any other similar content object, will give an object that does not exist in the local database.
+Because of this, a stand-in object is returned with minimal fields.
+To add more functionality, presuambly methods to make requests to the remote server
+which will then return more details, you need to subclass `RemoteObject`:
+
+```
+from ansible_base.rbac.remote import RemoteObject
+
+class MyRemoteObject(RemoteObject):
+  def fetch(self):
+    ...
+```
+
+Then you would set `settings.RBAC_REMOTE_OBJECT_CLASS` to the import path for `MyRemoteObject`.
+
+#### Add the Resource API URLs
+
+```
+from ansible_base.rbac.service_api.urls import rbac_service_urls
+
+urlpatterns = [
+    ...,
+    path('service-index/', include(rbac_service_urls)),
+]
+```
+
+This will add the following paths:
+- `service-index/role-types/`
+- `service-index/role-permissions/`
+- `service-index/role-user-assignments/`
+- `service-index/role-team-assignments/`
+
+Both the role user & team assignment lists have a `assign/` and `unassign/` URL from that base.
+Those can be used to do one-shot synchronization of a single role assignment with
+global identifiers.
+
 ### Evaluating Permissions
 
 The ultimate goal of this system is to evaluate what objects a user
@@ -326,3 +371,31 @@ role definition with the name "team-member".
 Apps that utilize django-ansible-base may wish to add extra validation when assigning roles to actors (users or teams).
 
 see [Validation callback for role assignment](../../lib/validation.md)
+
+### Remote Permissions
+
+There is an API under `/service-index/` designed for the purpose (primarily) for use in
+coordination of permissions between multiple servers or services.
+Actually doing the coordination of permissions in a cluster is an exercise left up to the reader.
+
+Types and permissions are shown in:
+ - `/service-index/role-types/`
+ - `/service-index/role-permissions/`
+
+To get everything you need, you must add an entry to your `RESOURCE_LIST` setting.
+
+```
+from ansible_base.rbac.models import RoleDefinition
+from ansible_base.resource_registry.shared_types import RoleDefinitionType
+
+RESOURCE_LIST = (
+    ...
+    ResourceConfig(
+        RoleDefinition,
+        shared_resource=SharedResource(serializer=RoleDefinitionType, is_provider=False),
+    ),
+)
+```
+
+With this, role definitions should appear in the endpoint
+ - `/service-index/resources/?`

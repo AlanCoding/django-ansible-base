@@ -108,6 +108,7 @@ def get_mergeable_dab_settings(settings: dict) -> dict:  # NOSONAR
             'user_ansible_id',
             'team_ansible_id',
             'object_ansible_id',
+            'assignment',  # for RoleAssignmentFilterBackend, assignment filtering
         )
 
     # SPECTACULAR SETTINGS

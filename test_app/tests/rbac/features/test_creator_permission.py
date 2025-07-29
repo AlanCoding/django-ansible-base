@@ -1,8 +1,8 @@
 import pytest
-from django.contrib.contenttypes.models import ContentType
+from django.apps import apps
 from django.test.utils import override_settings
 
-from ansible_base.rbac.models import RoleDefinition, RoleEvaluation
+from ansible_base.rbac.models import DABContentType, RoleDefinition, RoleEvaluation, RoleUserAssignment
 from test_app.models import User
 
 INVENTORY_OBJ_PERMS = ('change_inventory', 'update_inventory', 'view_inventory', 'delete_inventory')
@@ -19,7 +19,7 @@ def test_create_inventory_gain_role(rando, inventory):
 @pytest.mark.django_db
 def test_create_inventory_already_has_role(rando, inventory):
     org_inv_rd = RoleDefinition.objects.create_from_permissions(
-        name='global-inventory-admin', permissions=INVENTORY_OBJ_PERMS, content_type=ContentType.objects.get_for_model(inventory.organization)
+        name='global-inventory-admin', permissions=INVENTORY_OBJ_PERMS, content_type=DABContentType.objects.get_for_model(inventory.organization)
     )
     org_assignment = org_inv_rd.give_permission(rando, inventory.organization)
     # User should already have (at least) all object permissions on the inventory
@@ -61,3 +61,18 @@ def test_custom_creation_perms(rando, inventory):
     with override_settings(ANSIBLE_BASE_CREATOR_DEFAULTS=['change', 'view']):
         RoleDefinition.objects.give_creator_permissions(rando, inventory)
         assert set(perm_name.split('_', 1)[0] for perm_name in RoleEvaluation.get_permissions(rando, inventory)) == {'change', 'view'}
+
+
+@pytest.mark.django_db
+def test_creator_permission_for_unregistered_model(rando):
+    prior_ct = DABContentType.objects.count()
+    prior_assignments = RoleUserAssignment.objects.count()
+    prior_rds = RoleDefinition.objects.count()
+
+    cls = apps.get_model('test_app.secretcolor')
+    obj = cls.objects.create()
+    RoleDefinition.objects.give_creator_permissions(rando, obj)  # should do nothing
+
+    assert DABContentType.objects.count() == prior_ct  # did not create anything
+    assert RoleUserAssignment.objects.count() == prior_assignments
+    assert RoleDefinition.objects.count() == prior_rds

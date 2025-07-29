@@ -7,8 +7,9 @@ from rest_framework.exceptions import PermissionDenied
 
 from ansible_base.lib.utils.settings import get_setting
 from ansible_base.rbac.evaluations import has_super_permission
-from ansible_base.rbac.models import ObjectRole
+from ansible_base.rbac.models import DABPermission, ObjectRole
 from ansible_base.rbac.permission_registry import permission_registry
+from ansible_base.rbac.remote import RemoteObject
 from ansible_base.rbac.validators import permissions_allowed_for_role
 
 
@@ -78,7 +79,17 @@ def check_content_obj_permission(request_user, obj) -> None:
     on objects, so we firstly look to a simple matter of having change permission
     If that is not available, then we check all object-level permissions.
     """
-    if 'change' in obj._meta.default_permissions:
+    if isinstance(obj, RemoteObject):
+        permissions = DABPermission.objects.filter(content_type=obj.content_type)
+        for permission in permissions:
+            if permission.codename.startswith('change'):
+                if not request_user.has_obj_perm(obj, 'change'):
+                    raise PermissionDenied
+                return
+        for permission in permissions:
+            if not request_user.has_obj_perm(obj, permission.codename):
+                raise PermissionDenied
+    elif 'change' in obj._meta.default_permissions:
         # Model has no change permission, so user must have all permissions for the applicable model
         if not request_user.has_obj_perm(obj, 'change'):
             raise PermissionDenied

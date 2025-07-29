@@ -2,11 +2,10 @@ from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
-from django.contrib.contenttypes.models import ContentType
 
 from ansible_base.jwt_consumer.common.exceptions import InvalidService
 from ansible_base.jwt_consumer.hub.auth import HubJWTAuth
-from ansible_base.rbac.models import RoleDefinition, RoleUserAssignment
+from ansible_base.rbac.models import DABContentType, RoleDefinition, RoleUserAssignment
 from test_app.models import Organization, Team, User
 
 
@@ -61,9 +60,9 @@ def test_hub_jwt_orgs_teams_groups_memberships(mock_contenttype, mock_resource):
     # The rbac hooks will attempt to assign these roledefs
     # when users are added/removed from orgs+teams, so they
     # must exist before claims are processed ...
-    org_content_type = ContentType.objects.get_for_model(Organization)
+    org_content_type = DABContentType.objects.get_for_model(Organization)
     org_member_role, _ = RoleDefinition.objects.get_or_create(name="Organization Member", content_type=org_content_type)
-    team_content_type = ContentType.objects.get_for_model(Team)
+    team_content_type = DABContentType.objects.get_for_model(Team)
     team_member_role, _ = RoleDefinition.objects.get_or_create(name="Team Member", content_type=team_content_type)
     team_admin_role, _ = RoleDefinition.objects.get_or_create(name="Team Admin", content_type=team_content_type)
 

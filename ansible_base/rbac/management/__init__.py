@@ -1,10 +1,15 @@
 import logging
+import re
+from collections import defaultdict
 
 from django.apps import apps as global_apps
-from django.contrib.contenttypes.management import create_contenttypes
-from django.db import DEFAULT_DB_ALIAS, router
+from django.db import DEFAULT_DB_ALIAS, connection, router
 
 from ansible_base.rbac import permission_registry
+from ansible_base.rbac.remote import get_resource_prefix
+
+from ._old import create_dab_permissions as old_create_dab_permissions
+from .create_types import create_DAB_contenttypes
 
 logger = logging.getLogger(__name__)
 
@@ -12,49 +17,84 @@ logger = logging.getLogger(__name__)
 def create_dab_permissions(app_config, verbosity=2, interactive=True, using=DEFAULT_DB_ALIAS, apps=global_apps, **kwargs):
     """
     This is modified from the django auth.
-    This will create DABPermission entries
-    this will only create permissions for registered models
+    This will create DABPermission and DABContentType entries, only for registered models.
+
+    The core logic is mainly in the other method, and this is to adhere to the post_migrate contract
     """
-    if not getattr(app_config, 'models_module', None):
+    # NOTE: similar methods, like for contenttypes checks app models_module
+    # but we know this is for dab_rbac, and we know it has models, so that is irrelevant
+    if not permission_registry._registry:
+        logger.warning('DAB RBAC app is installed but no models are registered')
         return
-
-    # exit early if nothing is registered for this app
-    app_label = app_config.label
-    if not any(cls._meta.app_label == app_label for cls in permission_registry._registry):
-        return
-
-    # Ensure that contenttypes are created for this app. Needed if
-    # 'ansible_base.rbac' is in INSTALLED_APPS before
-    # 'django.contrib.contenttypes'.
-    create_contenttypes(
-        app_config,
-        verbosity=verbosity,
-        interactive=interactive,
-        using=using,
-        apps=apps,
-        **kwargs,
-    )
 
     try:
-        app_config = apps.get_app_config(app_label)
-        ContentType = apps.get_model("contenttypes", "ContentType")
-        Permission = apps.get_model("dab_rbac", "DABPermission")
+        dab_ct_cls = apps.get_model("dab_rbac", "RoleDefinition")
     except LookupError:
+        if app_config.label == 'dab_rbac':
+            logger.warning('Skipping DAB RBAC type and permission creation initial migration has not happened')
         return
 
-    if not router.allow_migrate_model(using, Permission):
+    try:
+        dab_ct_cls = apps.get_model("dab_rbac", "DABContentType")
+    except LookupError:
+        logger.info(f'Running historical permission creation method for {app_config.label} app')
+        old_create_dab_permissions(app_config, apps=apps)
         return
+
+    if app_config.label != 'dab_rbac':
+        return
+
+    if not router.allow_migrate_model(using, dab_ct_cls):
+        # Uncommon case, code logic is using a replica database or something, unlikely to be relevant
+        return
+
+    sync_dab_permissions(verbosity=verbosity, using=using, apps=apps)
+
+
+def is_safe_identifier(name: str) -> bool:
+    """Returns True or False, name is a valid identifier in postgres, just for safety"""
+    return re.match(r'^[A-Za-z_]\w*$', name) is not None
+
+
+def reset_ct_sequence(ct_cls):
+    table = ct_cls._meta.db_table
+    pk_column = ct_cls._meta.pk.column
+    # This case should never be hit, but for database safety we have this
+    if not is_safe_identifier(table) or not is_safe_identifier(pk_column):
+        raise ValueError(f"Unsafe identifier: {table}.{pk_column}")
+
+    logger.info('Updating the serial sequence of DABContentType model')
+    with connection.cursor() as cursor:
+        cursor.execute(
+            f"""
+            SELECT setval(
+                pg_get_serial_sequence(%s, %s),
+                (SELECT MAX({pk_column}) FROM {table})
+            )""",
+            [table, pk_column],
+        )
+
+
+def sync_dab_permissions(verbosity=2, using=DEFAULT_DB_ALIAS, apps=global_apps):
+    """Idepotent method to set database types and permissions for DAB RBAC
+
+    This should make the database content reflect the model Meta data and
+    registrations in the permission_registry for that app.
+    """
+    Permission = apps.get_model("dab_rbac", "DABPermission")
+    dab_ct_cls = Permission._meta.get_field('content_type').related_model
+
+    new_cts = create_DAB_contenttypes(verbosity=verbosity, using=using, apps=apps)
 
     # This will hold the permissions we're looking for as (content_type, (codename, name))
     searched_perms = []
     # The codenames and ctypes that should exist.
     ctypes = set()
-    for klass in app_config.get_models():
-        if not permission_registry.is_registered(klass):
-            continue
+    for klass in permission_registry.all_registered_models:
         # Force looking up the content types in the current database
         # before creating foreign keys to them.
-        ctype = ContentType.objects.db_manager(using).get_for_model(klass, for_concrete_model=False)
+        service = get_resource_prefix(klass)
+        ctype = dab_ct_cls.objects.db_manager(using).get_for_model(klass, service=service, for_concrete_model=False)
 
         ctypes.add(ctype)
 
@@ -84,8 +124,19 @@ def create_dab_permissions(app_config, verbosity=2, interactive=True, using=DEFA
             permission.codename = codename
             permission.name = name
             permission.content_type = ct
+            permission.api_slug = f'{ct.service}.{codename}'
             perms.append(permission)
 
     Permission.objects.using(using).bulk_create(perms)
+
+    # This is all just for nice logging
+    perms_by_model_name = defaultdict(list)
     for perm in perms:
-        logger.debug("Adding permission '%s'" % perm)
+        perms_by_model_name[perm.content_type.model].append(perm.codename)
+    for model_name, codenames in perms_by_model_name.items():
+        codename_prnt = ', '.join(codenames)
+        logger.debug(f"Added DAB permissions for model {model_name}: {codename_prnt}")
+
+    # Reset the sequence to avoid PK collision later
+    if connection.vendor == 'postgresql' and new_cts:
+        reset_ct_sequence(dab_ct_cls)

@@ -1,8 +1,7 @@
 import pytest
-from django.contrib.contenttypes.models import ContentType
 
 from ansible_base.lib.utils.response import get_relative_url
-from ansible_base.rbac.models import RoleDefinition
+from ansible_base.rbac.models import DABContentType, RoleDefinition
 from test_app.models import PositionModel
 
 
@@ -11,7 +10,7 @@ def nk_rd():
     return RoleDefinition.objects.create_from_permissions(
         name='name-key-admin',
         permissions=['change_positionmodel', 'view_positionmodel', 'delete_positionmodel'],
-        content_type=ContentType.objects.get_for_model(PositionModel),
+        content_type=DABContentType.objects.get_for_model(PositionModel),
     )
 
 

@@ -4,7 +4,7 @@ from typing import List, Optional
 from django.contrib.auth import authenticate
 from django.utils.translation import gettext_lazy as _
 
-from ansible_base.resource_registry.utils.resource_type_processor import ResourceTypeProcessor
+from ansible_base.resource_registry.utils.resource_type_processor import ResourceTypeProcessor, RoleDefinitionProcessor
 
 ParentResource = namedtuple("ParentResource", ["model", "field_name"])
 SharedResource = namedtuple("SharedResource", ["serializer", "is_provider"])
@@ -27,6 +27,7 @@ class ServiceAPIConfig:
         "shared.team": ResourceTypeProcessor,
         "shared.organization": ResourceTypeProcessor,
         "shared.user": ResourceTypeProcessor,
+        "shared.roledefinition": RoleDefinitionProcessor,
     }
 
     custom_resource_processors = {}

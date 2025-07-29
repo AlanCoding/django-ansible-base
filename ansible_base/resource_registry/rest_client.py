@@ -5,6 +5,7 @@ from typing import Optional
 
 import requests
 import urllib3
+from django.apps import apps
 
 from ansible_base.resource_registry.resource_server import get_resource_server_config, get_service_token
 
@@ -20,7 +21,7 @@ urllib3.disable_warnings()
 logger = logging.getLogger('ansible_base.resources_api.rest_client')
 
 
-def get_resource_server_client(service_path, **kwargs):
+def get_resource_server_client(service_path, **kwargs) -> "ResourceAPIClient":
     config = get_resource_server_config()
 
     return ResourceAPIClient(
@@ -111,7 +112,13 @@ class ResourceAPIClient:
         logger.debug(f"Response status code from {url}: {resp.status_code}")
 
         if self.raise_if_bad_request:
-            resp.raise_for_status()
+            try:
+                resp.raise_for_status()
+            except requests.exceptions.HTTPError as e:
+                content = resp.text
+
+                # Re-raise with more context
+                raise requests.exceptions.HTTPError(f"{e}\nResponse content: {content}", response=resp) from None
         return resp
 
     def _get_request_dict(self, data: ResourceRequestBody):
@@ -159,3 +166,50 @@ class ResourceAPIClient:
 
     def get_resource_type_manifest(self, name, filters: Optional[dict] = None):
         return self._make_request("get", f"resource-types/{name}/manifest/", params=filters, stream=True)
+
+    # RBAC related methods
+    def list_role_types(self, filters: Optional[dict] = None):
+        return self._make_request("get", "role-types/", params=filters)
+
+    def list_role_permissions(self, filters: Optional[dict] = None):
+        return self._make_request("get", "role-permissions/", params=filters)
+
+    def sync_assignment(self, assignment):
+        from ansible_base.rbac.service_api.serializers import ServiceRoleTeamAssignmentSerializer, ServiceRoleUserAssignmentSerializer
+
+        if assignment._meta.model_name == 'roleuserassignment':
+            serializer = ServiceRoleUserAssignmentSerializer(assignment)
+        else:
+            serializer = ServiceRoleTeamAssignmentSerializer(assignment)
+
+        return self._sync_assignment(serializer.data)
+
+    def sync_unassignment(self, role_definition, actor, content_object):
+        data = {'role_definition': role_definition.name}
+        data[f'{actor._meta.model_name}_ansible_id'] = str(actor.resource.ansible_id)
+
+        if content_object is None:
+            data['object_id'] = None
+        else:
+            ct_cls = apps.get_model('dab_rbac', 'DABContentType')
+            ct = ct_cls.objects.get_for_model(content_object)
+            if ct.service == 'shared':
+                data['object_ansible_id'] = str(content_object.resource.ansible_id)
+            else:
+                data['object_id'] = content_object.pk
+
+        return self._sync_assignment(data, giving=False)
+
+    def _sync_assignment(self, data, giving=True):
+        if giving:
+            sub_url = 'assign'
+        else:
+            sub_url = 'unassign'
+
+        actor_type = 'user'
+        if data.get('team_ansible_id'):
+            actor_type = 'team'
+
+        url = f'role-{actor_type}-assignments/{sub_url}/'
+
+        return self._make_request(method="post", path=url, data=data)

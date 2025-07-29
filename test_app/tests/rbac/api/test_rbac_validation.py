@@ -48,8 +48,8 @@ class TestSharedAssignmentsDisabled:
                 url,
                 data={
                     'name': 'Alternative Organization Admin Role in Local Server',
-                    'content_type': 'aap.organization',
-                    'permissions': ['aap.view_organization', 'local.change_organization'],
+                    'content_type': 'shared.organization',
+                    'permissions': ['shared.view_organization', 'shared.change_organization'],
                 },
             )
         if allowed is False:
@@ -77,8 +77,8 @@ class TestSharedAssignmentsDisabled:
             url,
             data={
                 'name': 'Custom Organization Inventory Admin Role',
-                'content_type': 'aap.organization',
-                'permissions': ['aap.view_organization', 'local.change_inventory', 'local.view_inventory'],
+                'content_type': 'shared.organization',
+                'permissions': ['shared.view_organization', 'aap.change_inventory', 'aap.view_inventory'],
             },
         )
         assert response.status_code == 201, response.data
@@ -186,22 +186,3 @@ def test_callback_validate_role_team_assignment(admin_api_client, inventory, org
     response = admin_api_client.post(url, data={'object_id': inventory.id, 'team': team.id, 'role_definition': inv_rd.id})
     assert response.status_code == 403
     assert "Role assignment not allowed 403" in str(response.data)
-
-
-@pytest.mark.django_db
-def test_unregistered_model_type_for_assignment(admin_api_client, inventory, inv_rd, user):
-    url = get_relative_url('roleuserassignment-list')
-    # force invalid state of role definition, should not really happen
-    cls = apps.get_model('test_app.secretcolor')
-    inv_rd.content_type = permission_registry.content_type_model.objects.get_for_model(cls)
-    inv_rd.save(update_fields=['content_type'])
-    r = admin_api_client.post(url, data={'object_id': inventory.pk, 'user': user.pk, 'role_definition': inv_rd.pk})
-    assert r.status_code == 400
-    assert 'Given role definition is for a model not registered in the permissions system' in str(r.data)
-
-    # Temporarily abusing user model to test this via ansible_id reference, this testing method may not work forever
-    inv_rd.content_type = permission_registry.content_type_model.objects.get_for_model(user)
-    inv_rd.save(update_fields=['content_type'])
-    r = admin_api_client.post(url, data={'object_ansible_id': str(user.resource.ansible_id), 'user': user.pk, 'role_definition': inv_rd.pk})
-    assert r.status_code == 400
-    assert 'user type is not registered with DAB RBAC' in str(r.data)

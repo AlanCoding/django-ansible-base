@@ -108,6 +108,8 @@ This will add the following paths:
 - `service-index/resource-types/`: list of available resource types.
 - `service-index/metadata/`: service metadata (service type and ID)
 
+Also consider adding the corresponding [RBAC urls](../apps/rbac/for_app_developers.md#add-the-resource-api-urls) under service-index.
+
 ## Fields
 
 ### AnsibleResourceField

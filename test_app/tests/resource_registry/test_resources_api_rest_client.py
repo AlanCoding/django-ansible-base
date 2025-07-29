@@ -5,9 +5,12 @@ import pytest
 from requests.exceptions import HTTPError
 
 from ansible_base.authentication.models import AuthenticatorUser
+from ansible_base.rbac import permission_registry
+from ansible_base.rbac.models import RoleDefinition
 from ansible_base.resource_registry.models import Resource, service_id
 from ansible_base.resource_registry.resource_server import get_resource_server_config
 from ansible_base.resource_registry.rest_client import ResourceAPIClient, ResourceRequestBody
+from test_app.models import Inventory
 
 
 @pytest.fixture
@@ -157,6 +160,85 @@ def test_list_resource_types(resource_client):
 
 
 @pytest.mark.django_db
+def test_list_role_types(resource_client):
+    resp = resource_client.list_role_types(filters={"api_slug": "shared.organization"})
+    assert resp.status_code == 200
+    assert resp.json()["count"] == 1
+    assert resp.json()["results"][0]["api_slug"] == "shared.organization"
+
+
+@pytest.mark.django_db
+def test_list_role_permissions(resource_client):
+    resp = resource_client.list_role_permissions(filters={"api_slug": "shared.view_organization"})
+    assert resp.status_code == 200
+    assert resp.json()["count"] == 1
+    assert resp.json()["results"][0]["api_slug"] == "shared.view_organization"
+
+
+@pytest.mark.django_db
+def test_list_role_permissions_all_pages(resource_client):
+    resp = resource_client.list_role_permissions()
+    assert resp.status_code == 200
+    assert resp.json()["next"] is not None
+    assert resp.json()["count"] > 25
+
+
+def _assert_assignment_matches_data(assignment, data, obj, user):
+    assert 'created' in data, data
+    # assert DateTimeField().to_representation(assignment.created) == data['created']  # TODO
+    assert str(assignment.created_by.resource.ansible_id) == data['created_by_ansible_id']
+    assert assignment.object_id == obj.id
+    assert str(assignment.object_id) == str(data['object_id'])
+    if hasattr(obj, 'resource'):
+        assert str(obj.resource.ansible_id) == data['object_ansible_id']
+        assert 'shared.organization' == data['content_type']
+        assert 'Organization Admin' == data['role_definition']
+    else:
+        assert 'aap.inventory' == data['content_type']
+        assert 'change-inv' == data['role_definition']
+    assert str(user.resource.ansible_id) == data['user_ansible_id']
+
+
+@pytest.mark.django_db
+def test_sync_org_assignment(resource_client, org_admin_rd, user, organization):
+    assignment = org_admin_rd.give_permission(user, organization)
+    resp = resource_client.sync_assignment(assignment)
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    # Existing assignment should be this current assignment
+    _assert_assignment_matches_data(assignment, data, organization, user)
+
+    org_admin_rd.remove_permission(user, organization)
+    resp = resource_client.sync_assignment(assignment)  # assignment not actually here locally
+    assert resp.status_code == 201, resp.text  # created
+    data = resp.json()
+    # All the data, on the remote system, should match our original assignment
+    _assert_assignment_matches_data(assignment, data, organization, user)
+
+
+@pytest.mark.django_db
+def test_sync_obj_assignment(resource_client, user, inventory):
+    inv_rd = RoleDefinition.objects.create_from_permissions(
+        permissions=['change_inventory', 'view_inventory'],
+        name='change-inv',
+        content_type=permission_registry.content_type_model.objects.get_for_model(Inventory),
+    )
+    assignment = inv_rd.give_permission(user, inventory)
+    resp = resource_client.sync_assignment(assignment)
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    # Existing assignment should be this current assignment
+    _assert_assignment_matches_data(assignment, data, inventory, user)
+
+    inv_rd.remove_permission(user, inventory)
+    resp = resource_client.sync_assignment(assignment)  # assignment not actually here locally
+    assert resp.status_code == 201, resp.text  # created
+    data = resp.json()
+    # All the data, on the remote system, should match our original assignment
+    _assert_assignment_matches_data(assignment, data, inventory, user)
+
+
+@pytest.mark.django_db
 def test_get_resource_404(resource_client):
     resource_client.raise_if_bad_request = True
 
@@ -166,7 +248,7 @@ def test_get_resource_404(resource_client):
 
 
 @pytest.mark.django_db
-def test_additional_data(resource_client, django_user_model, github_authenticator):
+def test_additional_data_read(resource_client, django_user_model, github_authenticator):
     user = django_user_model.objects.create(username="lisan_al_gaib")
 
     AuthenticatorUser.objects.create(provider=github_authenticator, user=user, uid="different_uid")
@@ -182,6 +264,33 @@ def test_additional_data(resource_client, django_user_model, github_authenticato
     assert additional["social_auth"][0]["uid"] == "different_uid"
     assert additional["social_auth"][0]["backend_type"] == github_authenticator.type
     assert additional["social_auth"][0]["sso_server"] == "https://github.com/login/oauth/authorize"
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize('partial', [True, False])
+def test_additional_data_write(resource_client, partial):
+    "Will remove a permission from a role definition."
+    rd = RoleDefinition.objects.create_from_permissions(
+        permissions=['aap.change_inventory', 'aap.view_inventory'],
+        name='change-inv-for-now',
+        content_type=permission_registry.content_type_model.objects.get_for_model(Inventory),
+    )
+    ansible_id = str(rd.resource.ansible_id)
+
+    # Need this to make a coherent PUT
+    resp = resource_client.get_resource(ansible_id)
+    assert resp.status_code == 200
+    ref = resp.json()
+
+    res_data = ref['resource_data']
+    res_data['permissions'] = ['aap.view_inventory', 'fooland.action_unicorns']
+
+    data = ResourceRequestBody(resource_data=res_data)
+    resp = resource_client.update_resource(ansible_id, data, partial=partial)
+    assert resp.status_code == 200, resp.__dict__
+
+    # Removed the change permission
+    assert {perm.api_slug for perm in rd.permissions.all()} == {'aap.view_inventory'}
 
 
 @pytest.mark.django_db

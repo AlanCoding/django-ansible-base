@@ -276,7 +276,7 @@ def rbac_post_user_delete(instance, *args, **kwargs):
 
 def post_migration_rbac_setup(sender, *args, **kwargs):
     if not migrations_are_complete():
-        logger.info('Not running DAB RBAC post_migrate logic because of suspected reverse migration')
+        logger.info('Not running DAB RBAC post_migrate logic because of incomplete migration')
         return
 
     dab_post_migrate.send(sender=sender)
