@@ -3,7 +3,7 @@ from copy import deepcopy
 import pytest
 
 from ansible_base.lib.utils.response import get_relative_url
-from ansible_base.rbac.models import DABContentType, DABPermission, RoleDefinition
+from ansible_base.rbac.models import DABContentType, DABPermission, RoleDefinition, RoleTeamAssignment, RoleUserAssignment
 from test_app.models import Team, User
 
 
@@ -491,3 +491,51 @@ class TestCreatedByAnsibleIdAllowNull:
         # Verify that created_by is None in validated_data when null is passed
         validated_data = serializer.validated_data
         assert 'created_by' not in validated_data or validated_data.get('created_by') is None
+
+def test_service_assignment_created_timestamp_sync(admin_api_client, rando, inv_rd, inventory):
+    """
+    Test that demonstrates the field sync issue: the 'created' timestamp field is displayed
+    in responses but not applied when creating assignments via POST to /assign/.
+
+    This test should FAIL, showing that custom timestamps are ignored and auto-generated instead.
+    """
+    from datetime import datetime, timezone
+
+    from django.utils.dateparse import parse_datetime
+
+    url = get_relative_url('serviceuserassignment-assign')
+
+    creator_user = User.objects.create(username='timestamp_creator')
+
+    # Set a specific timestamp that's different from "now"
+    custom_timestamp = datetime(2023, 1, 15, 10, 30, 45, tzinfo=timezone.utc)
+    custom_timestamp_str = custom_timestamp.isoformat()
+
+    post_data = {
+        "role_definition": inv_rd.name,
+        "user_ansible_id": str(rando.resource.ansible_id),
+        "object_id": str(inventory.pk),
+        "created_by_ansible_id": str(creator_user.resource.ansible_id),
+        "created": custom_timestamp_str,
+        "from_service": "test_service",
+    }
+
+    response = admin_api_client.post(url, data=post_data)
+    assert response.status_code == 201, response.data
+
+    assignment = RoleUserAssignment.objects.get(user=rando, role_definition=inv_rd, object_id=inventory.pk)
+
+    # Test if the custom timestamp was properly set
+    expected_created = custom_timestamp
+    actual_created = assignment.created
+
+    # This should FAIL, demonstrating the field sync issue
+    assert actual_created == expected_created, (
+        f"FIELD SYNC ISSUE: Expected created timestamp '{expected_created}' but got '{actual_created}'. "
+        f"The 'created' field is displayed in responses but not applied from POST data."
+    )
+
+    # Verify response contains the timestamp field (showing it's "displayed")
+    response_created = parse_datetime(response.data['created'])
+    # Note: This will show the auto-generated timestamp, not our custom one
+    assert response_created == expected_created, f"Response created timestamp should match: expected '{expected_created}' but got '{response_created}'"
