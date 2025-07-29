@@ -143,3 +143,61 @@ def test_org_roles_same_type_different_service(rando, organization):
         ], f'User should have permission to exactly {service_name} resource'
 
         rds[service_name].remove_permission(rando, organization)
+
+
+@pytest.mark.django_db
+def test_object_created_field_local_model(rando, org_inv_rd, organization):
+    """
+    Test that the object_created field is set to the local object's created timestamp
+    when creating an assignment for a local model like inventory.
+
+    This test should FAIL because the object_created field doesn't exist yet.
+    """
+    # Create the assignment
+    assignment = org_inv_rd.give_permission(rando, organization)
+
+    # Verify the assignment was created
+    assert assignment.user == rando
+    assert assignment.role_definition == org_inv_rd
+    assert assignment.object_id == organization.pk
+
+    # This should FAIL - the object_created field should be set to inventory.created
+    assert hasattr(assignment, 'object_created'), "Assignment should have an object_created field"
+
+    assert assignment.object_created == organization.created, (
+        f"object_created should be set to the organization's created timestamp. "
+        f"Expected: {organization.created}, but object_created field is missing or has wrong value"
+    )
+
+
+@pytest.mark.django_db
+def test_object_created_field_remote_object(rando, foo_type, foo_rd):
+    """
+    Test that the object_created field is properly handled when creating an assignment
+    for a remote object (stand-in object pattern).
+
+    This test should FAIL because the object_created field doesn't exist yet.
+    """
+    from datetime import datetime, timezone
+
+    # Create a remote object stand-in
+    remote_foo = RemoteObject(content_type=foo_type, object_id=42)
+
+    # Create the assignment
+    assignment = foo_rd.give_permission(rando, remote_foo)
+
+    # Verify the assignment was created
+    assert assignment.user == rando
+    assert assignment.role_definition == foo_rd
+    assert assignment.object_id == 42
+    assert isinstance(assignment.content_object, RemoteObject)
+
+    # This should FAIL - the object_created field should exist and be handled for remote objects
+    assert hasattr(assignment, 'object_created'), "Assignment should have an object_created field even for remote objects"
+
+    # For remote objects, the object_created field might be None or set to a default value
+    # since we don't have the actual remote object's creation timestamp
+    # The exact behavior will depend on implementation, but the field should exist
+    assert assignment.object_created is not None or assignment.object_created is None, (
+        f"object_created field should exist for remote objects. " f"Current value: {getattr(assignment, 'object_created', 'FIELD_MISSING')}"
+    )

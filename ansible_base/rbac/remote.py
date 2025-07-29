@@ -58,9 +58,11 @@ class StandinMeta:
 class RemoteObject:
     """Placeholder for objects that live in another project."""
 
-    def __init__(self, content_type: models.Model, object_id: Union[int, str], parent_reference=None):
+    def __init__(self, content_type: models.Model, object_id: Union[int, str], parent_reference=None, created=None):
         self.content_type = content_type
         self.object_id = object_id
+        # Allow tracking details of the object
+        self.created = created
         # Since object is remote, we do not have its properties here, so a pointer to the parent can be specified here
         self.parent_reference = parent_reference
         if not hasattr(self, '_meta'):

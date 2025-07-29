@@ -1,5 +1,6 @@
 import logging
 from collections.abc import Iterable
+from datetime import datetime
 from typing import Optional, Type, Union
 from uuid import UUID
 
@@ -9,6 +10,7 @@ from django.db import connection, models, transaction
 from django.db.models.functions import Cast
 from django.db.models.query import QuerySet
 from django.db.utils import IntegrityError
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 # Django-rest-framework
@@ -61,6 +63,18 @@ class ManagedRoleManager:
         if constructor:
             rd, _ = constructor.get_or_create(self.apps)
             return rd
+
+
+def get_created_timestamp(obj: Union[models.Model, RemoteObject]) -> Optional[datetime]:
+    """Given some obj from the users app, try to infer the created timestamp"""
+    if isinstance(obj, RemoteObject):
+        return obj.created
+    for field_name in ('created', 'created_at'):
+        if hasattr(obj, field_name):
+            val = getattr(obj, field_name)
+            if isinstance(val, datetime):
+                return val
+    return None
 
 
 class RoleDefinitionManager(models.Manager):
@@ -178,13 +192,13 @@ class RoleDefinition(CommonModel):
             managed_str = ', managed=True'
         return f'RoleDefinition(pk={self.id}, name={self.name}{managed_str})'
 
-    def give_global_permission(self, actor):
-        return self.give_or_remove_global_permission(actor, giving=True)
+    def give_global_permission(self, actor, assignment_created=None):
+        return self.give_or_remove_global_permission(actor, giving=True, assignment_created=assignment_created)
 
     def remove_global_permission(self, actor):
         return self.give_or_remove_global_permission(actor, giving=False)
 
-    def give_or_remove_global_permission(self, actor, giving=True):
+    def give_or_remove_global_permission(self, actor, giving=True, assignment_created=None):
         if giving and (self.content_type is not None):
             raise ValidationError('Role definition content type must be null to assign globally')
 
@@ -202,6 +216,8 @@ class RoleDefinition(CommonModel):
             raise RuntimeError(f'Cannot {giving and "give" or "remove"} permission for {actor}, must be a user or team')
 
         if giving:
+            if assignment_created:
+                kwargs['created'] = assignment_created
             assignment, _ = cls.objects.get_or_create(**kwargs)
         else:
             assignment = cls.objects.filter(**kwargs).first()
@@ -221,8 +237,8 @@ class RoleDefinition(CommonModel):
 
         return assignment
 
-    def give_permission(self, actor, content_object):
-        return self.give_or_remove_permission(actor, content_object, giving=True)
+    def give_permission(self, actor, content_object, assignment_created=None):
+        return self.give_or_remove_permission(actor, content_object, giving=True, assignment_created=assignment_created)
 
     def remove_permission(self, actor, content_object):
         return self.give_or_remove_permission(actor, content_object, giving=False)
@@ -247,7 +263,7 @@ class RoleDefinition(CommonModel):
             object_role = ObjectRole.objects.create(**kwargs, **defaults)
             return (object_role, True)
 
-    def give_or_remove_permission(self, actor, content_object, giving=True, sync_action=False):
+    def give_or_remove_permission(self, actor, content_object, giving=True, sync_action=False, assignment_created=None):
         "Shortcut method to do whatever needed to give user or team these permissions"
         validate_assignment(self, actor, content_object)
 
@@ -278,15 +294,28 @@ class RoleDefinition(CommonModel):
 
         update_teams, to_update = needed_updates_on_assignment(self, actor, object_role, created=created, giving=True)
 
+        assignment_defaults = {}
+        object_created = get_created_timestamp(content_object)
+        if object_created:
+            assignment_defaults['object_created'] = object_created
+        if assignment_created:
+            assignment_defaults['created'] = assignment_created
+
         assignment = None
         if actor._meta.model_name == 'user':
             if giving:
-                assignment, created = RoleUserAssignment.objects.get_or_create(user=actor, object_role=object_role)
+                try:
+                    assignment = RoleUserAssignment.objects.get(user=actor, object_role=object_role)
+                except RoleUserAssignment.DoesNotExist:
+                    assignment = RoleUserAssignment.objects.create(user=actor, object_role=object_role, **assignment_defaults)
             else:
                 object_role.users.remove(actor)
         elif isinstance(actor, permission_registry.team_model):
             if giving:
-                assignment, created = RoleTeamAssignment.objects.get_or_create(team=actor, object_role=object_role)
+                try:
+                    assignment = RoleTeamAssignment.objects.get(team=actor, object_role=object_role)
+                except RoleTeamAssignment.DoesNotExist:
+                    assignment = RoleTeamAssignment.objects.create(team=actor, object_role=object_role, **assignment_defaults)
             else:
                 object_role.teams.remove(actor)
 
@@ -410,6 +439,14 @@ class AssignmentBase(ImmutableCommonModel, ObjectRoleFields):
         null=True, blank=True, help_text=_('The primary key of the object this assignment applies to; null value indicates system-wide assignment.')
     )
     content_type = models.ForeignKey(DABContentType, on_delete=models.CASCADE, null=True, help_text=_("The content type this applies to."))
+    # The object_created field can be used for a checksum-like purpose to verify nothing strange happened with the related object
+    object_created = models.DateTimeField(help_text=_("The created timestamp of related object, if applicable."), null=True)
+    # Define this with default to make it possible to backdate if necessary, for sync
+    created = models.DateTimeField(
+        default=timezone.now,
+        editable=False,
+        help_text=_("The date/time this resource was created."),
+    )
 
     # object_role is internal, and not shown in serializer
     # content_type does not have a link, and ResourceType will be used in lieu sometime

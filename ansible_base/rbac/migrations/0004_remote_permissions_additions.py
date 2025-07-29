@@ -3,6 +3,7 @@
 import ansible_base.rbac.models.content_type
 import ansible_base.rbac.remote
 from django.db import migrations, models
+import django.utils.timezone
 
 
 class Migration(migrations.Migration):
@@ -158,6 +159,28 @@ class Migration(migrations.Migration):
         migrations.RemoveIndex(
             model_name='roleevaluationuuid',
             name='dab_rbac_ro_role_id_4fe905_idx',
+        ),
+        # Added field for a checksum like purpose for remote models
+        migrations.AddField(
+            model_name='roleuserassignment',
+            name='object_created',
+            field=models.DateTimeField(help_text='The created timestamp of related object, if applicable.', null=True),
+        ),
+        migrations.AddField(
+            model_name='roleteamassignment',
+            name='object_created',
+            field=models.DateTimeField(help_text='The created timestamp of related object, if applicable.', null=True),
+        ),
+        # Make assignment created timestamp backdateable
+        migrations.AlterField(
+            model_name='roleteamassignment',
+            name='created',
+            field=models.DateTimeField(default=django.utils.timezone.now, editable=False, help_text='The date/time this resource was created.'),
+        ),
+        migrations.AlterField(
+            model_name='roleuserassignment',
+            name='created',
+            field=models.DateTimeField(default=django.utils.timezone.now, editable=False, help_text='The date/time this resource was created.'),
         ),
         # Fields unique to DAB RBAC and not generally shared with ContentType or Permission
         migrations.AddField(
