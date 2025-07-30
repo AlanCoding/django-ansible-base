@@ -42,6 +42,13 @@ class ManagedRoleConstructor:
         # NOTE: this is subject to major migration-related hazards
         try:
             content_type_cls = apps.get_model('dab_rbac', 'DABContentType')
+            if not content_type_cls.objects.exists():
+                # Extra special migration hazard
+                # an old app migration file is trying to create managed roles with current models
+                # but permissions are not yet created
+                from ansible_base.rbac.management import sync_dab_permissions
+
+                sync_dab_permissions(apps=apps)
         except LookupError:
             content_type_cls = apps.get_model('contenttypes', 'ContentType')
         return content_type_cls.objects.get_for_model(model)

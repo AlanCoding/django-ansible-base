@@ -16,6 +16,7 @@ def create_dab_permissions(app_config, verbosity=2, interactive=True, using=DEFA
     this will only create permissions for registered models
     """
     if not getattr(app_config, 'models_module', None):
+        logger.info(f'Not running permission creation method for {app_config.label} because it has no models')
         return
 
     # exit early if nothing is registered for this app
@@ -39,10 +40,12 @@ def create_dab_permissions(app_config, verbosity=2, interactive=True, using=DEFA
         app_config = apps.get_app_config(app_label)
         ContentType = apps.get_model("contenttypes", "ContentType")
         Permission = apps.get_model("dab_rbac", "DABPermission")
-    except LookupError:
+    except LookupError as exc:
+        logger.info(f'Not running create_dab_permissions because model not available {str(exc)}')
         return
 
     if not router.allow_migrate_model(using, Permission):
+        logger.info('Not running create_dab_permissions because permission model does not allow migrating')
         return
 
     # This will hold the permissions we're looking for as (content_type, (codename, name))
