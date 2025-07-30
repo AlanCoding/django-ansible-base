@@ -1,3 +1,5 @@
+import logging
+
 from django.apps import apps
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
@@ -19,6 +21,8 @@ from ansible_base.rbac.validators import check_locally_managed, validate_permiss
 from ..models import DABContentType, DABPermission
 from ..remote import RemoteObject
 from .queries import assignment_qs_user_to_obj, assignment_qs_user_to_obj_perm
+
+logger = logging.getLogger(__name__)
 
 
 class RoleDefinitionSerializer(CommonModelSerializer):
@@ -257,9 +261,20 @@ class AccessListMixin:
             return {}
         related_fields = {}
         actor_cls = self.Meta.model
+
+        # Use ansible_id if available, otherwise fall back to pk
+        actor_identifier = obj.pk
+        try:
+            if hasattr(obj, 'resource') and obj.resource:
+                actor_identifier = str(obj.resource.ansible_id)
+        except ObjectDoesNotExist:
+            # Resource doesn't exist, stick with pk
+            logger.error(f"Resource does not exist for {self.Meta.model} {obj.pk}")
+            pass
+
         related_fields['details'] = get_relative_url(
             f'role-{actor_cls._meta.model_name}-access-assignments',
-            kwargs={'model_name': self.context.get("content_type").api_slug, 'pk': self.context.get("related_object").pk, 'actor_pk': obj.pk},
+            kwargs={'model_name': self.context.get("content_type").api_slug, 'pk': self.context.get("related_object").pk, 'actor_pk': actor_identifier},
         )
         return related_fields
 
