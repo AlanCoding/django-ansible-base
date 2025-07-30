@@ -132,15 +132,6 @@ class BaseAssignmentSerializer(CommonModelSerializer):
 
         return super().validate(attrs)
 
-    def get_actor_from_data(self, validated_data, requesting_user):
-        actor_aid_field = f'{self.actor_field}_ansible_id'
-        if validated_data.get(self.actor_field):
-            actor = validated_data[self.actor_field]
-        else:
-            # Actor is already resolved by ActorAnsibleIdField and validated
-            actor = validated_data[self.actor_field]
-        return actor
-
     def get_object_from_data(self, validated_data, role_definition, requesting_user):
         obj = None
         if validated_data.get('object_id') and validated_data.get('object_ansible_id'):
@@ -175,7 +166,7 @@ class BaseAssignmentSerializer(CommonModelSerializer):
         requesting_user = self.context['view'].request.user
 
         # Resolve actor - team or user
-        actor = self.get_actor_from_data(validated_data, requesting_user)
+        actor = validated_data[self.actor_field]
 
         # Resolve object
         obj = self.get_object_from_data(validated_data, rd, requesting_user)
@@ -285,7 +276,6 @@ class AccessListMixin:
         except ObjectDoesNotExist:
             # Resource doesn't exist, stick with pk
             logger.error(f"Resource does not exist for {self.Meta.model} {obj.pk}")
-            pass
 
         related_fields['details'] = get_relative_url(
             f'role-{actor_cls._meta.model_name}-access-assignments',
