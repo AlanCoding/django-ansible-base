@@ -20,6 +20,7 @@ from ansible_base.rbac.validators import check_locally_managed, validate_permiss
 
 from ..models import DABContentType, DABPermission
 from ..remote import RemoteObject
+from .fields import ActorAnsibleIdField
 from .queries import assignment_qs_user_to_obj, assignment_qs_user_to_obj_perm
 
 logger = logging.getLogger(__name__)
@@ -116,16 +117,28 @@ class BaseAssignmentSerializer(CommonModelSerializer):
             raise ValidationError({for_field: msg.format(pk_value=ansible_id)})
         return resource.content_object
 
+    def validate(self, attrs):
+        """Validate that exactly one of actor or actor_ansible_id is provided"""
+        actor_aid_field = f'{self.actor_field}_ansible_id'
+
+        # Check what was actually provided in the request
+        has_actor_in_request = self.actor_field in self.initial_data
+        has_actor_aid_in_request = actor_aid_field in self.initial_data
+
+        if has_actor_in_request and has_actor_aid_in_request:
+            self.raise_id_fields_error(self.actor_field, actor_aid_field)
+        elif not has_actor_in_request and not has_actor_aid_in_request:
+            self.raise_id_fields_error(self.actor_field, actor_aid_field)
+
+        return super().validate(attrs)
+
     def get_actor_from_data(self, validated_data, requesting_user):
         actor_aid_field = f'{self.actor_field}_ansible_id'
-        if validated_data.get(self.actor_field) and validated_data.get(actor_aid_field):
-            self.raise_id_fields_error(self.actor_field, actor_aid_field)
-        elif validated_data.get(self.actor_field):
+        if validated_data.get(self.actor_field):
             actor = validated_data[self.actor_field]
-        elif ansible_id := validated_data.get(actor_aid_field):
-            actor = self.get_by_ansible_id(ansible_id, requesting_user, for_field=actor_aid_field)
         else:
-            self.raise_id_fields_error(self.actor_field, f'{self.actor_field}_ansible_id')
+            # Actor is already resolved by ActorAnsibleIdField and validated
+            actor = validated_data[self.actor_field]
         return actor
 
     def get_object_from_data(self, validated_data, role_definition, requesting_user):
@@ -220,7 +233,8 @@ ASSIGNMENT_FIELDS = ImmutableCommonModelSerializer.Meta.fields + ['content_type'
 
 class RoleUserAssignmentSerializer(BaseAssignmentSerializer):
     actor_field = 'user'
-    user_ansible_id = serializers.UUIDField(
+    user_ansible_id = ActorAnsibleIdField(
+        source='user',
         required=False,
         help_text=_('The resource ID of the user who will receive permissions from this assignment. An alternative to user field.'),
         allow_null=True,  # for ease of use of the browseable API
@@ -236,7 +250,8 @@ class RoleUserAssignmentSerializer(BaseAssignmentSerializer):
 
 class RoleTeamAssignmentSerializer(BaseAssignmentSerializer):
     actor_field = 'team'
-    team_ansible_id = serializers.UUIDField(
+    team_ansible_id = ActorAnsibleIdField(
+        source='team',
         required=False,
         help_text=_('The resource ID of the team who will receive permissions from this assignment. An alternative to team field.'),
         allow_null=True,
