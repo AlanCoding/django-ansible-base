@@ -125,9 +125,7 @@ class BaseAssignmentSerializer(CommonModelSerializer):
         has_actor_in_request = self.actor_field in self.initial_data
         has_actor_aid_in_request = actor_aid_field in self.initial_data
 
-        if has_actor_in_request and has_actor_aid_in_request:
-            self.raise_id_fields_error(self.actor_field, actor_aid_field)
-        elif not has_actor_in_request and not has_actor_aid_in_request:
+        if (has_actor_in_request and has_actor_aid_in_request) or (not has_actor_in_request and not has_actor_aid_in_request):
             self.raise_id_fields_error(self.actor_field, actor_aid_field)
 
         return super().validate(attrs)
@@ -153,10 +151,11 @@ class BaseAssignmentSerializer(CommonModelSerializer):
         elif validated_data.get('object_ansible_id'):
             obj = self.get_by_ansible_id(validated_data.get('object_ansible_id'), requesting_user, for_field='object_ansible_id')
             if permission_registry.content_type_model.objects.get_for_model(obj) != role_definition.content_type:
+                model_name = getattr(role_definition.content_type, 'model', 'global')
                 raise ValidationError(
                     {
                         'object_ansible_id': _('Object type of %(model_name)s does not match role type of %(role_definition)s')
-                        % {'model_name': obj._meta.model_name, 'role_definition': role_definition.content_type.model}
+                        % {'model_name': obj._meta.model_name, 'role_definition': model_name}
                     }
                 )
         return obj
