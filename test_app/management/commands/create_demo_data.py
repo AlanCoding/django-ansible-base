@@ -102,10 +102,12 @@ class Command(BaseCommand):
             RoleDefinition.objects.managed.team_member.give_permission(spud, awx_devs)
 
         with impersonate(bull_bot):
-            inv_admin = RoleDefinition.objects.create_from_permissions(
-                permissions=['change_inventory', 'view_inventory'],
+            inv_admin, _ = RoleDefinition.objects.get_or_create(
                 name='Inventory Admin',
-                content_type=permission_registry.content_type_model.objects.get_for_model(Inventory),
+                permissions=['change_inventory', 'view_inventory'],
+                defaults={
+                    'content_type': permission_registry.content_type_model.objects.get_for_model(Inventory)
+                }
             )
         for inv in (awx_inv, galaxy_inv):
             inv_admin.give_permission(awx_devs, inv)
