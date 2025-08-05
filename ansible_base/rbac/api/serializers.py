@@ -1,3 +1,5 @@
+import logging
+
 from django.apps import apps
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
@@ -18,7 +20,10 @@ from ansible_base.rbac.validators import check_locally_managed, validate_permiss
 
 from ..models import DABContentType, DABPermission
 from ..remote import RemoteObject
+from .fields import ActorAnsibleIdField
 from .queries import assignment_qs_user_to_obj, assignment_qs_user_to_obj_perm
+
+logger = logging.getLogger(__name__)
 
 
 class RoleDefinitionSerializer(CommonModelSerializer):
@@ -112,17 +117,19 @@ class BaseAssignmentSerializer(CommonModelSerializer):
             raise ValidationError({for_field: msg.format(pk_value=ansible_id)})
         return resource.content_object
 
-    def get_actor_from_data(self, validated_data, requesting_user):
+    def validate(self, attrs):
+        """Validate that exactly one of actor or actor_ansible_id is provided"""
         actor_aid_field = f'{self.actor_field}_ansible_id'
-        if validated_data.get(self.actor_field) and validated_data.get(actor_aid_field):
+
+        # Check what was actually provided in the request
+        has_actor_in_request = self.actor_field in self.initial_data
+        has_actor_aid_in_request = actor_aid_field in self.initial_data
+
+        # If both actor and actor_ansible_id are present or both not present than we error out
+        if has_actor_in_request == has_actor_aid_in_request:
             self.raise_id_fields_error(self.actor_field, actor_aid_field)
-        elif validated_data.get(self.actor_field):
-            actor = validated_data[self.actor_field]
-        elif ansible_id := validated_data.get(actor_aid_field):
-            actor = self.get_by_ansible_id(ansible_id, requesting_user, for_field=actor_aid_field)
-        else:
-            self.raise_id_fields_error(self.actor_field, f'{self.actor_field}_ansible_id')
-        return actor
+
+        return super().validate(attrs)
 
     def get_object_from_data(self, validated_data, role_definition, requesting_user):
         obj = None
@@ -145,10 +152,11 @@ class BaseAssignmentSerializer(CommonModelSerializer):
         elif validated_data.get('object_ansible_id'):
             obj = self.get_by_ansible_id(validated_data.get('object_ansible_id'), requesting_user, for_field='object_ansible_id')
             if permission_registry.content_type_model.objects.get_for_model(obj) != role_definition.content_type:
+                model_name = getattr(role_definition.content_type, 'model', 'global')
                 raise ValidationError(
                     {
                         'object_ansible_id': _('Object type of %(model_name)s does not match role type of %(role_definition)s')
-                        % {'model_name': obj._meta.model_name, 'role_definition': role_definition.content_type.model}
+                        % {'model_name': obj._meta.model_name, 'role_definition': model_name}
                     }
                 )
         return obj
@@ -158,7 +166,7 @@ class BaseAssignmentSerializer(CommonModelSerializer):
         requesting_user = self.context['view'].request.user
 
         # Resolve actor - team or user
-        actor = self.get_actor_from_data(validated_data, requesting_user)
+        actor = validated_data[self.actor_field]
 
         # Resolve object
         obj = self.get_object_from_data(validated_data, rd, requesting_user)
@@ -216,7 +224,8 @@ ASSIGNMENT_FIELDS = ImmutableCommonModelSerializer.Meta.fields + ['content_type'
 
 class RoleUserAssignmentSerializer(BaseAssignmentSerializer):
     actor_field = 'user'
-    user_ansible_id = serializers.UUIDField(
+    user_ansible_id = ActorAnsibleIdField(
+        source='user',
         required=False,
         help_text=_('The resource ID of the user who will receive permissions from this assignment. An alternative to user field.'),
         allow_null=True,  # for ease of use of the browseable API
@@ -232,7 +241,8 @@ class RoleUserAssignmentSerializer(BaseAssignmentSerializer):
 
 class RoleTeamAssignmentSerializer(BaseAssignmentSerializer):
     actor_field = 'team'
-    team_ansible_id = serializers.UUIDField(
+    team_ansible_id = ActorAnsibleIdField(
+        source='team',
         required=False,
         help_text=_('The resource ID of the team who will receive permissions from this assignment. An alternative to team field.'),
         allow_null=True,
@@ -257,9 +267,21 @@ class AccessListMixin:
             return {}
         related_fields = {}
         actor_cls = self.Meta.model
+
+        # Use ansible_id if available, otherwise fall back to pk
+        actor_identifier = obj.pk
+        try:
+            if hasattr(obj, 'resource') and obj.resource:
+                actor_identifier = str(obj.resource.ansible_id)
+        except ObjectDoesNotExist:
+            # Resource doesn't exist, stick with pk
+            logger.warning(
+                f"No resource for {self.Meta.model} {obj.pk} due to internal error. Linking role-{actor_cls._meta.model_name}-access-assignments as pk."
+            )
+
         related_fields['details'] = get_relative_url(
             f'role-{actor_cls._meta.model_name}-access-assignments',
-            kwargs={'model_name': self.context.get("content_type").api_slug, 'pk': self.context.get("related_object").pk, 'actor_pk': obj.pk},
+            kwargs={'model_name': self.context.get("content_type").api_slug, 'pk': self.context.get("related_object").pk, 'actor_pk': actor_identifier},
         )
         return related_fields
 

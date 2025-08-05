@@ -1,6 +1,9 @@
+import uuid
 from collections import OrderedDict
 from typing import Type
 
+from django.apps import apps
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 from django.db.models import Model
 from django.utils.translation import gettext_lazy as _
@@ -379,6 +382,28 @@ class UserAccessAssignmentViewSet(
     def get_url_actor(self):
         actor_pk = self.kwargs.get("actor_pk")
         actor_cls = self.get_actor_model()
+
+        # First, try to parse as UUID for ansible_id lookup
+        try:
+            parsed_uuid = uuid.UUID(actor_pk)
+            # It's a valid UUID, try resource lookup first
+            try:
+                resource_cls = apps.get_model('dab_resource_registry', 'Resource')
+                resource = resource_cls.objects.get(ansible_id=parsed_uuid)
+                actor = resource.content_object
+                # Verify the content object is the correct type
+                if isinstance(actor, actor_cls):
+                    return actor
+                else:
+                    raise NotFound(f'Resource with ansible_id {parsed_uuid} is not a {actor_cls._meta.model_name}')
+            except (LookupError, ObjectDoesNotExist):
+                # Resource registry not available or resource not found with this UUID
+                raise NotFound(f'The {actor_cls._meta.model_name} with ansible_id={actor_pk} can not be found')
+        except ValueError:
+            # Not a valid UUID, continue with primary key lookup
+            pass
+
+        # Fallback to primary key lookup (only for non-UUID values)
         try:
             return actor_cls.objects.get(pk=actor_pk)
         except actor_cls.DoesNotExist:

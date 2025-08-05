@@ -7,6 +7,7 @@ from django.core.management.base import BaseCommand, CommandError
 
 from ansible_base.authentication.models import Authenticator, AuthenticatorUser
 from ansible_base.oauth2_provider.models import OAuth2Application
+from ansible_base.rbac import permission_registry
 from ansible_base.rbac.models import DABContentType, RoleDefinition
 from test_app.models import EncryptionModel, InstanceGroup, Inventory, Organization, Team, User
 
@@ -41,6 +42,7 @@ class Command(BaseCommand):
         (galaxy, _) = Organization.objects.get_or_create(name='Galaxy_community')
 
         (spud, _) = User.objects.get_or_create(username='angry_spud')
+        (team_member, _) = User.objects.get_or_create(username='team_member')
         (bull_bot, _) = User.objects.get_or_create(username='ansibullbot')
         (admin, _) = User.objects.get_or_create(username='admin')
         spud.set_password('password')
@@ -72,8 +74,8 @@ class Command(BaseCommand):
 
             # Inventory objects exist inside of an organization
             Inventory.objects.create(name='K8S clusters', organization=operator_stuff)
-            Inventory.objects.create(name='Galaxy Host', organization=galaxy)
-            Inventory.objects.create(name='AWX deployment', organization=awx)
+            galaxy_inv = Inventory.objects.create(name='Galaxy Host', organization=galaxy)
+            awx_inv = Inventory.objects.create(name='AWX deployment', organization=awx)
             # Objects that have no associated organization
             InstanceGroup.objects.create(name='Default')
             isolated_group = InstanceGroup.objects.create(name='Isolated Network')
@@ -95,7 +97,18 @@ class Command(BaseCommand):
             user.set_password('password')
             user.save()
 
-        RoleDefinition.objects.managed.team_member.give_permission(spud, awx_devs)
+        # Give some users team member and give that team some inventory object permissions
+        for user in (spud, team_member):
+            RoleDefinition.objects.managed.team_member.give_permission(spud, awx_devs)
+
+        with impersonate(bull_bot):
+            inv_admin, _ = RoleDefinition.objects.get_or_create(
+                name='Inventory Admin',
+                permissions=['change_inventory', 'view_inventory'],
+                defaults={'content_type': permission_registry.content_type_model.objects.get_for_model(Inventory)},
+            )
+        for inv in (awx_inv, galaxy_inv):
+            inv_admin.give_permission(awx_devs, inv)
 
         OAuth2Application.objects.get_or_create(
             name="Demo OAuth2 Application",

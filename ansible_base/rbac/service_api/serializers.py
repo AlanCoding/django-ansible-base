@@ -4,6 +4,7 @@ from django.db import transaction
 from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
 
+from ..api.fields import ActorAnsibleIdField
 from ..models import DABContentType, DABPermission, RoleDefinition, RoleTeamAssignment, RoleUserAssignment
 from ..remote import RemoteObject
 
@@ -22,25 +23,6 @@ class DABPermissionSerializer(serializers.ModelSerializer):
     class Meta:
         model = DABPermission
         fields = ['api_slug', 'codename', 'content_type', 'name']
-
-
-class ActorAnsibleIDField(serializers.Field):
-    def to_representation(self, actor):
-        if actor is None:
-            return None
-        resource = actor.resource
-        if resource is None:
-            return None
-        return str(resource.ansible_id)
-
-    def to_internal_value(self, data):
-        resource_cls = apps.get_model('dab_resource_registry', 'Resource')
-        try:
-            resource = resource_cls.objects.get(ansible_id=data)
-        except resource_cls.DoesNotExist:
-            raise serializers.ValidationError(f"No {self.source} found with ansible_id={data}")
-
-        return resource.content_object
 
 
 class ObjectIDAnsibleIDField(serializers.Field):
@@ -71,7 +53,7 @@ assignment_common_fields = ('created', 'created_by_ansible_id', 'object_id', 'ob
 class BaseAssignmentSerializer(serializers.ModelSerializer):
     content_type = serializers.SlugRelatedField(read_only=True, slug_field='api_slug')
     role_definition = serializers.SlugRelatedField(slug_field='name', queryset=RoleDefinition.objects.all())
-    created_by_ansible_id = ActorAnsibleIDField(source='created_by', required=False)
+    created_by_ansible_id = ActorAnsibleIdField(source='created_by', required=False)
     object_ansible_id = ObjectIDAnsibleIDField(source='object_id', required=False, allow_null=True)
     object_id = serializers.CharField(allow_blank=True, required=False, allow_null=True)
     from_service = serializers.CharField(write_only=True)
@@ -158,7 +140,7 @@ class BaseAssignmentSerializer(serializers.ModelSerializer):
 
 
 class ServiceRoleUserAssignmentSerializer(BaseAssignmentSerializer):
-    user_ansible_id = ActorAnsibleIDField(source='user', required=True)
+    user_ansible_id = ActorAnsibleIdField(source='user', required=True)
     actor_field = 'user'
 
     class Meta:
@@ -167,7 +149,7 @@ class ServiceRoleUserAssignmentSerializer(BaseAssignmentSerializer):
 
 
 class ServiceRoleTeamAssignmentSerializer(BaseAssignmentSerializer):
-    team_ansible_id = ActorAnsibleIDField(source='team', required=True)
+    team_ansible_id = ActorAnsibleIdField(source='team', required=True)
     actor_field = 'team'
 
     class Meta:
