@@ -125,7 +125,8 @@ class BaseAssignmentSerializer(CommonModelSerializer):
         has_actor_in_request = self.actor_field in self.initial_data
         has_actor_aid_in_request = actor_aid_field in self.initial_data
 
-        if (has_actor_in_request and has_actor_aid_in_request) or (not has_actor_in_request and not has_actor_aid_in_request):
+        # If both actor and actor_ansible_id are present or both not present than we error out
+        if has_actor_in_request == has_actor_aid_in_request:
             self.raise_id_fields_error(self.actor_field, actor_aid_field)
 
         return super().validate(attrs)
