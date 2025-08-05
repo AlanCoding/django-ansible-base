@@ -53,7 +53,7 @@ def get_user_permissions_hash(user):
 - **Setup**: 
   - Create 2 users with identical permissions
   - Same organizations, teams, roles
-- **Verification**: Both users produce identical hash using `get_user_permissions_hash()`
+- **Verification**: Both users produce identical hash using `get_user_permissions_hash(user)`
 
 #### Test: Permission Order Independence  
 - **Objective**: Assignment order doesn't affect hash

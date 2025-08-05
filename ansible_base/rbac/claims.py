@@ -7,7 +7,7 @@ from django.apps import apps
 from django.conf import settings
 from django.db.models import F, Model, OuterRef, QuerySet
 
-from ansible_base.lib.utils.auth import get_organization_model, get_team_model
+from ansible_base.lib.utils.auth import get_team_model
 
 from .models.content_type import DABContentType
 from .models.role import RoleDefinition
@@ -55,7 +55,7 @@ def get_user_object_roles(user: Model) -> QuerySet:
 def _resolve_team_organization_references(
     team_ansible_ids: set[str],
     object_arrays: dict[str, list],
-    ansible_id_to_index: defaultdict[str, dict],
+    org_ansible_id_to_index: dict[str, int],
 ) -> None:
     """Resolve team organization references by converting ansible_ids to array positions.
 
@@ -67,18 +67,15 @@ def _resolve_team_organization_references(
     Args:
         team_ansible_ids: Set of team ansible_ids that need organization mapping
         object_arrays: Dictionary with model_type -> list of objects (will be modified)
-        ansible_id_to_index: Maps model_type -> ansible_id -> array_position (will be modified)
+        org_ansible_id_to_index: Maps organization ansible_id -> array_position (will be modified)
 
-    The method modifies object_arrays and ansible_id_to_index in place:
+    The method modifies object_arrays and org_ansible_id_to_index in place:
     - Updates team objects' 'org' field from ansible_id to array position
     - Adds missing organizations to object_arrays['organization'] if needed
-    - Updates ansible_id_to_index mappings for any added organizations
+    - Updates org_ansible_id_to_index mappings for any added organizations
     """
     if not team_ansible_ids:
         return
-
-    # Get organization model type name
-    org_model_name = DABContentType.objects.get_for_model(get_organization_model()).model
 
     # Query team model to get team -> organization mappings with organization names
     team_cls = get_team_model()
@@ -101,17 +98,17 @@ def _resolve_team_organization_references(
             org_name = org_info['name']
 
             # Ensure the organization is in our arrays
-            if org_ansible_id not in ansible_id_to_index[org_model_name]:
+            if org_ansible_id not in org_ansible_id_to_index:
                 # Add missing organization using data from the query
-                if org_model_name not in object_arrays:
-                    object_arrays[org_model_name] = []
-                org_index = len(object_arrays[org_model_name])
-                ansible_id_to_index[org_model_name][org_ansible_id] = org_index
+                if 'organization' not in object_arrays:
+                    object_arrays['organization'] = []
+                org_index = len(object_arrays['organization'])
+                org_ansible_id_to_index[org_ansible_id] = org_index
                 org_data = {'ansible_id': org_ansible_id, 'name': org_name}
-                object_arrays[org_model_name].append(org_data)
+                object_arrays['organization'].append(org_data)
 
             # Set the organization reference to the array position
-            team_data['org'] = ansible_id_to_index[org_model_name][org_ansible_id]
+            team_data['org'] = org_ansible_id_to_index[org_ansible_id]
 
 
 def _build_objects_and_roles(
@@ -180,7 +177,7 @@ def _build_objects_and_roles(
         object_roles[role_name]['objects'].append(array_position)
 
     # Resolve team organization references
-    _resolve_team_organization_references(team_ansible_ids, object_arrays, ansible_id_to_index)
+    _resolve_team_organization_references(team_ansible_ids, object_arrays, ansible_id_to_index['organization'])
 
     return object_arrays, object_roles
 
