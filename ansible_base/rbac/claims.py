@@ -138,10 +138,8 @@ def _build_objects_and_roles(
     # Internal tracking for ansible_id to array position mapping
     ansible_id_to_index = defaultdict(dict)  # { <model_type>: {<ansible_id>: <array_position> } }
 
-    role_assignments = get_user_object_roles(user)
-
     # Single loop: build object_arrays and object_roles
-    for assignment in role_assignments:
+    for assignment in get_user_object_roles(user):
         role_name = assignment.rd_name
         ansible_id = str(assignment.aid)
         resource_name = str(assignment.resource_name)
