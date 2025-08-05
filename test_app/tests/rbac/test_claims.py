@@ -1,5 +1,7 @@
 import pytest
 from django.contrib.auth import get_user_model
+from django.db import connection
+from django.test.utils import override_settings
 
 from ansible_base.rbac import permission_registry
 from ansible_base.rbac.claims import get_claims_hash, get_user_claims, get_user_claims_hashable_form
@@ -349,3 +351,56 @@ class TestUserClaims:
         # Verify hash is a valid SHA-256 hex string (64 characters)
         assert len(user1_hash) == 64
         assert all(c in '0123456789abcdef' for c in user1_hash)
+
+    @override_settings(DEBUG=True)
+    def test_claims_query_performance_baseline(self, claims_scenario):
+        """Performance test to measure database queries for claims generation.
+
+        This test establishes a baseline for the number of database queries
+        used when generating claims for the 'mixed_large' scenario, which is
+        one of the most complex permission scenarios.
+
+        Scenario details:
+        - Organization Admin for 5 organizations (indexes 0,1,2,3,4)
+        - Team Member for 10 teams (indexes 0,2,4,6,8,10,12,14,16,18)
+        - Platform Auditor global role
+        """
+        scenario_name = 'mixed_large'
+
+        # Create user and apply the complex scenario
+        user = get_user_model().objects.create(username='test_user_performance')
+        claims_scenario.apply_scenario(scenario_name, user)
+
+        # Clear any existing queries from setup
+        connection.queries_log.clear()
+
+        # Count queries before claims generation
+        queries_before = len(connection.queries)
+
+        # Generate claims (this is what we're measuring)
+        user_claims = get_user_claims(user)
+
+        # Count queries after claims generation
+        queries_after = len(connection.queries)
+        total_queries = queries_after - queries_before
+
+        # Verify we got valid claims (basic sanity check)
+        assert isinstance(user_claims, dict)
+        assert 'objects' in user_claims
+        assert 'object_roles' in user_claims
+        assert 'global_roles' in user_claims
+
+        # Report the baseline query count
+        print("\n=== CLAIMS QUERY PERFORMANCE BASELINE ===")
+        print(f"Scenario: {scenario_name}")
+        print(f"Total database queries: {total_queries}")
+        print("Query details:")
+        for i, query in enumerate(connection.queries[queries_before:], 1):
+            print(f"  {i}. {query['sql'][:100]}{'...' if len(query['sql']) > 100 else ''}")
+            print(f"     Time: {query['time']}s")
+        print("=" * 45)
+
+        # Assert we maintain our performance baseline
+        # Baseline updated after optimization: 6 queries for the mixed_large scenario
+        # (More efficient: only loads objects user has access to, not ALL objects)
+        assert total_queries == 6, f"Claims generation used {total_queries} queries, expected 6 (baseline)"
