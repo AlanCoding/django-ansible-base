@@ -152,7 +152,7 @@ class TestAccessListRelatedLinksWithAnsibleID:
         assert expected_ansible_id in team_data['related']['details']
         # Check that the URL ends with the ansible_id, not the primary key
         assert team_data['related']['details'].endswith(f'{expected_ansible_id}/')
-        assert not team_data['related']['details'].endswith(f'{team.pk}/')
+        assert not team_data['related']['details'].endswith(f'/{team.pk}/')
 
     def test_user_access_list_fallback_to_pk_when_no_resource(self, admin_api_client, inventory, inv_rd):
         """Test fallback to primary key when user has no resource (edge case)"""
