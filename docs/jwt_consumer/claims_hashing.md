@@ -43,7 +43,7 @@ The `get_user_claims(user)` function generates a claims dictionary containing:
 
 ### 2. Hashable Form Conversion
 
-Before hashing, the claims are converted to a "hashable form" that:
+Before hashing, the claims are converted to a "hashable form" using `get_user_claims_hashable_form(claims)` that:
 
 - **Uses ansible_id instead of names**: Object names can change, but ansible_id is immutable
 - **Sorts all collections deterministically**: Ensures consistent ordering regardless of database query order
@@ -63,11 +63,11 @@ Example hashable form:
 
 ### 3. Hash Generation
 
-The hashable form is:
-1. Serialized to JSON with sorted keys
-2. Encoded to UTF-8 bytes
-3. Hashed using SHA-256
-4. Returned as a hexadecimal string
+The hashable form is passed to `get_claims_hash(hashable_claims)` which:
+1. Serializes to JSON with sorted keys
+2. Encodes to UTF-8 bytes
+3. Hashes using SHA-256
+4. Returns as a hexadecimal string
 
 ## Properties of Claims Hashing
 
@@ -88,12 +88,44 @@ The hashable form is:
 - Uses SHA-256 cryptographic hash function
 - Extremely low probability of different permission sets producing same hash
 
+## API Usage
+
+### Complete Workflow
+```python
+from ansible_base.rbac.claims import get_user_claims, get_user_claims_hashable_form, get_claims_hash
+
+# Step 1: Get user claims
+claims = get_user_claims(user)
+
+# Step 2: Convert to hashable form
+hashable_claims = get_user_claims_hashable_form(claims)
+
+# Step 3: Generate hash
+permissions_hash = get_claims_hash(hashable_claims)
+```
+
+### Convenience Helper Function
+You may want to create a helper function in your application:
+
+```python
+def get_user_permissions_hash(user):
+    """Generate a hash for a user's permissions."""
+    claims = get_user_claims(user)
+    hashable_claims = get_user_claims_hashable_form(claims)
+    return get_claims_hash(hashable_claims)
+```
+
 ## Use Cases
 
 ### JWT Token Validation
 ```python
 # Generate hash for current user permissions
-current_hash = get_user_claims_hash(user)
+def get_user_permissions_hash(user):
+    claims = get_user_claims(user)
+    hashable_claims = get_user_claims_hashable_form(claims)
+    return get_claims_hash(hashable_claims)
+
+current_hash = get_user_permissions_hash(user)
 
 # Compare with hash in JWT token
 if current_hash != jwt_payload.get('permissions_hash'):
@@ -105,7 +137,7 @@ if current_hash != jwt_payload.get('permissions_hash'):
 ```python
 # Store hash after permission change
 old_hash = user.permissions_hash
-new_hash = get_user_claims_hash(user)
+new_hash = get_user_permissions_hash(user)
 
 if old_hash != new_hash:
     # Log permission change for audit
@@ -115,7 +147,7 @@ if old_hash != new_hash:
 ### Caching
 ```python
 # Use hash as cache key for expensive permission computations
-cache_key = f"user_permissions:{get_user_claims_hash(user)}"
+cache_key = f"user_permissions:{get_user_permissions_hash(user)}"
 accessible_resources = cache.get(cache_key)
 if not accessible_resources:
     accessible_resources = compute_accessible_resources(user)
@@ -125,18 +157,19 @@ if not accessible_resources:
 ## Implementation Details
 
 ### Supported Content Types
-- Organizations
-- Teams  
-- Any registered RBAC model with ansible_id
+- Organizations (hardcoded as 'organization' in object arrays)
+- Teams (hardcoded as 'team' in object arrays)
+- Any registered RBAC model with ansible_id (dynamically added with model name)
 
 ### Global vs Object Roles
 - **Global roles**: Platform-wide permissions (Platform Auditor, System Admin)
 - **Object roles**: Permissions scoped to specific resources (Organization Admin, Team Member)
 
 ### Performance Considerations
-- Claims generation involves database queries - consider caching
+- Claims generation involves database queries - consider caching the final hash
 - Hash computation is fast (SHA-256 on small JSON)
 - Hashable form conversion does sorting - O(n log n) complexity
+- Efficient query structure: uses QuerySet annotations to minimize database hits
 
 ## Security Notes
 

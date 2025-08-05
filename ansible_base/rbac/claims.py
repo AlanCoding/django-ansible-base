@@ -1,7 +1,7 @@
 import hashlib
 import json
 from collections import defaultdict
-from typing import Type, Union
+from typing import Union
 
 from django.apps import apps
 from django.conf import settings
@@ -13,146 +13,118 @@ from .models.content_type import DABContentType
 from .models.role import RoleDefinition
 
 
-def _get_resource_model() -> Type[Model]:
-    """Get the Resource model class from the resource registry.
-
-    Returns:
-        The Resource model class used for ansible_id lookups
-    """
-    return apps.get_model('dab_resource_registry', 'Resource')
-
-
-def _build_resource_subquery() -> QuerySet:
-    """Build a subquery to retrieve ansible_id values for resources.
-
-    This subquery is used to annotate role assignments with their corresponding
-    ansible_id values from the resource registry.
-
-    Returns:
-        QuerySet that filters resources by object_id and content_type from outer query
-        and returns ansible_id values
-    """
-    resource_cls = _get_resource_model()
-    return resource_cls.objects.filter(object_id=OuterRef('object_id'), content_type=OuterRef('content_type')).values('ansible_id')
-
-
-def _build_role_assignments_queryset(user: Model, resource_subquery: QuerySet) -> QuerySet:
-    """Build queryset of role assignments with ansible_id and role name annotations.
-
-    Args:
-        user: The user whose role assignments to query
-        resource_subquery: Subquery to get ansible_id values
-
-    Returns:
-        QuerySet of role assignments filtered to:
-        - Object-scoped assignments only (content_type is not null)
-        - JWT-managed roles only (as defined in settings)
-        Annotated with:
-        - aid: ansible_id from the resource registry
-        - rd_name: role definition name
-    """
-    return (
-        user.role_assignments.filter(content_type__isnull=False)
-        .annotate(aid=resource_subquery, rd_name=F('role_definition__name'))
-        .filter(rd_name__in=settings.ANSIBLE_BASE_JWT_MANAGED_ROLES)
-    )
-
-
-def _format_role_assignment_results(assignment_queryset: QuerySet) -> list[tuple[str, str, int]]:
-    """Convert role assignment queryset to list of tuples.
-
-    Args:
-        assignment_queryset: QuerySet with aid and rd_name annotations
-
-    Returns:
-        List of tuples containing (role_name, ansible_id, content_type_id)
-        where:
-        - role_name: Name of the role definition (e.g., "Organization Admin")
-        - ansible_id: String representation of the resource's ansible_id
-        - content_type_id: Integer ID of the content type
-    """
-    return [(ra.rd_name, str(ra.aid), ra.content_type_id) for ra in assignment_queryset]
-
-
-def get_user_object_roles(user: Model) -> list[tuple[str, str, int]]:
+def get_user_object_roles(user: Model) -> QuerySet:
     """Get all object-scoped role assignments for a user with resource metadata.
 
     This function retrieves role assignments that are scoped to specific objects
     (not global roles) and joins them with resource registry data to include
-    ansible_id values. Only JWT-managed roles are included.
+    ansible_id and name values. Only JWT-managed roles are included.
 
     Args:
         user: Django user model instance
 
     Returns:
-        List of tuples containing (role_name, ansible_id, content_type_id):
-        - role_name: Name of the role definition (e.g., "Organization Admin")
-        - ansible_id: String representation of the resource's ansible_id
+        QuerySet of role assignments annotated with:
+        - aid: ansible_id from the resource registry
+        - resource_name: name from the resource registry
+        - rd_name: role definition name
         - content_type_id: Integer ID of the content type for the assigned object
 
-    Example:
-        [
-            ("Organization Admin", "uuid-123", 42),
-            ("Team Member", "uuid-456", 43)
-        ]
+    The queryset is filtered to:
+        - Object-scoped assignments only (content_type is not null)
+        - JWT-managed roles only (as defined in settings)
+
+    Example usage:
+        assignments = get_user_object_roles(user)
+        for assignment in assignments:
+            print(assignment.rd_name, assignment.aid, assignment.resource_name, assignment.content_type_id)
     """
-    resource_subquery = _build_resource_subquery()
-    assignment_queryset = _build_role_assignments_queryset(user, resource_subquery)
-    return _format_role_assignment_results(assignment_queryset)
+    # Create subqueries for resource data
+    resource_cls = apps.get_model('dab_resource_registry', 'Resource')
+    ansible_id_subquery = resource_cls.objects.filter(object_id=OuterRef('object_id'), content_type=OuterRef('content_type')).values('ansible_id')
+
+    resource_name_subquery = resource_cls.objects.filter(object_id=OuterRef('object_id'), content_type=OuterRef('content_type')).values('name')
+
+    return (
+        user.role_assignments.filter(content_type__isnull=False)
+        .annotate(aid=ansible_id_subquery, resource_name=resource_name_subquery, rd_name=F('role_definition__name'))
+        .filter(rd_name__in=settings.ANSIBLE_BASE_JWT_MANAGED_ROLES)
+    )
 
 
-def _load_needed_objects(needed_objects: dict[str, set[str]]) -> dict[str, dict[str, dict]]:
-    """Load only the specific objects needed for claims processing.
+def _resolve_team_organization_references(
+    team_ansible_ids: set[str],
+    object_arrays: dict[str, list],
+    ansible_id_to_index: defaultdict[str, dict],
+) -> None:
+    """Resolve team organization references by converting ansible_ids to array positions.
+
+    This method queries the team model to get organization mappings for teams,
+    then updates team objects to reference their organizations by array position
+    instead of ansible_id. If a team's organization is not already in the object
+    arrays, it will be added.
 
     Args:
-        needed_objects: Dict mapping content_type_model -> set of ansible_ids needed
+        team_ansible_ids: Set of team ansible_ids that need organization mapping
+        object_arrays: Dictionary with model_type -> list of objects (will be modified)
+        ansible_id_to_index: Maps model_type -> ansible_id -> array_position (will be modified)
 
-    Returns:
-        Dict mapping content_type_model -> ansible_id -> object_data
+    The method modifies object_arrays and ansible_id_to_index in place:
+    - Updates team objects' 'org' field from ansible_id to array position
+    - Adds missing organizations to object_arrays['organization'] if needed
+    - Updates ansible_id_to_index mappings for any added organizations
     """
-    objs_by_ansible_id = {}
+    if not team_ansible_ids:
+        return
 
-    # Load organizations if needed
-    org_content_type_model = DABContentType.objects.get_for_model(get_organization_model()).model
-    if org_content_type_model in needed_objects:
-        org_ansible_ids = needed_objects[org_content_type_model]
-        objs_by_ansible_id[org_content_type_model] = {}
+    # Get organization model type name
+    org_model_name = DABContentType.objects.get_for_model(get_organization_model()).model
 
-        org_cls = get_organization_model()
-        for org in org_cls.objects.filter(resource__ansible_id__in=org_ansible_ids).values('name', 'resource__ansible_id'):
-            ansible_id = str(org['resource__ansible_id'])
-            objs_by_ansible_id[org_content_type_model][ansible_id] = {'ansible_id': ansible_id, 'name': org['name']}
+    # Query team model to get team -> organization mappings with organization names
+    team_cls = get_team_model()
+    team_org_mapping = {}
+    for team in team_cls.objects.filter(resource__ansible_id__in=team_ansible_ids).values(
+        'resource__ansible_id', 'organization__resource__ansible_id', 'organization__name'
+    ):
+        team_ansible_id = str(team['resource__ansible_id'])
+        org_ansible_id = str(team['organization__resource__ansible_id'])
+        org_name = team['organization__name']
+        team_org_mapping[team_ansible_id] = {'ansible_id': org_ansible_id, 'name': org_name}
 
-    # Load teams if needed
-    team_content_type_model = DABContentType.objects.get_for_model(get_team_model()).model
-    if team_content_type_model in needed_objects:
-        team_ansible_ids = needed_objects[team_content_type_model]
-        objs_by_ansible_id[team_content_type_model] = {}
+    # Update team objects with organization references
+    for team_data in object_arrays.get('team', []):
+        team_ansible_id = team_data['ansible_id']
+        org_info = team_org_mapping.get(team_ansible_id)
 
-        team_cls = get_team_model()
-        for team in team_cls.objects.filter(resource__ansible_id__in=team_ansible_ids).values(
-            'name', 'resource__ansible_id', 'organization__resource__ansible_id'
-        ):
-            ansible_id = str(team['resource__ansible_id'])
-            org_ansible_id = str(team['organization__resource__ansible_id'])
-            objs_by_ansible_id[team_content_type_model][ansible_id] = {'ansible_id': ansible_id, 'name': team['name'], 'org': org_ansible_id}
+        if org_info:
+            org_ansible_id = org_info['ansible_id']
+            org_name = org_info['name']
 
-    return objs_by_ansible_id
+            # Ensure the organization is in our arrays
+            if org_ansible_id not in ansible_id_to_index[org_model_name]:
+                # Add missing organization using data from the query
+                if org_model_name not in object_arrays:
+                    object_arrays[org_model_name] = []
+                org_index = len(object_arrays[org_model_name])
+                ansible_id_to_index[org_model_name][org_ansible_id] = org_index
+                org_data = {'ansible_id': org_ansible_id, 'name': org_name}
+                object_arrays[org_model_name].append(org_data)
+
+            # Set the organization reference to the array position
+            team_data['org'] = ansible_id_to_index[org_model_name][org_ansible_id]
 
 
-def _process_user_object_roles(
+def _build_objects_and_roles(
     user: Model,
-    cached_objects_index: defaultdict[str, dict],
 ) -> tuple[dict[str, list], dict[str, dict[str, Union[str, list[int]]]]]:
     """Process user's object-scoped role assignments and return objects and roles data.
 
     Args:
         user: User model instance
-        cached_objects_index: Cache mapping content_model -> ansible_id -> array_index (will be modified)
 
     Returns:
         Tuple containing:
-        - objects_dict: Dictionary with content_model -> list of objects
+        - object_arrays: Dictionary with model_type -> list of objects
         - object_roles: Dictionary mapping role names to role data
 
     Example:
@@ -161,127 +133,56 @@ def _process_user_object_roles(
             {'Organization Admin': {'content_type': 'organization', 'objects': [0]}}
         )
     """
-    # Get content type models for organizations and teams
-    org_content_type_model = DABContentType.objects.get_for_model(get_organization_model()).model
-    team_content_type_model = DABContentType.objects.get_for_model(get_team_model()).model
-
-    # Initialize objects dict with empty arrays
-    objects_dict = {org_content_type_model: [], team_content_type_model: []}
-
-    user_object_roles = get_user_object_roles(user)
-
-    # First pass: identify what objects we need
-    needed_objects = defaultdict(set)
-    for role_name, ansible_id, content_type_id in user_object_roles:
-        content_model_type = DABContentType.objects.get_for_id(content_type_id).model
-        needed_objects[content_model_type].add(ansible_id)
-
-    # Load only the objects we actually need
-    objs_by_ansible_id = _load_needed_objects(needed_objects)
-
-    # Second pass: build objects_dict and object_roles
+    # Initialize empty object arrays and roles with expected keys
+    object_arrays = {'organization': [], 'team': []}
     object_roles = {}
-    for role_name, ansible_id, content_type_id in user_object_roles:
-        content_model_type = DABContentType.objects.get_for_id(content_type_id).model
 
-        # Ensure the content_model_type exists in objects_dict (in case of new types)
-        if content_model_type not in objects_dict:
-            objects_dict[content_model_type] = []
+    # Internal tracking for ansible_id to array position mapping
+    ansible_id_to_index = defaultdict(dict)  # { <model_type>: {<ansible_id>: <array_position> } }
 
-        # If the ansible_id is not in the cached_objects_index
-        if ansible_id not in cached_objects_index[content_model_type]:
-            # Cache the index (current len will be the next index when we append)
-            cached_objects_index[content_model_type][ansible_id] = len(objects_dict[content_model_type])
-            # Add the object to the objects dict
-            objects_dict[content_model_type].append(objs_by_ansible_id[content_model_type][ansible_id])
+    # Collect team ansible_ids that need organization mapping
+    team_ansible_ids = set()
 
-        # Get the index value from the cache
-        object_index = cached_objects_index[content_model_type][ansible_id]
+    # Single loop: build object_arrays and object_roles
+    for assignment in get_user_object_roles(user):
+        role_name = assignment.rd_name
+        ansible_id = str(assignment.aid)
+        resource_name = str(assignment.resource_name)
+        content_type_id = assignment.content_type_id
+        model_type = DABContentType.objects.get_for_id(content_type_id).model
+
+        # Ensure the model_type exists in object_arrays (for non-standard types)
+        if model_type not in object_arrays:
+            object_arrays[model_type] = []
+
+        # Collect team ansible_ids for organization resolution
+        if model_type == 'team':
+            team_ansible_ids.add(ansible_id)
+
+        # If the ansible_id is not yet indexed
+        if ansible_id not in ansible_id_to_index[model_type]:
+            # Cache the array position (current len will be the next index when we append)
+            ansible_id_to_index[model_type][ansible_id] = len(object_arrays[model_type])
+            # Add the object to the array (without org reference for teams yet)
+            object_data = {'ansible_id': ansible_id, 'name': resource_name}
+            if model_type == 'team':
+                object_data['org'] = None  # Will be resolved later
+            object_arrays[model_type].append(object_data)
+
+        # Get the array position from the cache
+        array_position = ansible_id_to_index[model_type][ansible_id]
 
         # If the role is not in object_roles, initialize it
         if role_name not in object_roles:
-            object_roles[role_name] = {'content_type': content_model_type, 'objects': []}
+            object_roles[role_name] = {'content_type': model_type, 'objects': []}
 
-        # Add the object index to the role
-        object_roles[role_name]['objects'].append(object_index)
+        # Add the array position to the role
+        object_roles[role_name]['objects'].append(array_position)
 
-    return objects_dict, object_roles
+    # Resolve team organization references
+    _resolve_team_organization_references(team_ansible_ids, object_arrays, ansible_id_to_index)
 
-
-def _pivot_objects_by_ansible_id(objects_dict: dict[str, list]) -> dict[str, dict[str, dict]]:
-    """Convert objects_dict to a lookup dictionary indexed by ansible_id.
-
-    Args:
-        objects_dict: Dictionary with content_model -> list of objects
-
-    Returns:
-        Dictionary mapping content_model -> ansible_id -> object_data
-
-    Example:
-        Input: {'organization': [{'ansible_id': 'uuid1', 'name': 'Org1'}]}
-        Output: {'organization': {'uuid1': {'ansible_id': 'uuid1', 'name': 'Org1'}}}
-    """
-    objs_by_ansible_id = {}
-
-    for content_model_type, objects_list in objects_dict.items():
-        objs_by_ansible_id[content_model_type] = {}
-        for obj_data in objects_list:
-            ansible_id = obj_data['ansible_id']
-            objs_by_ansible_id[content_model_type][ansible_id] = obj_data
-
-    return objs_by_ansible_id
-
-
-def _fix_team_organization_references(
-    objects_dict: dict[str, list],
-    cached_objects_index: defaultdict[str, dict],
-    objs_by_ansible_id: dict[str, dict[str, dict]],
-) -> None:
-    """Convert team organization references from ansible_ids to array indexes.
-
-    Teams initially reference their organizations by ansible_id. This method
-    converts those references to array indexes within the objects structure.
-
-    Args:
-        objects_dict: Dictionary with content_model -> list of objects (will be modified)
-        cached_objects_index: Cache mapping content_model -> ansible_id -> array_index (will be modified)
-        objs_by_ansible_id: Dictionary mapping content_model -> ansible_id -> object_data
-    """
-    # Get content type models for organizations and teams
-    org_content_type_model = DABContentType.objects.get_for_model(get_organization_model()).model
-    team_content_type_model = DABContentType.objects.get_for_model(get_team_model()).model
-
-    # Only process if there are teams in the objects dict
-    if team_content_type_model not in objects_dict:
-        return
-
-    # Collect any missing org ansible_ids that we need to load
-    missing_org_ansible_ids = set()
-    for team in objects_dict[team_content_type_model]:
-        org_ansible_id = team['org']
-        if org_ansible_id not in cached_objects_index[org_content_type_model]:
-            missing_org_ansible_ids.add(org_ansible_id)
-
-    # Load any missing organizations
-    if missing_org_ansible_ids:
-        missing_orgs = _load_needed_objects({org_content_type_model: missing_org_ansible_ids})
-        if org_content_type_model in missing_orgs:
-            objs_by_ansible_id.setdefault(org_content_type_model, {}).update(missing_orgs[org_content_type_model])
-
-    # Now convert ansible_ids to indexes
-    for team in objects_dict[team_content_type_model]:
-        org_ansible_id = team['org']
-
-        if org_ansible_id in cached_objects_index[org_content_type_model]:
-            # Organization is already in objects, use its index
-            team['org'] = cached_objects_index[org_content_type_model][org_ansible_id]
-        else:
-            # Organization not yet in objects - add it
-            org_index = len(objects_dict[org_content_type_model])
-            cached_objects_index[org_content_type_model][org_ansible_id] = org_index
-            org_data = objs_by_ansible_id[org_content_type_model][org_ansible_id]
-            team['org'] = org_index
-            objects_dict[org_content_type_model].append(org_data)
+    return object_arrays, object_roles
 
 
 def _get_user_global_roles(user: Model) -> list[str]:
@@ -333,23 +234,14 @@ def get_user_claims(user: Model) -> dict[str, Union[list[str], dict[str, Union[s
     # Warm the DABContentType cache for efficient lookups
     DABContentType.objects.warm_cache()
 
-    # Initialize caching dictionaries
-    cached_objects_index = defaultdict(dict)  # { <content_model>: {<ansible_id>: <array index integer> } }
-
-    # Process user's object role assignments (loads only needed objects)
-    objects_dict, object_roles = _process_user_object_roles(user, cached_objects_index)
-
-    # Create lookup dictionary by ansible_id for organization reference resolution
-    objs_by_ansible_id = _pivot_objects_by_ansible_id(objects_dict)
-
-    # Convert team organization references from ansible_ids to indexes
-    _fix_team_organization_references(objects_dict, cached_objects_index, objs_by_ansible_id)
+    # Build object arrays and roles from user's assignments
+    object_arrays, object_roles = _build_objects_and_roles(user)
 
     # Get global roles
     global_roles = _get_user_global_roles(user)
 
     # Build final claims structure
-    return {'objects': objects_dict, 'object_roles': object_roles, 'global_roles': global_roles}
+    return {'objects': object_arrays, 'object_roles': object_roles, 'global_roles': global_roles}
 
 
 def get_user_claims_hashable_form(claims: dict) -> dict[str, Union[list[str], dict[str, list[str]]]]:

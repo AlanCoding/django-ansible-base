@@ -117,6 +117,7 @@ class PermissionScenarios:
             'mixed_large': {'org_admin': [0, 1, 2, 3, 4], 'team_member': [0, 2, 4, 6, 8, 10, 12, 14, 16, 18], 'global_roles': ['Platform Auditor']},
             'all_org_admin': {'org_admin': list(range(10)), 'team_member': [], 'global_roles': []},  # all 10 orgs
             'scattered_permissions': {'org_admin': [1, 7], 'team_member': [3, 9, 15], 'global_roles': ['Platform Auditor']},
+            'teams_no_orgs': {'org_admin': [], 'team_member': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], 'global_roles': []},  # 10 teams, no direct org permissions
         }
 
 
@@ -260,6 +261,7 @@ class TestUserClaims:
             'mixed_large',
             'all_org_admin',
             'scattered_permissions',
+            'teams_no_orgs',
         ],
     )
     def test_claims_scenarios(self, claims_scenario, scenario_name):
@@ -290,6 +292,7 @@ class TestUserClaims:
             'mixed_large',
             'all_org_admin',
             'scattered_permissions',
+            'teams_no_orgs',
         ],
     )
     def test_hashable_claims_scenarios(self, claims_scenario, scenario_name):
@@ -321,6 +324,7 @@ class TestUserClaims:
             'mixed_large',
             'all_org_admin',
             'scattered_permissions',
+            'teams_no_orgs',
         ],
     )
     def test_identical_permissions_same_hash(self, claims_scenario, scenario_name):
@@ -400,7 +404,69 @@ class TestUserClaims:
             print(f"     Time: {query['time']}s")
         print("=" * 45)
 
-        # Assert we maintain our performance baseline
-        # Baseline updated after optimization: 6 queries for the mixed_large scenario
-        # (More efficient: only loads objects user has access to, not ALL objects)
-        assert total_queries == 6, f"Claims generation used {total_queries} queries, expected 6 (baseline)"
+        # Assert we maintain our improved performance baseline
+        # Baseline improved after N+1 fix: 4 queries for the mixed_large scenario
+        # (Even more efficient: team organization resolution optimized with single join query)
+        assert total_queries == 4, f"Claims generation used {total_queries} queries, expected 4 (improved baseline)"
+
+    @override_settings(DEBUG=True)
+    def test_claims_query_teams_no_orgs_efficient(self, claims_scenario):
+        """Test that team organization resolution is efficient after N+1 fix.
+
+        This test verifies that when a user has team permissions but no direct
+        organization permissions, the claims generation is still efficient.
+
+        The fix: Include 'organization__name' in the team query to get all needed
+        data in a single query instead of individual org lookups.
+
+        Scenario details:
+        - Team Member for 10 teams (indexes 0,1,2,3,4,5,6,7,8,9)
+        - NO Organization Admin permissions
+        - Teams are distributed across 10 different organizations
+
+        Expected: Efficient bulk query gets team + organization data together
+        Query count: 4 (even better than the 6-query baseline!)
+        """
+        scenario_name = 'teams_no_orgs'
+
+        # Create user and apply the scenario
+        user = get_user_model().objects.create(username='test_user_teams_efficient')
+        claims_scenario.apply_scenario(scenario_name, user)
+
+        # Clear any existing queries from setup
+        connection.queries_log.clear()
+
+        # Count queries before claims generation
+        queries_before = len(connection.queries)
+
+        # Generate claims (this is what we're measuring)
+        user_claims = get_user_claims(user)
+
+        # Count queries after claims generation
+        queries_after = len(connection.queries)
+        total_queries = queries_after - queries_before
+
+        # Verify we got valid claims (basic sanity check)
+        assert isinstance(user_claims, dict)
+        assert 'objects' in user_claims
+        assert 'object_roles' in user_claims
+        assert 'global_roles' in user_claims
+
+        # Verify we have team permissions but no direct org permissions
+        assert 'Team Member' in user_claims['object_roles']
+        assert 'Organization Admin' not in user_claims['object_roles']
+        assert len(user_claims['objects'].get('team', [])) == 10  # 10 teams
+        assert len(user_claims['objects'].get('organization', [])) == 10  # 10 orgs (added during resolution)
+
+        # Report the successful fix
+        print("\n=== TEAMS_NO_ORGS N+1 PROBLEM FIXED ===")
+        print(f"Scenario: {scenario_name}")
+        print(f"Total database queries: {total_queries}")
+        print("Query details:")
+        for i, query in enumerate(connection.queries[queries_before:], 1):
+            print(f"  {i}. {query['sql'][:100]}{'...' if len(query['sql']) > 100 else ''}")
+            print(f"     Time: {query['time']}s")
+        print("=" * 45)
+
+        # Assert the fix worked - even better performance than baseline!
+        assert total_queries == 4, f"Claims generation used {total_queries} queries, expected 4 (N+1 problem fixed!)"
