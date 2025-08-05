@@ -74,6 +74,13 @@ class TestUserClaims:
         # The user will fill in the expected structure later
         assert isinstance(claims, dict)
 
-        # Placeholder assertion - user will replace this with actual expected structure
-        expected_claims = {}
+        expected_claims = {
+            'global_roles': ['Platform Auditor'],
+            'object_roles': {'Organization Admin': {'content_type': 'organization', 'objects': [0]}, 'Team Member': {'content_type': 'team', 'objects': [0]}},
+            'objects': {
+                'organization': [{'ansible_id': str(org.resource.ansible_id), 'name': 'Test Org'}],
+                'team': [{'ansible_id': str(team.resource.ansible_id), 'name': 'Test Team', 'org': 0}],
+            },
+        }
+
         assert claims == expected_claims
