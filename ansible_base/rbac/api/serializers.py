@@ -274,7 +274,9 @@ class AccessListMixin:
                 actor_identifier = str(obj.resource.ansible_id)
         except ObjectDoesNotExist:
             # Resource doesn't exist, stick with pk
-            logger.warning(f"No resource for {self.Meta.model} {obj.pk} due to internal error. Linking role-{actor_cls._meta.model_name}-access-assignments as pk.")
+            logger.warning(
+                f"No resource for {self.Meta.model} {obj.pk} due to internal error. Linking role-{actor_cls._meta.model_name}-access-assignments as pk."
+            )
 
         related_fields['details'] = get_relative_url(
             f'role-{actor_cls._meta.model_name}-access-assignments',
