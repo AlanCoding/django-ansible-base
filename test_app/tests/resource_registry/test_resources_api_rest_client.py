@@ -36,6 +36,15 @@ def resource_client(system_user, admin_user, live_server, local_authenticator, t
     return ResourceAPIClient(live_server.url, "/api/v1/service-index/", jwt_user_id=admin_user.resource.ansible_id)
 
 
+@pytest.fixture
+def inv_rd():
+    return RoleDefinition.objects.create_from_permissions(
+        permissions=['change_inventory', 'view_inventory'],
+        name='change-inv',
+        content_type=permission_registry.content_type_model.objects.get_for_model(Inventory),
+    )
+
+
 @pytest.mark.django_db
 def test_service_metadata(resource_client):
     """Test that the resource list is working."""
@@ -183,7 +192,7 @@ def test_list_role_permissions_all_pages(resource_client):
     assert resp.json()["count"] > 25
 
 
-def _assert_assignment_matches_data(assignment, data, obj, user):
+def _assert_assignment_matches_data(assignment, data, obj, actor):
     assert 'created' in data, data
     # assert DateTimeField().to_representation(assignment.created) == data['created']  # TODO
     assert str(assignment.created_by.resource.ansible_id) == data['created_by_ansible_id']
@@ -196,7 +205,10 @@ def _assert_assignment_matches_data(assignment, data, obj, user):
     else:
         assert 'aap.inventory' == data['content_type']
         assert 'change-inv' == data['role_definition']
-    assert str(user.resource.ansible_id) == data['user_ansible_id']
+    if 'user_ansible_id' in data:
+        assert str(actor.resource.ansible_id) == data['user_ansible_id']
+    elif 'team_ansible_id' in data:
+        assert str(actor.resource.ansible_id) == data['team_ansible_id']
 
 
 @pytest.mark.django_db
@@ -217,12 +229,7 @@ def test_sync_org_assignment(resource_client, org_admin_rd, user, organization):
 
 
 @pytest.mark.django_db
-def test_sync_obj_assignment(resource_client, user, inventory):
-    inv_rd = RoleDefinition.objects.create_from_permissions(
-        permissions=['change_inventory', 'view_inventory'],
-        name='change-inv',
-        content_type=permission_registry.content_type_model.objects.get_for_model(Inventory),
-    )
+def test_sync_obj_assignment(resource_client, user, inventory, inv_rd):
     assignment = inv_rd.give_permission(user, inventory)
     resp = resource_client.sync_assignment(assignment)
     assert resp.status_code == 200, resp.text
@@ -307,3 +314,51 @@ def test_validate_local_user(resource_client, admin_user, member_rd):
 
     resp = resource_client.validate_local_user(username=admin_user.username, password="fake password")
     assert resp.status_code == 401
+
+
+@pytest.mark.django_db
+def test_list_user_assignments(resource_client, org_admin_rd, user, organization):
+    """Test listing user role assignments."""
+    # Create an assignment for the user
+    assignment = org_admin_rd.give_permission(user, organization)
+
+    # Call the list_user_assignments method (doesn't exist yet)
+    resp = resource_client.list_user_assignments(user_ansible_id=str(user.resource.ansible_id))
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["count"] >= 1
+
+    # Find our assignment in the results
+    assignment_found = False
+    for result in data["results"]:
+        if result["user_ansible_id"] == str(user.resource.ansible_id):
+            _assert_assignment_matches_data(assignment, result, organization, user)
+            assignment_found = True
+            break
+
+    assert assignment_found, "User assignment not found in list results"
+
+
+@pytest.mark.django_db
+def test_list_team_assignments(resource_client, inv_rd, team, inventory):
+    """Test listing team role assignments."""
+    # Create an assignment for the team
+    assignment = inv_rd.give_permission(team, inventory)
+
+    # Call the list_team_assignments method (doesn't exist yet)
+    resp = resource_client.list_team_assignments(team_ansible_id=str(team.resource.ansible_id))
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["count"] >= 1
+
+    # Find our assignment in the results
+    assignment_found = False
+    for result in data["results"]:
+        if result["team_ansible_id"] == str(team.resource.ansible_id):
+            _assert_assignment_matches_data(assignment, result, inventory, team)
+            assignment_found = True
+            break
+
+    assert assignment_found, "Team assignment not found in list results"

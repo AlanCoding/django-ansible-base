@@ -174,6 +174,20 @@ class ResourceAPIClient:
     def list_role_permissions(self, filters: Optional[dict] = None):
         return self._make_request("get", "role-permissions/", params=filters)
 
+    def list_user_assignments(self, user_ansible_id: Optional[str] = None, filters: Optional[dict] = None):
+        """List user role assignments."""
+        params = (filters or {}).copy()
+        if user_ansible_id is not None:
+            params['user_ansible_id'] = user_ansible_id
+        return self._make_request("get", "role-user-assignments/", params=params)
+
+    def list_team_assignments(self, team_ansible_id: Optional[str] = None, filters: Optional[dict] = None):
+        """List team role assignments."""
+        params = (filters or {}).copy()
+        if team_ansible_id is not None:
+            params['team_ansible_id'] = team_ansible_id
+        return self._make_request("get", "role-team-assignments/", params=params)
+
     def sync_assignment(self, assignment):
         from ansible_base.rbac.service_api.serializers import ServiceRoleTeamAssignmentSerializer, ServiceRoleUserAssignmentSerializer
 
