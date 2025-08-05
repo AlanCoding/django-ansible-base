@@ -53,7 +53,6 @@ def get_user_object_roles(user: Model) -> QuerySet:
 
 
 def _resolve_team_organization_references(
-    team_ansible_ids: set[str],
     object_arrays: dict[str, list],
     org_ansible_id_to_index: dict[str, int],
 ) -> None:
@@ -65,7 +64,6 @@ def _resolve_team_organization_references(
     arrays, it will be added.
 
     Args:
-        team_ansible_ids: Set of team ansible_ids that need organization mapping
         object_arrays: Dictionary with model_type -> list of objects (will be modified)
         org_ansible_id_to_index: Maps organization ansible_id -> array_position (will be modified)
 
@@ -74,6 +72,9 @@ def _resolve_team_organization_references(
     - Adds missing organizations to object_arrays['organization'] if needed
     - Updates org_ansible_id_to_index mappings for any added organizations
     """
+    # Extract team ansible_ids from the team objects
+    team_ansible_ids = {team_data['ansible_id'] for team_data in object_arrays['team']}
+
     if not team_ansible_ids:
         return
 
@@ -89,7 +90,7 @@ def _resolve_team_organization_references(
         team_org_mapping[team_ansible_id] = {'ansible_id': org_ansible_id, 'name': org_name}
 
     # Update team objects with organization references
-    for team_data in object_arrays.get('team', []):
+    for team_data in object_arrays['team']:
         team_ansible_id = team_data['ansible_id']
         org_info = team_org_mapping.get(team_ansible_id)
 
@@ -137,11 +138,10 @@ def _build_objects_and_roles(
     # Internal tracking for ansible_id to array position mapping
     ansible_id_to_index = defaultdict(dict)  # { <model_type>: {<ansible_id>: <array_position> } }
 
-    # Collect team ansible_ids that need organization mapping
-    team_ansible_ids = set()
+    role_assignments = get_user_object_roles(user)
 
     # Single loop: build object_arrays and object_roles
-    for assignment in get_user_object_roles(user):
+    for assignment in role_assignments:
         role_name = assignment.rd_name
         ansible_id = str(assignment.aid)
         resource_name = str(assignment.resource_name)
@@ -152,18 +152,12 @@ def _build_objects_and_roles(
         if model_type not in object_arrays:
             object_arrays[model_type] = []
 
-        # Collect team ansible_ids for organization resolution
-        if model_type == 'team':
-            team_ansible_ids.add(ansible_id)
-
         # If the ansible_id is not yet indexed
         if ansible_id not in ansible_id_to_index[model_type]:
             # Cache the array position (current len will be the next index when we append)
             ansible_id_to_index[model_type][ansible_id] = len(object_arrays[model_type])
-            # Add the object to the array (without org reference for teams yet)
+            # Add the object to the array
             object_data = {'ansible_id': ansible_id, 'name': resource_name}
-            if model_type == 'team':
-                object_data['org'] = None  # Will be resolved later
             object_arrays[model_type].append(object_data)
 
         # Get the array position from the cache
@@ -177,7 +171,7 @@ def _build_objects_and_roles(
         object_roles[role_name]['objects'].append(array_position)
 
     # Resolve team organization references
-    _resolve_team_organization_references(team_ansible_ids, object_arrays, ansible_id_to_index['organization'])
+    _resolve_team_organization_references(object_arrays, ansible_id_to_index['organization'])
 
     return object_arrays, object_roles
 
