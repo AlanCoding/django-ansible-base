@@ -14,6 +14,7 @@ from ansible_base.authentication.authenticator_plugins.ldap import (
     LDAPSearchField,
     LDAPSettings,
     PosixUIDGroupType,
+    default_connection_options,
     find_class_in_modules,
     validate_ldap_filter,
 )
@@ -771,3 +772,118 @@ def test_is_member_missing_uid(group_type, ldap_user):
     ldap_user.attrs = {"gidNumber": ["1000"]}
     result = group_type.is_member(ldap_user, "cn=group,dc=example,dc=com")
     assert result is False
+
+
+def test_ldap_config_defaults():
+    from ansible_base.authentication.authenticator_plugins.ldap import LDAPConfiguration, LDAPSettings
+
+    config = LDAPConfiguration()
+    errors = []
+
+    # Verify basic field defaults
+    if config['START_TLS'].default is not False:
+        errors.append(f"START_TLS did not default to false, got {config['START_TLS'].default}")
+
+    # Verify CONNECTION_OPTIONS field default is empty (for clean UI)
+    if config['CONNECTION_OPTIONS'].default != {}:
+        errors.append(f"CONNECTION_OPTIONS field did not default to empty dict, got {config['CONNECTION_OPTIONS'].default}")
+
+    # Verify that LDAPSettings properly applies defaults when CONNECTION_OPTIONS is empty
+    test_config = {
+        'SERVER_URI': ['ldap://example.com'],
+        'CONNECTION_OPTIONS': {},  # Empty, should get merged with defaults
+        'GROUP_TYPE': 'PosixGroupType',
+        'GROUP_TYPE_PARAMS': {"name_attr": "cn"},
+    }
+    settings = LDAPSettings(defaults=test_config)
+
+    # Check that the defaults were applied in the settings object
+    import ldap
+
+    expected_referrals = ldap.OPT_REFERRALS in settings.CONNECTION_OPTIONS and settings.CONNECTION_OPTIONS[ldap.OPT_REFERRALS] == 0
+
+    if not expected_referrals:
+        errors.append("LDAPSettings did not apply OPT_REFERRALS default when CONNECTION_OPTIONS was empty")
+
+    assert errors == []
+
+
+def test_ldap_connection_options_user_override():
+    import ldap
+
+    from ansible_base.authentication.authenticator_plugins.ldap import LDAPSettings
+
+    errors = []
+
+    # Test scenario 1: User overrides default values
+    test_config_override = {
+        'SERVER_URI': ['ldap://example.com'],
+        'CONNECTION_OPTIONS': {
+            'OPT_REFERRALS': 1,  # Override default value of default_connection_options['OPT_REFERRALS']
+        },
+        'GROUP_TYPE': 'PosixGroupType',
+        'GROUP_TYPE_PARAMS': {"name_attr": "cn"},
+    }
+    settings = LDAPSettings(defaults=test_config_override)
+
+    # Verify user values override defaults
+    if settings.CONNECTION_OPTIONS[ldap.OPT_REFERRALS] != 1:
+        errors.append(f"Expected OPT_REFERRALS to be overridden to 1, got {settings.CONNECTION_OPTIONS[ldap.OPT_REFERRALS]}")
+
+    # Test scenario 2: User provides additional options not in defaults
+    test_config_additional = {
+        'SERVER_URI': ['ldap://example.com'],
+        'CONNECTION_OPTIONS': {
+            'OPT_PROTOCOL_VERSION': 3,  # New option not in defaults
+        },
+        'GROUP_TYPE': 'PosixGroupType',
+        'GROUP_TYPE_PARAMS': {"name_attr": "cn"},
+    }
+    settings = LDAPSettings(defaults=test_config_additional)
+
+    # Verify defaults are still applied
+    if settings.CONNECTION_OPTIONS[ldap.OPT_REFERRALS] != default_connection_options['OPT_REFERRALS']:
+        errors.append(
+            f"Expected OPT_REFERRALS default ({default_connection_options['OPT_REFERRALS']}) "
+            f"to be preserved, got {settings.CONNECTION_OPTIONS[ldap.OPT_REFERRALS]}"
+        )
+    # Verify additional option is included
+    if settings.CONNECTION_OPTIONS[ldap.OPT_PROTOCOL_VERSION] != 3:
+        errors.append(f"Expected OPT_PROTOCOL_VERSION to be set to 3, got {settings.CONNECTION_OPTIONS.get(ldap.OPT_PROTOCOL_VERSION)}")
+
+    # Test scenario 3: Mixed scenario - some overrides, some defaults, some new
+    test_config_mixed = {
+        'SERVER_URI': ['ldap://example.com'],
+        'CONNECTION_OPTIONS': {
+            'OPT_REFERRALS': 1,  # Override default
+            'OPT_PROTOCOL_VERSION': 3,  # New option
+        },
+        'GROUP_TYPE': 'PosixGroupType',
+        'GROUP_TYPE_PARAMS': {"name_attr": "cn"},
+    }
+    settings = LDAPSettings(defaults=test_config_mixed)
+
+    # Verify override
+    if settings.CONNECTION_OPTIONS[ldap.OPT_REFERRALS] != 1:
+        errors.append(f"Expected OPT_REFERRALS to be overridden to 1, got {settings.CONNECTION_OPTIONS[ldap.OPT_REFERRALS]}")
+    # Verify new option
+    if settings.CONNECTION_OPTIONS[ldap.OPT_PROTOCOL_VERSION] != 3:
+        errors.append(f"Expected OPT_PROTOCOL_VERSION to be set to 3, got {settings.CONNECTION_OPTIONS.get(ldap.OPT_PROTOCOL_VERSION)}")
+
+    # Test scenario 4: CONNECTION_OPTIONS is not a dict (edge case)
+    test_config_non_dict = {
+        'SERVER_URI': ['ldap://example.com'],
+        'CONNECTION_OPTIONS': "invaaalid",  # Not a dict
+        'GROUP_TYPE': 'PosixGroupType',
+        'GROUP_TYPE_PARAMS': {"name_attr": "cn"},
+    }
+    settings = LDAPSettings(defaults=test_config_non_dict)
+
+    # Should fall back to defaults only
+    if settings.CONNECTION_OPTIONS[ldap.OPT_REFERRALS] != default_connection_options['OPT_REFERRALS']:
+        errors.append(
+            f"Expected OPT_REFERRALS default ({default_connection_options['OPT_REFERRALS']}) "
+            f"when CONNECTION_OPTIONS is invalid, got {settings.CONNECTION_OPTIONS[ldap.OPT_REFERRALS]}"
+        )
+
+    assert errors == []

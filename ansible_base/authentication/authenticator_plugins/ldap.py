@@ -27,6 +27,7 @@ _MUST_BE_AN_ARRAY_MESSAGE_TRANSLATED = _(_MUST_BE_AN_ARRAY_MESSAGE)
 
 
 user_search_string = '%(user)s'
+default_connection_options = {'OPT_REFERRALS': 0}
 
 
 class PosixUIDGroupType(LDAPGroupType):
@@ -434,7 +435,14 @@ class LDAPSettings(BaseLDAPSettings):
         setattr(self, 'SERVER_URI', ','.join(defaults['SERVER_URI']))
 
         # Connection options need to be set as {"integer": "value"} but our configuration has {"friendly_name": "value"} so we need to convert them
-        connection_options = defaults.get('CONNECTION_OPTIONS', {})
+        connection_options = defaults.get('CONNECTION_OPTIONS')
+        if not isinstance(connection_options, dict):
+            logger.warning(f"Invalid CONNECTION_OPTIONS (not a dict): {connection_options}")
+            connection_options = {}
+        _tmp_connection_options = default_connection_options.copy()
+        _tmp_connection_options.update(connection_options)
+        connection_options = _tmp_connection_options
+        del _tmp_connection_options
         valid_options = dict([(v, k) for k, v in ldap.OPT_NAMES_DICT.items()])
         internal_data = {}
         for key in connection_options:
