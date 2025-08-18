@@ -13,7 +13,6 @@ from ansible_base.lib.utils.auth import get_team_model
 
 from .models.content_type import DABContentType
 from .models.role import RoleDefinition
-from .permission_registry import permission_registry
 
 logger = logging.getLogger(__name__)
 
@@ -256,7 +255,10 @@ def get_role_definition(name: str) -> Optional[Model]:
         return RoleDefinition.objects.get(name=name)
     except RoleDefinition.DoesNotExist:
 
-        constructor = permission_registry().get_managed_role_constructor_by_name(name)
+        # Delayed import just in case of initialization problems
+        from .permission_registry import permission_registry
+
+        constructor = permission_registry.get_managed_role_constructor_by_name(name)
         if constructor:
             rd, _ = constructor.get_or_create(apps)
             return rd

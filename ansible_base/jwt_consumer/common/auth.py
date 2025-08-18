@@ -33,18 +33,6 @@ default_mapped_user_fields = [
     "is_superuser",
 ]
 
-_permission_registry = None
-
-
-def permission_registry():
-    global _permission_registry
-
-    if not _permission_registry:
-        from ansible_base.rbac.permission_registry import permission_registry as permission_registry_singleton
-
-        _permission_registry = permission_registry_singleton
-    return _permission_registry
-
 
 class JWTCommonAuth:
     def __init__(self, user_fields=default_mapped_user_fields) -> None:
