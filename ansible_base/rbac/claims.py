@@ -12,7 +12,7 @@ from django.db.utils import IntegrityError
 from ansible_base.lib.utils.auth import get_team_model
 
 from .models.content_type import DABContentType
-from .models.role import RoleDefinition
+from .models.role import RoleDefinition, RoleUserAssignment
 
 logger = logging.getLogger(__name__)
 
@@ -249,8 +249,6 @@ def get_role_definition(name: str) -> Optional[Model]:
     If this is the name of a managed role for which we have a corresponding definition in code,
     and that role can not be found in the database, it may be created here
     """
-    from ansible_base.rbac.models import RoleDefinition
-
     try:
         return RoleDefinition.objects.get(name=name)
     except RoleDefinition.DoesNotExist:
@@ -315,8 +313,6 @@ def save_user_claims(user: Model, objects: dict, object_roles: dict, global_role
     """
     Apply RBAC permissions from claims data
     """
-    from ansible_base.rbac.models import RoleUserAssignment
-
     role_diff = RoleUserAssignment.objects.filter(user=user, role_definition__name__in=settings.ANSIBLE_BASE_JWT_MANAGED_ROLES)
 
     for system_role_name in global_roles:
