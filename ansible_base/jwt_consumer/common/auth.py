@@ -241,7 +241,8 @@ class JWTCommonAuth:
             algorithms=["RS256"],
         )
 
-    def get_role_definition(self, name: str) -> Optional[Model]:
+    @staticmethod
+    def get_role_definition(name: str) -> Optional[Model]:
         """Simply get the RoleDefinition from the database if it exists and handler corner cases
 
         If this is the name of a managed role for which we have a corresponding definition in code,
@@ -344,35 +345,36 @@ class JWTCommonAuth:
             logger.error(f"Error fetching claims from gateway: {e}")
             return None
 
-    def _apply_rbac_permissions(self, objects, object_roles, global_roles):
+    @staticmethod
+    def _apply_rbac_permissions(user, objects: dict, object_roles: dict, global_roles: list) -> None:
         """
         Apply RBAC permissions from claims data
         """
         from ansible_base.rbac.models import RoleUserAssignment
 
-        role_diff = RoleUserAssignment.objects.filter(user=self.user, role_definition__name__in=settings.ANSIBLE_BASE_JWT_MANAGED_ROLES)
+        role_diff = RoleUserAssignment.objects.filter(user=user, role_definition__name__in=settings.ANSIBLE_BASE_JWT_MANAGED_ROLES)
 
         for system_role_name in global_roles:
-            logger.debug(f"Processing system role {system_role_name} for {self.user.username}")
-            rd = self.get_role_definition(system_role_name)
+            logger.debug(f"Processing system role {system_role_name} for {user.username}")
+            rd = JWTCommonAuth.get_role_definition(system_role_name)
             if rd:
                 if rd.name in settings.ANSIBLE_BASE_JWT_MANAGED_ROLES:
-                    assignment = rd.give_global_permission(self.user)
+                    assignment = rd.give_global_permission(user)
                     role_diff = role_diff.exclude(pk=assignment.pk)
-                    logger.info(f"Granted user {self.user.username} global role {system_role_name}")
+                    logger.info(f"Granted user {user.username} global role {system_role_name}")
                 else:
-                    logger.error(f"Unable to grant {self.user.username} system level role {system_role_name} because it is not a JWT managed role")
+                    logger.error(f"Unable to grant {user.username} system level role {system_role_name} because it is not a JWT managed role")
             else:
-                logger.error(f"Unable to grant {self.user.username} system level role {system_role_name} because it does not exist")
+                logger.error(f"Unable to grant {user.username} system level role {system_role_name} because it does not exist")
                 continue
 
         for object_role_name in object_roles.keys():
-            rd = self.get_role_definition(object_role_name)
+            rd = JWTCommonAuth.get_role_definition(object_role_name)
             if rd is None:
-                logger.error(f"Unable to grant {self.user.username} object role {object_role_name} because it does not exist")
+                logger.error(f"Unable to grant {user.username} object role {object_role_name} because it does not exist")
                 continue
             elif rd.name not in settings.ANSIBLE_BASE_JWT_MANAGED_ROLES:
-                logger.error(f"Unable to grant {self.user.username} object role {object_role_name} because it is not a JWT managed role")
+                logger.error(f"Unable to grant {user.username} object role {object_role_name} because it is not a JWT managed role")
                 continue
 
             object_type = object_roles[object_role_name]['content_type']
@@ -381,7 +383,7 @@ class JWTCommonAuth:
             for index in object_indexes:
                 object_data = objects[object_type][index]
                 try:
-                    resource, obj = self.get_or_create_resource(object_type, object_data)
+                    resource, obj = JWTCommonAuth.get_or_create_resource(objects, object_type, object_data)
                 except IntegrityError as e:
                     logger.warning(
                         f"Got integrity error ({e}) on {object_data}. Skipping {object_type} assignment. "
@@ -390,20 +392,21 @@ class JWTCommonAuth:
                     continue
 
                 if resource is not None:
-                    assignment = rd.give_permission(self.user, obj)
+                    assignment = rd.give_permission(user, obj)
                     role_diff = role_diff.exclude(pk=assignment.pk)
-                    logger.info(f"Granted user {self.user.username} role {object_role_name} to object {obj.name} with ansible_id {object_data['ansible_id']}")
+                    logger.info(f"Granted user {user.username} role {object_role_name} to object {obj.name} with ansible_id {object_data['ansible_id']}")
 
         # Remove all permissions not authorized by the JWT
         for role_assignment in role_diff:
             rd = role_assignment.role_definition
             content_object = role_assignment.content_object
             if content_object:
-                rd.remove_permission(self.user, content_object)
+                rd.remove_permission(user, content_object)
             else:
-                rd.remove_global_permission(self.user)
+                rd.remove_global_permission(user)
 
-    def get_or_create_resource(self, content_type: str, data: dict) -> Tuple[Optional[Resource], Optional[Model]]:
+    @staticmethod
+    def get_or_create_resource(objects: dict, content_type: str, data: dict) -> Tuple[Optional[Resource], Optional[Model]]:
         """
         Gets or creates a resource from a content type and its default data
 
@@ -421,10 +424,10 @@ class JWTCommonAuth:
         if content_type == 'team':
             # For a team we first have to make sure the org is there
             org_id = data['org']
-            organization_data = self.token['objects']["organization"][org_id]
+            organization_data = objects["organization"][org_id]
 
             # Now that we have the org we can build a team
-            org_resource, _ = self.get_or_create_resource("organization", organization_data)
+            org_resource, _ = JWTCommonAuth.get_or_create_resource("organization", organization_data)
 
             resource = Resource.create_resource(
                 ResourceType.objects.get(name="shared.team"),
