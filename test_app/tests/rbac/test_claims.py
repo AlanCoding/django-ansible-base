@@ -4,7 +4,7 @@ from django.db import connection
 from django.test.utils import override_settings
 
 from ansible_base.rbac import permission_registry
-from ansible_base.rbac.claims import get_claims_hash, get_user_claims, get_user_claims_hashable_form
+from ansible_base.rbac.claims import get_claims_hash, get_user_claims, get_user_claims_hashable_form, save_user_claims
 from ansible_base.rbac.models import RoleDefinition
 from test_app.models import Inventory, Organization, Team
 
@@ -355,6 +355,54 @@ class TestUserClaims:
         # Verify hash is a valid SHA-256 hex string (64 characters)
         assert len(user1_hash) == 64
         assert all(c in '0123456789abcdef' for c in user1_hash)
+
+    @pytest.mark.parametrize(
+        "scenario_name",
+        [
+            'no_permissions',
+            'first_org_only',
+            'odds_org_admin',
+            'evens_org_admin',
+            'first_three_teams',
+            'platform_auditor_only',
+            'mixed_small',
+            'mixed_large',
+            'all_org_admin',
+            'scattered_permissions',
+            'teams_no_orgs',
+        ],
+    )
+    def test_serialize_and_save_claims(self, claims_scenario, scenario_name):
+        """Test that serialized claims from first user can be saved to second user"""
+        # Create two different users
+        user1 = get_user_model().objects.create(username=f'test_hash_user1_{scenario_name}')
+        user2 = get_user_model().objects.create(username=f'test_hash_user2_{scenario_name}')
+
+        # Apply the same scenario to both users
+        claims_scenario.apply_scenario(scenario_name, user1)
+
+        # Get claims for the first user
+        user1_claims = get_user_claims(user1)
+        # Claims for second user should be nothing
+        assert get_user_claims(user2) == {'global_roles': [], 'object_roles': {}, 'objects': {'organization': [], 'team': []}}
+
+        # Save the claims for user2
+        save_user_claims(user2, **user1_claims)
+        user2_claims = get_user_claims(user2)
+
+        # Verify claims match, users should now have same permissions
+        assert user1_claims == user2_claims
+
+        # Convert to hashable form
+        user1_hashable = get_user_claims_hashable_form(user1_claims)
+        user2_hashable = get_user_claims_hashable_form(user2_claims)
+
+        # Generate hashes
+        user1_hash = get_claims_hash(user1_hashable)
+        user2_hash = get_claims_hash(user2_hashable)
+
+        # Verify hashes are identical
+        assert user1_hash == user2_hash
 
     @override_settings(DEBUG=True)
     def test_claims_query_performance_baseline(self, claims_scenario):
