@@ -404,6 +404,55 @@ class TestUserClaims:
         # Verify hashes are identical
         assert user1_hash == user2_hash
 
+    @pytest.mark.parametrize(
+        "scenario_name",
+        [
+            'no_permissions',
+            'first_org_only',
+            'odds_org_admin',
+            'evens_org_admin',
+            'first_three_teams',
+            'platform_auditor_only',
+            'mixed_small',
+            'mixed_large',
+            'all_org_admin',
+            'scattered_permissions',
+            'teams_no_orgs',
+        ],
+    )
+    def test_rebuild_single_user(self, claims_scenario, scenario_name):
+        """Get claims hash, then just delete everything and save_user_claims should build it back up"""
+        user = get_user_model().objects.create(username=f'test_hash_user1_{scenario_name}')
+
+        # Apply the scenario
+        claims_scenario.apply_scenario(scenario_name, user)
+
+        # Save the claims to reapply later
+        user_claims = get_user_claims(user)
+        claims_hash = get_claims_hash(get_user_claims_hashable_form(user_claims))
+
+        # Rage delete everything
+        for team in Team.objects.all():
+            team.delete()
+
+        for org in Organization.objects.all():
+            org.delete()
+
+        # If we deleted everything, the current object-related claims should be empty
+        # The global roles might still have some content, we do not care here
+        wrecked_user_claims = get_user_claims(user)
+        assert wrecked_user_claims['objects'] == {'organization': [], 'team': []}  # we deleted them all
+        assert wrecked_user_claims['object_roles'] == {}
+
+        # Save the old claims, should rebuild all the objects, potentially complex operation, highly abstracted here
+        save_user_claims(user, **user_claims)
+
+        # Now that everything is created anew, claims should match
+        assert get_user_claims(user) == user_claims
+
+        # Verify current claims hash also matches
+        assert get_claims_hash(get_user_claims_hashable_form(get_user_claims(user))) == claims_hash
+
     @override_settings(DEBUG=True)
     def test_claims_query_performance_baseline(self, claims_scenario):
         """Performance test to measure database queries for claims generation.

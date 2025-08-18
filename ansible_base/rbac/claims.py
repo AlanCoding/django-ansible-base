@@ -286,7 +286,7 @@ def get_or_create_resource(objects: dict, content_type: str, data: dict) -> Tupl
         organization_data = objects["organization"][org_id]
 
         # Now that we have the org we can build a team
-        org_resource, _ = get_or_create_resource("organization", organization_data)
+        org_resource, _ = get_or_create_resource(objects, "organization", organization_data)
 
         resource = resource_cls.create_resource(
             resource_type_cls.objects.get(name="shared.team"),
