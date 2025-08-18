@@ -248,22 +248,7 @@ class TestUserClaims:
     def claims_scenario(self, shared_test_data):
         return ClaimsScenario(shared_test_data)
 
-    @pytest.mark.parametrize(
-        "scenario_name",
-        [
-            'no_permissions',
-            'first_org_only',
-            'odds_org_admin',
-            'evens_org_admin',
-            'first_three_teams',
-            'platform_auditor_only',
-            'mixed_small',
-            'mixed_large',
-            'all_org_admin',
-            'scattered_permissions',
-            'teams_no_orgs',
-        ],
-    )
+    @pytest.mark.parametrize("scenario_name", list(PermissionScenarios.get_scenario_definitions().keys()))
     def test_claims_scenarios(self, claims_scenario, scenario_name):
         """Test various permission scenarios produce correct claims"""
         user = get_user_model().objects.create(username=f'test_user_{scenario_name}')
@@ -279,22 +264,7 @@ class TestUserClaims:
 
         assert actual_claims == expected_claims
 
-    @pytest.mark.parametrize(
-        "scenario_name",
-        [
-            'no_permissions',
-            'first_org_only',
-            'odds_org_admin',
-            'evens_org_admin',
-            'first_three_teams',
-            'platform_auditor_only',
-            'mixed_small',
-            'mixed_large',
-            'all_org_admin',
-            'scattered_permissions',
-            'teams_no_orgs',
-        ],
-    )
+    @pytest.mark.parametrize("scenario_name", list(PermissionScenarios.get_scenario_definitions().keys()))
     def test_hashable_claims_scenarios(self, claims_scenario, scenario_name):
         """Test various permission scenarios produce correct hashable claims"""
         user = get_user_model().objects.create(username=f'test_hashable_user_{scenario_name}')
@@ -311,22 +281,7 @@ class TestUserClaims:
 
         assert actual_hashable_claims == expected_hashable_claims
 
-    @pytest.mark.parametrize(
-        "scenario_name",
-        [
-            'no_permissions',
-            'first_org_only',
-            'odds_org_admin',
-            'evens_org_admin',
-            'first_three_teams',
-            'platform_auditor_only',
-            'mixed_small',
-            'mixed_large',
-            'all_org_admin',
-            'scattered_permissions',
-            'teams_no_orgs',
-        ],
-    )
+    @pytest.mark.parametrize("scenario_name", list(PermissionScenarios.get_scenario_definitions().keys()))
     def test_identical_permissions_same_hash(self, claims_scenario, scenario_name):
         """Test that two users with identical permissions produce the same hash"""
         # Create two different users
@@ -356,22 +311,7 @@ class TestUserClaims:
         assert len(user1_hash) == 64
         assert all(c in '0123456789abcdef' for c in user1_hash)
 
-    @pytest.mark.parametrize(
-        "scenario_name",
-        [
-            'no_permissions',
-            'first_org_only',
-            'odds_org_admin',
-            'evens_org_admin',
-            'first_three_teams',
-            'platform_auditor_only',
-            'mixed_small',
-            'mixed_large',
-            'all_org_admin',
-            'scattered_permissions',
-            'teams_no_orgs',
-        ],
-    )
+    @pytest.mark.parametrize("scenario_name", list(PermissionScenarios.get_scenario_definitions().keys()))
     def test_serialize_and_save_claims(self, claims_scenario, scenario_name):
         """Test that serialized claims from first user can be saved to second user"""
         # Create two different users
@@ -404,22 +344,7 @@ class TestUserClaims:
         # Verify hashes are identical
         assert user1_hash == user2_hash
 
-    @pytest.mark.parametrize(
-        "scenario_name",
-        [
-            'no_permissions',
-            'first_org_only',
-            'odds_org_admin',
-            'evens_org_admin',
-            'first_three_teams',
-            'platform_auditor_only',
-            'mixed_small',
-            'mixed_large',
-            'all_org_admin',
-            'scattered_permissions',
-            'teams_no_orgs',
-        ],
-    )
+    @pytest.mark.parametrize("scenario_name", list(PermissionScenarios.get_scenario_definitions().keys()))
     def test_rebuild_single_user(self, claims_scenario, scenario_name):
         """Get claims hash, then just delete everything and save_user_claims should build it back up"""
         user = get_user_model().objects.create(username=f'test_hash_user1_{scenario_name}')
