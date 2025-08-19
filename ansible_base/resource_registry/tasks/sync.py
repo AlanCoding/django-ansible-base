@@ -36,8 +36,10 @@ class ResourceDeletionError(Error):
 class ResourceSyncHTTPError(HTTPError):
     """Custom catchall error"""
 
+
 class SkipResource(ValidationError):
     """To raise by serializers if the item should be skipped"""
+
     default_detail = "The specified content_type slug was not found."
     default_code = "content_type_does_not_exist"
 

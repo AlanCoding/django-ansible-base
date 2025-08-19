@@ -7,11 +7,10 @@ from django.db.utils import Error
 
 from ansible_base.lib.testing.util import StaticResourceAPIClient
 from ansible_base.lib.utils.response import get_relative_url
+from ansible_base.rbac.models import RoleDefinition
 from ansible_base.resource_registry.models import Resource, ResourceType
 from ansible_base.resource_registry.models.service_identifier import service_id
-from ansible_base.resource_registry.tasks.sync import ResourceSyncHTTPError, SyncExecutor, _attempt_create_resource, ManifestItem
-from ansible_base.rbac import permission_registry
-from ansible_base.rbac.models import RoleDefinition
+from ansible_base.resource_registry.tasks.sync import ManifestItem, ResourceSyncHTTPError, SyncExecutor, _attempt_create_resource
 
 
 @pytest.fixture(scope="function")
@@ -189,7 +188,7 @@ def test_resource_sync_create_local_role_definition(static_api_client, stdout, r
         resource_data=item_data,
         resource_type=ResourceType.objects.get(name='shared.roledefinition'),
         resource_service_id=str(uuid4()),
-        api_client=static_api_client  # unused
+        api_client=static_api_client,  # unused
     )
     assert result.status == 'created'
 
@@ -203,7 +202,7 @@ def test_resource_sync_create_non_local_role_definition(static_api_client, stdou
         resource_data=item_data,
         resource_type=ResourceType.objects.get(name='shared.roledefinition'),
         resource_service_id=str(uuid4()),
-        api_client=static_api_client  # unused
+        api_client=static_api_client,  # unused
     )
     assert result.status == 'noop'
 
