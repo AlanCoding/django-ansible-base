@@ -3,6 +3,7 @@ import binascii
 import re
 import secrets
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlparse, urlunsplit
 
 from cryptography.exceptions import InvalidSignature
@@ -142,6 +143,114 @@ def validate_image_data(data: str) -> None:
         base64.b64decode(b64data)
     except (TypeError, binascii.Error):
         raise ValidationError(_("Invalid base64-encoded data in data URL."))
+
+
+def _is_valid_domain_format(domain: str) -> bool:
+    """Check basic domain format requirements."""
+    return isinstance(domain, str) and bool(domain) and len(domain) <= 255 and '.' in domain
+
+
+def _normalize_domain(domain: str) -> str:
+    """Normalize domain by removing trailing dot if present."""
+    return domain[:-1] if domain.endswith('.') else domain
+
+
+def _is_valid_label(label: str) -> bool:
+    """Validate a single domain label according to LDH (Letter, Digit, Hyphen) rule."""
+    return bool(label) and len(label) <= 63 and re.match(r'^[a-zA-Z0-9-]+$', label) is not None and not label.startswith('-') and not label.endswith('-')
+
+
+def _is_valid_tld(tld: str) -> bool:
+    """Validate the top-level domain."""
+    return len(tld) >= 2 and not tld.isdigit() and re.search(r'[a-zA-Z]', tld) is not None
+
+
+def validate_domain_name(domain: str) -> bool:
+    """
+    Validate a domain name according to RFC standards.
+
+    Validates domain names according to RFC 1035, 1123, and 2181 specifications.
+
+    Args:
+        domain: The domain name to validate
+
+    Returns:
+        bool: True if the domain name is valid, False otherwise
+
+    Checks:
+        - Length limits (labels ≤ 63 chars, total ≤ 255 chars)
+        - LDH rule (Letters, Digits, Hyphens only)
+        - No leading/trailing hyphens in labels
+        - Valid TLD format (not all-numeric, at least 2 chars)
+        - At least one dot (fully qualified domain name)
+    """
+    # Basic format validation
+    if not _is_valid_domain_format(domain):
+        return False
+
+    # Normalize and split domain into labels
+    normalized_domain = _normalize_domain(domain)
+    labels = normalized_domain.split('.')
+
+    # Must have at least domain.tld
+    if len(labels) < 2:
+        return False
+
+    # Validate each label
+    for label in labels:
+        if not _is_valid_label(label):
+            return False
+
+    # Validate TLD (last label)
+    return _is_valid_tld(labels[-1])
+
+
+def validate_port(port: Any) -> bool:
+    """
+    Validate a network port number.
+
+    Accepts port numbers as integers or strings and validates they are within
+    the valid TCP/UDP port range (1-65535).
+
+    Args:
+        port: Port number as int, str, or other type
+
+    Returns:
+        bool: True if the port is valid, False otherwise
+
+    Examples:
+        validate_port(80)        # True
+        validate_port("443")     # True
+        validate_port("0")       # False (port 0 is reserved)
+        validate_port("65536")   # False (above valid range)
+        validate_port(None)      # False (invalid type)
+        validate_port("abc")     # False (non-numeric string)
+    """
+    # Handle None and non-string/non-integer types
+    if port is None:
+        return False
+
+    # Explicitly reject boolean types (even though they're technically integers in Python)
+    if isinstance(port, bool):
+        return False
+
+    # Convert to integer if it's a string
+    if isinstance(port, str):
+        # Reject strings with leading/trailing whitespace for stricter validation
+        if port != port.strip():
+            return False
+        try:
+            port_int = int(port)
+        except ValueError:
+            return False
+    elif isinstance(port, int):
+        port_int = port
+    else:
+        # Reject other types (float, list, dict, etc.)
+        return False
+
+    # Validate port range (1-65535)
+    return 1 <= port_int <= 65535
 
 
 def to_python_boolean(value, allow_none=False):
