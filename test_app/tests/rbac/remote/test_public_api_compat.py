@@ -4,6 +4,7 @@ import pytest
 
 from ansible_base.lib.utils.response import get_relative_url
 from ansible_base.rbac import permission_registry
+from ansible_base.rbac.models import RoleUserAssignment
 from ansible_base.rbac.remote import RemoteObject
 from test_app.models import Organization
 
@@ -111,5 +112,17 @@ def test_give_permission_to_remote_object_uuid(admin_api_client, rando, foo_type
     data = {"role_definition": foo_rd_uuid.id, "user": rando.pk, "object_id": pk_value}
     response = admin_api_client.post(path=url, data=data)
     assert response.status_code == 201, response.data
+    assignment = RoleUserAssignment.objects.get(pk=response.data['id'])
+
+    # Test that we can serialize the assignment in a GET
+    response = admin_api_client.get(url)
+    assert response.status_code == 200, response.data
+    valid_items = [item for item in response.data['results'] if item['id'] == assignment.id]
+    assert len(valid_items) == 1
+    assignment_data = valid_items[0]
+    assert 'summary_fields' in assignment_data
+    sf = assignment_data['summary_fields']
+    assert 'content_object' in sf
+    assert str(sf['content_object']['pk']) == str(a_foo.object_id)
 
     assert rando.has_obj_perm(a_foo, 'foo')

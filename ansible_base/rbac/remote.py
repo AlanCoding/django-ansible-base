@@ -90,7 +90,7 @@ class RemoteObject:
     @classmethod
     def get_ct_from_type(cls):
         if not hasattr(cls, '_meta'):
-            raise ValueError('Generlized RemoteObject can not obtain content_type from its class')
+            raise ValueError('Generalized RemoteObject can not obtain content_type from its class')
         ct_model = apps.get_model('dab_rbac', 'DABContentType')
         return ct_model.objects.get_by_natural_key(cls._meta.service, cls._meta.app_label, cls._meta.model_name)
 
