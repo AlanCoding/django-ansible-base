@@ -111,7 +111,7 @@ class FederatedForeignKey(DjangoGenericForeignKey):
             return False
 
         ct_match = ct_id == self.get_content_type(obj=rel_obj).id
-        pk_match = ct_match and rel_obj.pk == pk_val
+        pk_match = ct_match and str(rel_obj.pk) == str(pk_val)
         return pk_match
 
     def _fetch_related_object(self, ct_id, pk_val):

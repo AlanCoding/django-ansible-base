@@ -6,6 +6,7 @@ from ansible_base.lib.utils.response import get_relative_url
 from ansible_base.rbac import permission_registry
 from ansible_base.rbac.models import RoleUserAssignment
 from ansible_base.rbac.remote import RemoteObject
+from ansible_base.rbac.service_api.serializers import ServiceRoleUserAssignmentSerializer
 from test_app.models import Organization
 
 # Role Definitions
@@ -120,9 +121,20 @@ def test_give_permission_to_remote_object_uuid(admin_api_client, rando, foo_type
     valid_items = [item for item in response.data['results'] if item['id'] == assignment.id]
     assert len(valid_items) == 1
     assignment_data = valid_items[0]
-    assert 'summary_fields' in assignment_data
-    sf = assignment_data['summary_fields']
-    assert 'content_object' in sf
-    assert str(sf['content_object']['pk']) == str(a_foo.object_id)
+    assert 'content_object' in assignment_data['summary_fields']
+    assert assignment_data['summary_fields']['content_object']['pk'] == str(a_foo.object_id)
 
     assert rando.has_obj_perm(a_foo, 'foo')
+
+    # Test that we can serialize the assignment in a GET to the service-index endpoint
+    service_url = get_relative_url('serviceuserassignment-list')
+    response = admin_api_client.get(service_url + f'?user={rando.id}', format="json")
+    assert response.status_code == 200, response.data
+    assert response.data['count'] == 1
+    assignment_data = response.data['results'][0]
+    assert assignment_data['object_id'] == str(assignment.object_id)
+
+    # Direct serialization is used for synchronizing, so test that as well here
+    serializer = ServiceRoleUserAssignmentSerializer(assignment)
+    assignment_data = serializer.data
+    assert assignment_data['object_id'] == str(assignment.object_id)

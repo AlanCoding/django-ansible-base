@@ -117,7 +117,10 @@ class RemoteObject:
         This placeholder should be cleary identifable by a client or by the RBAC resource server.
         Then, the idea, is that it can make a request to the remote server to get the summary data.
         """
-        return {'<remote_object_placeholder>': True, 'model_name': self._meta.model_name, 'service': self._meta.service, 'pk': self.pk}
+        pk_val = self.pk
+        if not isinstance(pk_val, int):
+            pk_val = str(pk_val)
+        return {'<remote_object_placeholder>': True, 'model_name': self._meta.model_name, 'service': self._meta.service, 'pk': pk_val}
 
 
 def get_remote_base_class() -> Type[RemoteObject]:
