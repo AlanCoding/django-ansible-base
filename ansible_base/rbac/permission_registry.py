@@ -138,6 +138,13 @@ class PermissionRegistry:
         # This will lock-down the registry, raising an error for any other registrations
         self.apps_ready = True
 
+        # Enable performance measurement for post_migrate signals if requested
+        from django.conf import settings as django_settings
+        if getattr(django_settings, 'ANSIBLE_BASE_MEASURE_POST_MIGRATE_PERFORMANCE', False):
+            from ansible_base.lib.utils.performance import patch_post_migrate_handlers, enable_performance_logging
+            enable_performance_logging()
+            patch_post_migrate_handlers()
+
         # Do no specify sender for create_dab_permissions, because that is passed as app_config
         # and we want to create permissions for external apps, not the dab_rbac app
         post_migrate.connect(
