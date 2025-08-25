@@ -124,7 +124,7 @@ class OpenIdConnectConfiguration(BaseAuthenticatorConfiguration):
 
     JWT_ALGORITHMS = ListField(
         help_text=_("The algorithm(s) for decoding JWT responses from the IDP."),
-        default=None,
+        default=OpenIdConnectAuth.JWT_ALGORITHMS,
         allow_null=True,
         validators=[JWTAlgorithmListFieldValidator()],
         ui_field_label=_('OIDC JWT Algorithm(s)'),
