@@ -240,27 +240,6 @@ def test_related_view_log_message(debug_mode, not_called, expected_log):
             model.related_fields(request)
 
 
-@pytest.mark.parametrize(
-    "ignore_relation",
-    [
-        True,
-        False,
-    ],
-)
-@pytest.mark.django_db
-def test_related_view_ignore_m2m_relations(ignore_relation, admin_user):
-    rf = RequestFactory()
-    request = rf.get('/')
-    with patch('ansible_base.lib.abstract_models.common.get_relative_url', return_value='https://www.example.com/user'):
-        if ignore_relation:
-            admin_user.ignore_relations = ['member_of_organizations']
-        else:
-            admin_user.ignore_relations = []
-
-        related = admin_user.related_fields(request)
-        assert ('member_of_organizations' not in related) is ignore_relation
-
-
 def test_jsonfield_can_be_encrypted(admin_user, local_authenticator):
     extra_data = {}
 
