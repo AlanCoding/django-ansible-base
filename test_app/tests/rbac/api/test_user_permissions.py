@@ -2,7 +2,6 @@ import pytest
 from django.test import override_settings
 
 from ansible_base.lib.utils.response import get_relative_url
-from ansible_base.rbac.policies import visible_users
 from test_app.models import Organization, Team, User
 
 

@@ -1,5 +1,5 @@
 import logging
-from typing import Optional, Union
+from typing import Union
 from uuid import UUID
 
 from django.db.models import Model, Q
