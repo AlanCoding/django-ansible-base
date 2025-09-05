@@ -30,20 +30,6 @@ class Organization(AbstractOrganization):
 
     resource = AnsibleResourceField(primary_key_field="id")
 
-    users = models.ManyToManyField(
-        settings.AUTH_USER_MODEL,
-        related_name='member_of_organizations',
-        blank=True,
-        help_text="The list of users on this organization",
-    )
-
-    admins = models.ManyToManyField(
-        settings.AUTH_USER_MODEL,
-        related_name='admin_of_organizations',
-        blank=True,
-        help_text="The list of admins for this organization",
-    )
-
     extra_field = models.CharField(max_length=100, null=True)
 
 
@@ -73,7 +59,6 @@ class ManagedUser(User):
 
 class Team(AbstractTeam):
     resource = AnsibleResourceField(primary_key_field="id")
-    team_parents = models.ManyToManyField('Team', related_name='team_children', blank=True)
 
     encryptioner = models.ForeignKey('test_app.EncryptionModel', on_delete=models.SET_NULL, null=True)
 
@@ -88,20 +73,6 @@ class Team(AbstractTeam):
         #   This doesn't match the behavior of the AAP gateway and produces SQL queries that are not identical to AAP gateway.
         ordering = ('organization__name', 'name')
         permissions = [('member_team', 'Has all roles assigned to this team')]
-
-    users = models.ManyToManyField(
-        User,
-        related_name='teams',
-        blank=True,
-        help_text="The list of users on this team",
-    )
-
-    admins = models.ManyToManyField(
-        User,
-        related_name='teams_administered',
-        blank=True,
-        help_text="The list of admins for this team",
-    )
 
 
 class ResourceMigrationTestModel(models.Model):
@@ -381,17 +352,6 @@ permission_registry.register(InstanceGroup, ImmutableTask, LogEntry, parent_fiel
 # since permissions would be double-tracked on the sub-class table and the original UUIDModel table
 permission_registry.register(AutoExtraUUIDModel, ManualExtraUUIDModel, parent_field_name='uuidmodel_ptr')
 permission_registry.register(ExtraExtraUUIDModel, parent_field_name='extra_uuid')
-
-
-# NOTE(cutwater): Using hard coded role names instead of ones defined in ReconcileUser class,
-#   to avoid circular dependency between models and claims modules. This is a temporary workarond,
-#   since we plan to drop support of tracked relationships in future.
-permission_registry.track_relationship(Team, 'users', 'Team Member')
-permission_registry.track_relationship(Team, 'admins', 'Team Admin')
-permission_registry.track_relationship(Team, 'team_parents', 'Team Member')
-
-permission_registry.track_relationship(Organization, 'users', 'Organization Member')
-permission_registry.track_relationship(Organization, 'admins', 'Organization Admin')
 
 
 class MultipleFieldsModel(NamedCommonModel):

@@ -32,8 +32,6 @@ class PermissionRegistry:
         self._parent_fields = dict()
         self._managed_roles = dict()  # code-defined role definitions, managed=True
         self.apps_ready = False
-        self._tracked_relationships = set()
-        self._trackers = dict()
 
     def register(self, *args: Type[Model], parent_field_name: Optional[str] = 'organization'):
         if self.apps_ready:
@@ -49,9 +47,6 @@ class PermissionRegistry:
                     self._parent_fields[model_name] = parent_field_name
             else:
                 logger.debug(f'Model {cls._meta.model_name} registered to permission registry more than once')
-
-    def track_relationship(self, cls, relationship, role_name):
-        self._tracked_relationships.add((cls, relationship, role_name))
 
     def get_parent_model(self, model) -> Optional[type]:
         model = self._name_to_model[model._meta.model_name]
@@ -157,14 +152,6 @@ class PermissionRegistry:
         for cls in self._registry:
             triggers.connect_rbac_signals(cls)
             connect_rbac_methods(cls)
-
-        for cls, relationship, role_name in self._tracked_relationships:
-            if role_name in self._trackers:
-                tracker = self._trackers[role_name]
-            else:
-                tracker = triggers.TrackedRelationship(cls, role_name)
-                self._trackers[role_name] = tracker
-            tracker.initialize(relationship)
 
         self.register_managed_role_constructors()
 

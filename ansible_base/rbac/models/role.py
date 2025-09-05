@@ -302,11 +302,6 @@ class RoleDefinition(CommonModel):
 
         update_after_assignment(update_teams, to_update)
 
-        if not sync_action and self.name in permission_registry._trackers:
-            tracker = permission_registry._trackers[self.name]
-            with tracker.sync_active():
-                tracker.sync_relationship(actor, content_object, giving=giving)
-
         return assignment
 
     @classmethod

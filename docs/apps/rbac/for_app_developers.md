@@ -344,27 +344,6 @@ If you create (in code) a role definition that sets `managed` to True, then thes
 rules will be disregarded for that particular role definition. Managed role
 definitions can not be created through the API, but can be created in code like migration scripts.
 
-### Tracked Relationships
-
-Let's say that you are introducing RBAC, and you have already set up your API
-with some relationship, like members of a team, and parents of a team
-(to get nested teams).
-This sub-feature will use signals to do bidirectional syncing of memberships of
-that relationship with memberships of their corresponding role.
-
-```
-permission_registry.track_relationship(Team, 'users', 'Team Member')
-permission_registry.track_relationship(Team, 'team_parents', 'Team Member')
-```
-
-This only works with our 2 "actor" types of users and teams.
-Adding these lines will synchronize users and teams of team-object-roles with the "team-member"
-role definition (by name) to the `Team.users`
-and `Team.tracked_parents` ManyToMany relationships, respectively.
-So if you have a team object, `team.users.add(user)` will also give that
-user _member permission_ to that team, where those permissions are defined by the
-role definition with the name "team-member".
-
 
 ### Role assignment callback
 
