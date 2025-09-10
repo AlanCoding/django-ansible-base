@@ -1,4 +1,8 @@
+import logging
+from datetime import datetime
 from django.db import models
+
+logger = logging.getLogger(__name__)
 
 # This method has moved, and this is put here temporarily to make branch management easier
 from ansible_base.rbac.management import create_dab_permissions as create_custom_permissions  # noqa
@@ -45,3 +49,67 @@ def give_permissions(apps, rd, users=(), teams=(), object_id=None, content_type_
                 for team_id in teams
             ]
         RoleTeamAssignment.objects.bulk_create(team_assignments, ignore_conflicts=True)
+
+
+def get_model_class_from_content_type(apps, content_type):
+    """
+    Get a model class from a content type in a migration-safe way.
+
+    This is needed because content_type.model_class() is not available in migrations.
+    """
+    try:
+        return apps.get_model(content_type.app_label, content_type.model)
+    except (LookupError, AttributeError):
+        return None
+
+
+def populate_object_created_field(apps, schema_editor=None):
+    """Populate the object_created field for existing role assignments."""
+    assignment_models = [
+        ('roleuserassignment', 'RoleUserAssignment'),
+        ('roleteamassignment', 'RoleTeamAssignment'),
+    ]
+
+    updated_count = 0
+
+    for model_name, model_class_name in assignment_models:
+        assignment_cls = apps.get_model('dab_rbac', model_name)
+        assignments_to_update = assignment_cls.objects.filter(object_created__isnull=True)
+
+        for assignment in assignments_to_update:
+            object_created_value = None
+
+            # Try to get the actual object to extract its created timestamp
+            if assignment.object_id and assignment.content_type:
+                try:
+                    # Get the model class from the old content_type field (before migration to DABContentType)
+                    model_class = get_model_class_from_content_type(apps, assignment.content_type)
+                    if model_class:
+                        try:
+                            # Try to get the actual object
+                            actual_object = model_class.objects.get(pk=assignment.object_id)
+
+                            # Try to get created timestamp from common field names
+                            for field_name in ('created', 'created_at'):
+                                if hasattr(actual_object, field_name):
+                                    val = getattr(actual_object, field_name)
+                                    if isinstance(val, datetime):
+                                        object_created_value = val
+                                        break
+                        except (model_class.DoesNotExist, ValueError, TypeError):
+                            # Object doesn't exist or can't be retrieved, skip
+                            pass
+                except (AttributeError, LookupError):
+                    # Content type or model class issues, skip
+                    pass
+
+            # Update the assignment if we found a created timestamp
+            if object_created_value:
+                assignment.object_created = object_created_value
+                assignment.save(update_fields=['object_created'])
+                updated_count += 1
+
+    if updated_count:
+        logger.info(f'Populated object_created field for {updated_count} existing role assignments')
+
+    return updated_count

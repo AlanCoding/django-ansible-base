@@ -193,6 +193,7 @@ def test_list_role_permissions_all_pages(resource_client):
 def _assert_assignment_matches_data(assignment, data, obj, actor):
     assert 'created' in data, data
     # assert DateTimeField().to_representation(assignment.created) == data['created']  # TODO
+    assert 'object_created' in data, data
     assert str(assignment.created_by.resource.ansible_id) == data['created_by_ansible_id']
     assert assignment.object_id == obj.id
     assert str(assignment.object_id) == str(data['object_id'])

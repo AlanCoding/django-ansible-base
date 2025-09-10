@@ -60,7 +60,7 @@ class BaseAssignmentSerializer(serializers.ModelSerializer):
     # Force created field to be writable
     created = serializers.DateTimeField(required=False)
     # Force object_created field to be writable
-    object_created = serializers.DateTimeField(required=False)
+    object_created = serializers.DateTimeField(required=False, allow_null=True)
 
     def to_representation(self, instance):
         # hack to surface content_object for ObjectIDAnsibleIDField

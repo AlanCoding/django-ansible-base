@@ -320,89 +320,40 @@ def test_role_types_and_permissions_payload_shape(user_api_client):
 class TestCreatedByAnsibleIdAllowNull:
     """Test that created_by_ansible_id field accepts null values and omissions"""
 
-    def test_service_user_assignment_with_null_created_by(self, admin_api_client, rando, inv_rd, inventory):
-        """Test that ServiceRoleUserAssignmentSerializer accepts null created_by_ansible_id"""
-        url = get_relative_url('serviceuserassignment-assign')
+    @pytest.mark.parametrize(
+        'actor_type,created_by_value',
+        [
+            ('user', ''),  # empty string
+            ('user', None),  # omitted (None means field not present)
+            ('user', 'valid'),  # valid creator
+            ('team', ''),  # empty string
+            ('team', None),  # omitted
+            ('team', 'valid'),  # valid creator
+        ],
+    )
+    def test_service_assignment_created_by_handling(self, admin_api_client, rando, inv_rd, inventory, team, member_rd, actor_type, created_by_value):
+        """Test that ServiceRoleAssignmentSerializer handles created_by_ansible_id correctly"""
+        # Setup for team assignments
+        if actor_type == 'team':
+            member_rd.give_permission(rando, team)
+            actor = team
+        else:
+            actor = rando
+
+        url = get_relative_url(f'service{actor_type}assignment-assign')
         data = {
             "role_definition": inv_rd.name,
-            "user_ansible_id": str(rando.resource.ansible_id),
-            "object_id": inventory.pk,
-            "created_by_ansible_id": "",  # Use empty string instead of None
-        }
-
-        response = admin_api_client.post(url, data=data)
-        assert response.status_code == 201, response.data
-        assert rando.has_obj_perm(inventory, 'change')
-
-    def test_service_user_assignment_without_created_by(self, admin_api_client, rando, inv_rd, inventory):
-        """Test that ServiceRoleUserAssignmentSerializer works when created_by_ansible_id is omitted"""
-        url = get_relative_url('serviceuserassignment-assign')
-        data = {
-            "role_definition": inv_rd.name,
-            "user_ansible_id": str(rando.resource.ansible_id),
-            "object_id": inventory.pk,
-            # created_by_ansible_id is intentionally omitted
-        }
-
-        response = admin_api_client.post(url, data=data)
-        assert response.status_code == 201, response.data
-        assert rando.has_obj_perm(inventory, 'change')
-
-    def test_service_user_assignment_with_valid_created_by(self, admin_api_client, rando, inv_rd, inventory):
-        """Test that valid created_by_ansible_id values still work correctly"""
-        creator = User.objects.create(username='creator-user')
-        url = get_relative_url('serviceuserassignment-assign')
-        data = {
-            "role_definition": inv_rd.name,
-            "user_ansible_id": str(rando.resource.ansible_id),
-            "object_id": inventory.pk,
-            "created_by_ansible_id": str(creator.resource.ansible_id),
-        }
-
-        response = admin_api_client.post(url, data=data)
-        assert response.status_code == 201, response.data
-        assert rando.has_obj_perm(inventory, 'change')
-
-    def test_service_team_assignment_with_null_created_by(self, admin_api_client, team, inv_rd, inventory, member_rd, rando):
-        """Test that ServiceRoleTeamAssignmentSerializer accepts null created_by_ansible_id"""
-        member_rd.give_permission(rando, team)
-        url = get_relative_url('serviceteamassignment-assign')
-        data = {
-            "role_definition": inv_rd.name,
-            "team_ansible_id": str(team.resource.ansible_id),
-            "object_id": inventory.pk,
-            "created_by_ansible_id": "",  # Use empty string instead of None
-        }
-
-        response = admin_api_client.post(url, data=data)
-        assert response.status_code == 201, response.data
-        assert rando.has_obj_perm(inventory, 'change')
-
-    def test_service_team_assignment_without_created_by(self, admin_api_client, team, inv_rd, inventory, member_rd, rando):
-        """Test that ServiceRoleTeamAssignmentSerializer works when created_by_ansible_id is omitted"""
-        member_rd.give_permission(rando, team)
-        url = get_relative_url('serviceteamassignment-assign')
-        data = {
-            "role_definition": inv_rd.name,
-            "team_ansible_id": str(team.resource.ansible_id),
+            f"{actor_type}_ansible_id": str(actor.resource.ansible_id),
             "object_id": inventory.pk,
         }
 
-        response = admin_api_client.post(url, data=data)
-        assert response.status_code == 201, response.data
-        assert rando.has_obj_perm(inventory, 'change')
-
-    def test_service_team_assignment_with_valid_created_by(self, admin_api_client, team, inv_rd, inventory, member_rd, rando):
-        """Test that valid created_by_ansible_id values still work correctly for teams"""
-        member_rd.give_permission(rando, team)
-        creator = User.objects.create(username='team-creator-user')
-        url = get_relative_url('serviceteamassignment-assign')
-        data = {
-            "role_definition": inv_rd.name,
-            "team_ansible_id": str(team.resource.ansible_id),
-            "object_id": inventory.pk,
-            "created_by_ansible_id": str(creator.resource.ansible_id),
-        }
+        # Handle different created_by_value scenarios
+        if created_by_value == '':
+            data["created_by_ansible_id"] = ""
+        elif created_by_value == 'valid':
+            creator = User.objects.create(username=f'{actor_type}-creator-user')
+            data["created_by_ansible_id"] = str(creator.resource.ansible_id)
+        # None means field is omitted (not added to data)
 
         response = admin_api_client.post(url, data=data)
         assert response.status_code == 201, response.data
@@ -543,11 +494,19 @@ def test_service_assignment_created_timestamp_sync(admin_api_client, rando, inv_
 
 
 @pytest.mark.django_db
-def test_service_assignment_object_created_timestamp_sync(admin_api_client, rando, inv_rd, inventory):
+@pytest.mark.parametrize(
+    'object_created_source',
+    [
+        'custom',  # Provide custom timestamp
+        'local_object',  # Use local object's created timestamp
+    ],
+)
+def test_service_assignment_object_created_sync(admin_api_client, rando, inv_rd, inventory, org_inv_rd, organization, object_created_source):
     """
     Test that the 'object_created' field can be synchronized in both directions:
     1. POST to /assign/ accepts a provided 'object_created' value
-    2. Serializing local assignments includes the 'object_created' field from the DB
+    2. When no object_created is provided, it defaults to the local object's created timestamp
+    3. Serializing local assignments includes the 'object_created' field from the DB
     """
     from datetime import datetime, timezone
 
@@ -555,34 +514,46 @@ def test_service_assignment_object_created_timestamp_sync(admin_api_client, rand
 
     url = get_relative_url('serviceuserassignment-assign')
 
-    creator_user = User.objects.create(username='object_created_creator')
+    if object_created_source == 'custom':
+        # Use inventory with custom timestamp
+        target_object = inventory
+        role_def = inv_rd
+        custom_object_created = datetime(2022, 6, 15, 14, 30, 0, tzinfo=timezone.utc)
+        expected_object_created = custom_object_created
 
-    # Set a specific object_created timestamp that's different from the actual object's created time
-    custom_object_created = datetime(2022, 6, 15, 14, 30, 0, tzinfo=timezone.utc)
-    custom_object_created_str = custom_object_created.isoformat()
+        post_data = {
+            "role_definition": role_def.name,
+            "user_ansible_id": str(rando.resource.ansible_id),
+            "object_id": str(target_object.pk),
+            "object_created": custom_object_created.isoformat(),
+            "from_service": "test_service",
+        }
+    else:  # local_object
+        # Use organization without providing object_created
+        target_object = organization
+        role_def = org_inv_rd
+        expected_object_created = organization.created
 
-    post_data = {
-        "role_definition": inv_rd.name,
-        "user_ansible_id": str(rando.resource.ansible_id),
-        "object_id": str(inventory.pk),
-        "created_by_ansible_id": str(creator_user.resource.ansible_id),
-        "object_created": custom_object_created_str,
-        "from_service": "test_service",
-    }
+        post_data = {
+            "role_definition": role_def.name,
+            "user_ansible_id": str(rando.resource.ansible_id),
+            "object_id": str(target_object.pk),
+            "from_service": "test_service",
+            # Note: no object_created provided - should default to target_object.created
+        }
 
-    # Test 1: POST accepts object_created value
+    # Test 1: POST accepts object_created value or defaults to local object
     response = admin_api_client.post(url, data=post_data)
     assert response.status_code == 201, response.data
 
-    assignment = RoleUserAssignment.objects.get(user=rando, role_definition=inv_rd, object_id=inventory.pk)
+    assignment = RoleUserAssignment.objects.get(user=rando, role_definition=role_def, object_id=target_object.pk)
 
-    # Verify the custom object_created timestamp was properly set
-    expected_object_created = custom_object_created
+    # Verify the object_created timestamp was properly set
     actual_object_created = assignment.object_created
-
+    operation_type = 'synchronized' if object_created_source == 'custom' else 'defaulted to local object'
     assert (
         actual_object_created == expected_object_created
-    ), f"object_created should be synchronized: Expected '{expected_object_created}' but got '{actual_object_created}'"
+    ), f"object_created should be {operation_type}: Expected '{expected_object_created}' but got '{actual_object_created}'"
 
     # Test 2: Serializing local assignments includes object_created field
     list_url = get_relative_url('serviceuserassignment-list')
@@ -590,7 +561,7 @@ def test_service_assignment_object_created_timestamp_sync(admin_api_client, rand
     assert response.status_code == 200, response.data
 
     # Find our assignment in the list
-    assignments = [a for a in response.data['results'] if a['role_definition'] == inv_rd.name and str(a['object_id']) == str(inventory.pk)]
+    assignments = [a for a in response.data['results'] if a['role_definition'] == role_def.name and str(a['object_id']) == str(target_object.pk)]
     assert len(assignments) >= 1, "Should find at least our assignment"
 
     # Check that object_created is properly serialized
@@ -601,53 +572,3 @@ def test_service_assignment_object_created_timestamp_sync(admin_api_client, rand
     assert (
         response_object_created == expected_object_created
     ), f"Serialized object_created should match stored value: expected '{expected_object_created}' but got '{response_object_created}'"
-
-
-@pytest.mark.django_db
-def test_service_assignment_object_created_from_local_object(admin_api_client, rando, org_inv_rd, organization):
-    """
-    Test that when no object_created is provided in POST, the field is automatically set
-    from the local object's created timestamp and properly serialized.
-    """
-    url = get_relative_url('serviceuserassignment-assign')
-
-    post_data = {
-        "role_definition": org_inv_rd.name,
-        "user_ansible_id": str(rando.resource.ansible_id),
-        "object_id": str(organization.pk),
-        "from_service": "test_service",
-        # Note: no object_created provided - should default to organization.created
-    }
-
-    # Create assignment without providing object_created
-    response = admin_api_client.post(url, data=post_data)
-    assert response.status_code == 201, response.data
-
-    assignment = RoleUserAssignment.objects.get(user=rando, role_definition=org_inv_rd, object_id=organization.pk)
-
-    # Verify object_created was set to the organization's created timestamp
-    expected_object_created = organization.created
-    actual_object_created = assignment.object_created
-
-    assert (
-        actual_object_created == expected_object_created
-    ), f"object_created should default to organization.created: Expected '{expected_object_created}' but got '{actual_object_created}'"
-
-    # Verify serialization includes the correct object_created value
-    list_url = get_relative_url('serviceuserassignment-list')
-    response = admin_api_client.get(list_url + '?page_size=200', format="json")
-    assert response.status_code == 200, response.data
-
-    # Find our assignment
-    assignments = [a for a in response.data['results'] if a['role_definition'] == org_inv_rd.name and str(a['object_id']) == str(organization.pk)]
-    assert len(assignments) >= 1, "Should find at least our assignment"
-
-    assignment_data = assignments[0]
-    assert 'object_created' in assignment_data, "object_created field should be present in serialized output"
-
-    from django.utils.dateparse import parse_datetime
-
-    response_object_created = parse_datetime(assignment_data['object_created'])
-    assert (
-        response_object_created == expected_object_created
-    ), f"Serialized object_created should match organization.created: expected '{expected_object_created}' but got '{response_object_created}'"
