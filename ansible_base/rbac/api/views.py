@@ -120,38 +120,26 @@ class RoleDefinitionViewSet(AnsibleBaseDjangoAppApiView, ModelViewSet):
         if instance.managed is True:
             raise ValidationError(_('Role is managed by the system'))
 
-    def create(self, request, *args, **kwargs):
-        """Create a new RoleDefinition with delayed reverse-sync."""
+    def perform_create(self, serializer):
         from ansible_base.resource_registry.signals.handlers import no_reverse_sync
 
         with no_reverse_sync():
-            response = super().create(request, *args, **kwargs)
+            super().perform_create(serializer)
 
         # Manually sync after permissions are fully saved
-        instance = self.get_queryset().get(pk=response.data['id'])
-        maybe_reverse_sync_role_definition(instance, "create")
-
-        return response
-
-    def update(self, request, *args, **kwargs):
-        """Update a RoleDefinition with delayed reverse-sync."""
-        from ansible_base.resource_registry.signals.handlers import no_reverse_sync
-
-        instance = self.get_object()
-        self._error_if_managed(instance)
-
-        with no_reverse_sync():
-            response = super().update(request, *args, **kwargs)
-
-        # Manually sync after permissions are fully saved
-        instance.refresh_from_db()
-        maybe_reverse_sync_role_definition(instance, "update")
-
-        return response
+        maybe_reverse_sync_role_definition(serializer.instance, "create")
 
     def perform_update(self, serializer):
+        from ansible_base.resource_registry.signals.handlers import no_reverse_sync
+
         self._error_if_managed(serializer.instance)
-        return super().perform_update(serializer)
+
+        with no_reverse_sync():
+            super().perform_update(serializer)
+
+        # Manually sync after permissions are fully saved
+        serializer.instance.refresh_from_db()
+        maybe_reverse_sync_role_definition(serializer.instance, "update")
 
     def perform_destroy(self, instance):
         self._error_if_managed(instance)
