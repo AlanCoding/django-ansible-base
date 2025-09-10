@@ -47,7 +47,7 @@ class ObjectIDAnsibleIDField(serializers.Field):
         return resource.object_id
 
 
-assignment_common_fields = ('created', 'created_by_ansible_id', 'object_id', 'object_ansible_id', 'content_type', 'role_definition')
+assignment_common_fields = ('created', 'object_created', 'created_by_ansible_id', 'object_id', 'object_ansible_id', 'content_type', 'role_definition')
 
 
 class BaseAssignmentSerializer(serializers.ModelSerializer):
@@ -59,6 +59,8 @@ class BaseAssignmentSerializer(serializers.ModelSerializer):
     from_service = serializers.CharField(write_only=True)
     # Force created field to be writable
     created = serializers.DateTimeField(required=False)
+    # Force object_created field to be writable
+    object_created = serializers.DateTimeField(required=False)
 
     def to_representation(self, instance):
         # hack to surface content_object for ObjectIDAnsibleIDField
@@ -133,10 +135,14 @@ class BaseAssignmentSerializer(serializers.ModelSerializer):
                     raise serializers.ValidationError({'object_id': _('Object must be specified for this role assignment')})
 
                 with transaction.atomic():
-                    assignment = rd.give_permission(actor, obj, assignment_created=validated_data.get('created'))
+                    assignment = rd.give_permission(
+                        actor, obj, assignment_created=validated_data.get('created'), assignment_object_created=validated_data.get('object_created')
+                    )
             else:
                 with transaction.atomic():
-                    assignment = rd.give_global_permission(actor, assignment_created=validated_data.get('created'))
+                    assignment = rd.give_global_permission(
+                        actor, assignment_created=validated_data.get('created'), assignment_object_created=validated_data.get('object_created')
+                    )
 
             return assignment
 

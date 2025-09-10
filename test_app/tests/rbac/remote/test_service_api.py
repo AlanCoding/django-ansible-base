@@ -3,7 +3,7 @@ from copy import deepcopy
 import pytest
 
 from ansible_base.lib.utils.response import get_relative_url
-from ansible_base.rbac.models import DABContentType, DABPermission, RoleDefinition, RoleTeamAssignment, RoleUserAssignment
+from ansible_base.rbac.models import DABContentType, DABPermission, RoleDefinition, RoleUserAssignment
 from test_app.models import Team, User
 
 
@@ -492,6 +492,7 @@ class TestCreatedByAnsibleIdAllowNull:
         validated_data = serializer.validated_data
         assert 'created_by' not in validated_data or validated_data.get('created_by') is None
 
+
 def test_service_assignment_created_timestamp_sync(admin_api_client, rando, inv_rd, inventory):
     """
     Test that demonstrates the field sync issue: the 'created' timestamp field is displayed
@@ -539,3 +540,114 @@ def test_service_assignment_created_timestamp_sync(admin_api_client, rando, inv_
     response_created = parse_datetime(response.data['created'])
     # Note: This will show the auto-generated timestamp, not our custom one
     assert response_created == expected_created, f"Response created timestamp should match: expected '{expected_created}' but got '{response_created}'"
+
+
+@pytest.mark.django_db
+def test_service_assignment_object_created_timestamp_sync(admin_api_client, rando, inv_rd, inventory):
+    """
+    Test that the 'object_created' field can be synchronized in both directions:
+    1. POST to /assign/ accepts a provided 'object_created' value
+    2. Serializing local assignments includes the 'object_created' field from the DB
+    """
+    from datetime import datetime, timezone
+
+    from django.utils.dateparse import parse_datetime
+
+    url = get_relative_url('serviceuserassignment-assign')
+
+    creator_user = User.objects.create(username='object_created_creator')
+
+    # Set a specific object_created timestamp that's different from the actual object's created time
+    custom_object_created = datetime(2022, 6, 15, 14, 30, 0, tzinfo=timezone.utc)
+    custom_object_created_str = custom_object_created.isoformat()
+
+    post_data = {
+        "role_definition": inv_rd.name,
+        "user_ansible_id": str(rando.resource.ansible_id),
+        "object_id": str(inventory.pk),
+        "created_by_ansible_id": str(creator_user.resource.ansible_id),
+        "object_created": custom_object_created_str,
+        "from_service": "test_service",
+    }
+
+    # Test 1: POST accepts object_created value
+    response = admin_api_client.post(url, data=post_data)
+    assert response.status_code == 201, response.data
+
+    assignment = RoleUserAssignment.objects.get(user=rando, role_definition=inv_rd, object_id=inventory.pk)
+
+    # Verify the custom object_created timestamp was properly set
+    expected_object_created = custom_object_created
+    actual_object_created = assignment.object_created
+
+    assert (
+        actual_object_created == expected_object_created
+    ), f"object_created should be synchronized: Expected '{expected_object_created}' but got '{actual_object_created}'"
+
+    # Test 2: Serializing local assignments includes object_created field
+    list_url = get_relative_url('serviceuserassignment-list')
+    response = admin_api_client.get(list_url + '?page_size=200', format="json")
+    assert response.status_code == 200, response.data
+
+    # Find our assignment in the list
+    assignments = [a for a in response.data['results'] if a['role_definition'] == inv_rd.name and str(a['object_id']) == str(inventory.pk)]
+    assert len(assignments) >= 1, "Should find at least our assignment"
+
+    # Check that object_created is properly serialized
+    assignment_data = assignments[0]
+    assert 'object_created' in assignment_data, "object_created field should be present in serialized output"
+
+    response_object_created = parse_datetime(assignment_data['object_created'])
+    assert (
+        response_object_created == expected_object_created
+    ), f"Serialized object_created should match stored value: expected '{expected_object_created}' but got '{response_object_created}'"
+
+
+@pytest.mark.django_db
+def test_service_assignment_object_created_from_local_object(admin_api_client, rando, org_inv_rd, organization):
+    """
+    Test that when no object_created is provided in POST, the field is automatically set
+    from the local object's created timestamp and properly serialized.
+    """
+    url = get_relative_url('serviceuserassignment-assign')
+
+    post_data = {
+        "role_definition": org_inv_rd.name,
+        "user_ansible_id": str(rando.resource.ansible_id),
+        "object_id": str(organization.pk),
+        "from_service": "test_service",
+        # Note: no object_created provided - should default to organization.created
+    }
+
+    # Create assignment without providing object_created
+    response = admin_api_client.post(url, data=post_data)
+    assert response.status_code == 201, response.data
+
+    assignment = RoleUserAssignment.objects.get(user=rando, role_definition=org_inv_rd, object_id=organization.pk)
+
+    # Verify object_created was set to the organization's created timestamp
+    expected_object_created = organization.created
+    actual_object_created = assignment.object_created
+
+    assert (
+        actual_object_created == expected_object_created
+    ), f"object_created should default to organization.created: Expected '{expected_object_created}' but got '{actual_object_created}'"
+
+    # Verify serialization includes the correct object_created value
+    list_url = get_relative_url('serviceuserassignment-list')
+    response = admin_api_client.get(list_url + '?page_size=200', format="json")
+    assert response.status_code == 200, response.data
+
+    # Find our assignment
+    assignments = [a for a in response.data['results'] if a['role_definition'] == org_inv_rd.name and str(a['object_id']) == str(organization.pk)]
+    assert len(assignments) >= 1, "Should find at least our assignment"
+
+    assignment_data = assignments[0]
+    assert 'object_created' in assignment_data, "object_created field should be present in serialized output"
+
+    from django.utils.dateparse import parse_datetime
+
+    response_object_created = parse_datetime(assignment_data['object_created'])
+    assert (
+        response_object_created == expected_object_created
+    ), f"Serialized object_created should match organization.created: expected '{expected_object_created}' but got '{response_object_created}'"

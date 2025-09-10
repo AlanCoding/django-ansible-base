@@ -185,8 +185,6 @@ def test_object_created_field_remote_object(rando, foo_type, foo_rd):
 
     This test should FAIL because the object_created field doesn't exist yet.
     """
-    from datetime import datetime, timezone
-
     # Create a remote object stand-in
     remote_foo = RemoteObject(content_type=foo_type, object_id=42)
 

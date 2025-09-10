@@ -192,13 +192,15 @@ class RoleDefinition(CommonModel):
             managed_str = ', managed=True'
         return f'RoleDefinition(pk={self.id}, name={self.name}{managed_str})'
 
-    def give_global_permission(self, actor, assignment_created=None):
-        return self.give_or_remove_global_permission(actor, giving=True, assignment_created=assignment_created)
+    def give_global_permission(self, actor, assignment_created=None, assignment_object_created=None):
+        return self.give_or_remove_global_permission(
+            actor, giving=True, assignment_created=assignment_created, assignment_object_created=assignment_object_created
+        )
 
     def remove_global_permission(self, actor):
         return self.give_or_remove_global_permission(actor, giving=False)
 
-    def give_or_remove_global_permission(self, actor, giving=True, assignment_created=None):
+    def give_or_remove_global_permission(self, actor, giving=True, assignment_created=None, assignment_object_created=None):
         if giving and (self.content_type is not None):
             raise ValidationError('Role definition content type must be null to assign globally')
 
@@ -218,6 +220,8 @@ class RoleDefinition(CommonModel):
         if giving:
             if assignment_created:
                 kwargs['created'] = assignment_created
+            if assignment_object_created:
+                kwargs['object_created'] = assignment_object_created
             assignment, _ = cls.objects.get_or_create(**kwargs)
         else:
             assignment = cls.objects.filter(**kwargs).first()
@@ -237,8 +241,10 @@ class RoleDefinition(CommonModel):
 
         return assignment
 
-    def give_permission(self, actor, content_object, assignment_created=None):
-        return self.give_or_remove_permission(actor, content_object, giving=True, assignment_created=assignment_created)
+    def give_permission(self, actor, content_object, assignment_created=None, assignment_object_created=None):
+        return self.give_or_remove_permission(
+            actor, content_object, giving=True, assignment_created=assignment_created, assignment_object_created=assignment_object_created
+        )
 
     def remove_permission(self, actor, content_object):
         return self.give_or_remove_permission(actor, content_object, giving=False)
@@ -263,7 +269,7 @@ class RoleDefinition(CommonModel):
             object_role = ObjectRole.objects.create(**kwargs, **defaults)
             return (object_role, True)
 
-    def give_or_remove_permission(self, actor, content_object, giving=True, sync_action=False, assignment_created=None):
+    def give_or_remove_permission(self, actor, content_object, giving=True, sync_action=False, assignment_created=None, assignment_object_created=None):
         "Shortcut method to do whatever needed to give user or team these permissions"
         validate_assignment(self, actor, content_object)
 
@@ -295,9 +301,13 @@ class RoleDefinition(CommonModel):
         update_teams, to_update = needed_updates_on_assignment(self, actor, object_role, created=created, giving=True)
 
         assignment_defaults = {}
-        object_created = get_created_timestamp(content_object)
-        if object_created:
-            assignment_defaults['object_created'] = object_created
+        # Use provided object_created if available, otherwise get from content_object
+        if assignment_object_created:
+            assignment_defaults['object_created'] = assignment_object_created
+        else:
+            object_created = get_created_timestamp(content_object)
+            if object_created:
+                assignment_defaults['object_created'] = object_created
         if assignment_created:
             assignment_defaults['created'] = assignment_created
 
