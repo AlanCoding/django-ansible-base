@@ -8,12 +8,12 @@ from django.test.utils import override_settings
 
 from ansible_base.lib.utils.response import get_relative_url
 
-# Import the fixture from resource_registry conftest
-pytest_plugins = ["test_app.tests.resource_registry.conftest"]
+# Make fixture available
+from test_app.tests.resource_registry.conftest import enable_reverse_sync  # noqa: F401
 
 
 @pytest.mark.django_db
-def test_roledefinition_create_with_permissions_reverse_sync(admin_api_client, enable_reverse_sync):
+def test_roledefinition_create_with_permissions_reverse_sync(admin_api_client, enable_reverse_sync):  # noqa: F811
     """
     Test that creating a RoleDefinition with permissions triggers reverse-sync correctly.
 
