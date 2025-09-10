@@ -28,10 +28,7 @@ def test_roledefinition_create_with_permissions_reverse_sync(admin_api_client, e
                 # Mock successful response from resource server
                 mock_response = mock.Mock()
                 mock_response.status_code = 201
-                mock_response.json.return_value = {
-                    'ansible_id': str(uuid.uuid4()),
-                    'service_id': str(uuid.uuid4())
-                }
+                mock_response.json.return_value = {'ansible_id': str(uuid.uuid4()), 'service_id': str(uuid.uuid4())}
                 mock_make_request.return_value = mock_response
 
                 # Create RoleDefinition via API (this should trigger reverse-sync)
@@ -40,7 +37,7 @@ def test_roledefinition_create_with_permissions_reverse_sync(admin_api_client, e
                     'name': 'test-reverse-sync-role',
                     'description': 'Test role for reverse sync',
                     'permissions': ['shared.view_organization', 'shared.change_organization'],
-                    'content_type': 'shared.organization'
+                    'content_type': 'shared.organization',
                 }
 
                 response = admin_api_client.post(url, data=data, format="json")
@@ -50,12 +47,10 @@ def test_roledefinition_create_with_permissions_reverse_sync(admin_api_client, e
                 assert mock_make_request.called, "Resource server sync should have been called"
 
                 # Find the POST request that creates the resource
-                create_calls = [call for call in mock_make_request.call_args_list
-                            if call[0][0].upper() == 'POST']  # First arg is HTTP method
+                create_calls = [call for call in mock_make_request.call_args_list if call[0][0].upper() == 'POST']  # First arg is HTTP method
 
                 assert len(create_calls) >= 1, (
-                    f"Should have at least one POST call to create resource. "
-                    f"Found calls: {[call[0] for call in mock_make_request.call_args_list]}"
+                    f"Should have at least one POST call to create resource. " f"Found calls: {[call[0] for call in mock_make_request.call_args_list]}"
                 )
 
                 # Get the request data from the create call
