@@ -38,7 +38,7 @@ from ansible_base.rest_filters.rest_framework import ansible_id_backend
 from ..models import DABContentType, DABPermission, get_evaluation_model
 from ..policies import check_content_obj_permission
 from ..remote import RemoteObject, get_resource_prefix
-from ..sync import maybe_reverse_sync_assignment, maybe_reverse_sync_unassignment, delayed_reverse_sync
+from ..sync import maybe_reverse_sync_assignment, maybe_reverse_sync_role_definition, maybe_reverse_sync_unassignment
 from .queries import assignment_qs_user_to_obj, assignment_qs_user_to_obj_perm
 
 
@@ -121,49 +121,33 @@ class RoleDefinitionViewSet(AnsibleBaseDjangoAppApiView, ModelViewSet):
             raise ValidationError(_('Role is managed by the system'))
 
     def create(self, request, *args, **kwargs):
-        """Create a new RoleDefinition with delayed reverse-sync.
+        """Create a new RoleDefinition with delayed reverse-sync."""
+        from ansible_base.resource_registry.signals.handlers import no_reverse_sync
 
-        This ensures that the RoleDefinition is fully created with
-        permissions before syncing to the resource server.
-        """
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        with no_reverse_sync():
+            response = super().create(request, *args, **kwargs)
 
-        # Use delayed sync to avoid the timing issue where post_save fires
-        # before many-to-many permissions are saved
-        with delayed_reverse_sync(None, "create") as ctx:
-            # Create the instance but disable auto-sync
-            instance = serializer.save()
-            # Update the context manager with the actual instance
-            ctx.set_instance(instance)
+        # Manually sync after permissions are fully saved
+        instance = self.get_queryset().get(pk=response.data['id'])
+        maybe_reverse_sync_role_definition(instance, "create")
 
-        headers = self.get_success_headers(serializer.data)
-        return Response(serializer.data, status=201, headers=headers)
+        return response
 
     def update(self, request, *args, **kwargs):
-        """Update a RoleDefinition with delayed reverse-sync.
+        """Update a RoleDefinition with delayed reverse-sync."""
+        from ansible_base.resource_registry.signals.handlers import no_reverse_sync
 
-        This ensures that the RoleDefinition is fully updated with
-        permissions before syncing to the resource server.
-        """
-        partial = kwargs.pop('partial', False)
         instance = self.get_object()
         self._error_if_managed(instance)
 
-        serializer = self.get_serializer(instance, data=request.data, partial=partial)
-        serializer.is_valid(raise_exception=True)
+        with no_reverse_sync():
+            response = super().update(request, *args, **kwargs)
 
-        # Use delayed sync to avoid the timing issue where post_save fires
-        # before many-to-many permissions are saved
-        with delayed_reverse_sync(instance, "update"):
-            serializer.save()
+        # Manually sync after permissions are fully saved
+        instance.refresh_from_db()
+        maybe_reverse_sync_role_definition(instance, "update")
 
-        if getattr(instance, '_prefetched_objects_cache', None):
-            # If 'prefetch_related' has been applied to a queryset, we need to
-            # forcibly invalidate the prefetch cache on the instance.
-            instance._prefetched_objects_cache = {}
-
-        return Response(serializer.data)
+        return response
 
     def perform_update(self, serializer):
         self._error_if_managed(serializer.instance)
