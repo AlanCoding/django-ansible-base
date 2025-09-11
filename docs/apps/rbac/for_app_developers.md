@@ -2,7 +2,10 @@
 
 These instructions are intended for someone applying this system to an existing Django app.
 Start with `docs/Installation.md` for the core ansible_base setup.
-The app name is dab_rbac, INSTALLED_APPS path is "ansible_base.rbac".
+
+The 2 main things to enable DAB RBAC are:
+1. Add to INSTALLED_APPS in settings, path is "ansible_base.rbac"
+2. Register your models with the DAB RBAC `permission_registry`
 
 ### DAB Models vs Django Models
 
@@ -10,18 +13,12 @@ DAB RBAC uses specialized models that mirror Django's built-in auth models but a
 
 - **`DABPermission`** - Mirrors Django's `Permission` model but only tracks permissions for RBAC-registered models and supports remote models
 - **`DABContentType`** - Mirrors Django's `ContentType` but with enhanced caching and support for remote models
-- **User/Team/Organization Models** - Configurable through settings, defaults to Django's built-in models
+- **User/Team/Organization Models** - Configurable through settings, defaults to Django or DAB default models
 
-This parallel structure provides:
+The custom permission and content type models provide:
 - Better performance through aggressive caching
 - Support for tracking permissions to remote services
-- Clean separation from Django's built-in auth system
-
-### Integration Approach
-
-You can use DAB RBAC entirely at the Django model level:
-- Use role definitions to delegate permissions to users and teams
-- The system efficiently filters querysets to show only objects a user has permission to access
+- Clean separation from Django's built-in auth system, avoiding conflicts with other apps
 
 ### Terminology for Developers
 
@@ -31,7 +28,7 @@ When working with DAB RBAC code, use precise terminology:
 - **Object Role** - The instantiation of a role definition for a specific object
 - **Role Assignment** - The record linking a user/team to a role definition for an object or globally
 - **Permission** - An action on a model type (e.g., "change_inventory")
-- **Access** - Avoid this term in code; use specific permission evaluations instead
+- **Access** - Avoid this term in code; used for AWX `awx/main/access.py` module, overlay logic on top of RBAC evaluations
 
 User-facing interfaces may simplify "role definition" to "role" for usability, but internal code should maintain precision.
 

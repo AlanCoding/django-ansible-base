@@ -1,6 +1,6 @@
 ## Using DAB RBAC as an API Client
 
-This section explains how to use the RBAC API endpoints to manage permissions. The API follows a clear hierarchy that reflects the system architecture.
+This section explains how to use the RBAC API endpoints to manage permissions.
 
 ### Prerequisites
 
@@ -111,7 +111,11 @@ The role definition must have `content_type: null` for global assignments.
 
 ### Team Membership
 
-First, users must be members of teams. Team membership grants the "member_team" permission and automatically inherits all permissions assigned to the team.
+Teams are used to bulk assign permissions to multiple users.
+
+You give permissions to a team by assigning the team a role definition, usually for a specific object. A single team can be assigned many roles, to many different objects. Teams can in theory be given global roles, but this may be disabled by the application settings.
+
+If a user has the "member_team" permission to a team, that user automatically inherits all permissions assigned to the team.
 
 ### Assign Role Definition to Team
 
