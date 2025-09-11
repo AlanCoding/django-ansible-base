@@ -1,126 +1,93 @@
 # Using DAB Role-Based Access Control
 
 Access control allows or denies requests from a user based on some permission specification.
-Roles are an implementation detail of some access control systems, such as this one.
+This system uses role definitions to organize and assign permissions efficiently.
 
-## Model Permissions
+## Terminology
 
-Permissions are defined on a per-model basis, like **permission to change inventory**,
-which represents the permission to modify an inventory, but _which_ inventory
-is still unclear when looking at the permission itself.
+For clarity, this documentation uses precise terminology:
 
-Permissions combine two pieces of information
+- **Permission**: An action for a specific model type (e.g., "change inventory", "view project")
+- **Role Definition**: A collection of permissions that can be assigned. In user-facing interfaces, these are often simply called "roles"
+- **Role Assignment**: A record linking a user or team to a role definition, either for a specific object or globally
+- **Content Type**: The model type that permissions apply to (e.g., Inventory, Project, Organization)
 
- - The **action** being taken
- - The **content type** the action applies to
+## Basic Concepts
 
-## Role Definitions
+### 1. Permissions
 
-The DAB RBAC system may use the word "role" or "role definition" interchangeably.
-The "role definition" wording is help clarify that it is abstract,
-meaning that it does not have an object association.
+Permissions are the foundation of the access control system. Each permission combines:
 
-Roles contain two functional pieces of information (excluding things like its `name`)
+ - The **action** being taken (view, change, delete, execute, etc.)
+ - The **content type** the action applies to (inventory, project, organization, etc.)
 
- - A list of **permissions** the role gives to all asignees
- - A **content type** restriction
+For example, "change inventory" means the permission to modify inventory objects, but doesn't specify _which_ inventory until assigned.
 
-## Role User Assignments
+### 2. Role Definitions
 
-When you give a user some permissions, 3 pieces of information are involved
+Role definitions group related permissions together for easy assignment. Each role definition contains:
 
- - The **role**
- - The **user** getting the permissions listed in that role
- - The **object** this assignment is applied to
+ - A list of **permissions** granted to anyone assigned this role
+ - A **content type** that determines what objects this role can be assigned to
 
-This is illustrated in the image below. 1 user gets 1 or more permissions to the object.
+Role definitions are templates - they become useful when assigned to users for specific objects.
+
+## Permission Assignment Levels
+
+The RBAC system allows assigning permissions at three different levels, each serving different use cases:
+
+### 1. Object-Level Assignments
+
+Give permissions to specific objects. When assigning a role definition to a user for an object, you specify:
+
+ - The **role definition** (which permissions to grant)
+ - The **user** receiving the permissions
+ - The **object** the assignment applies to
+
+This grants the user only the specified permissions for only that specific object.
 
 ![User getting permission to an object](images/user_obj.svg)
 
-## Role Team Assignments
+### 2. Organization-Level Assignments
 
-Teams are treated like other objects in the system by DAB RBAC,
-with the exception that its **member** permission acts as a multiplier.
-By receiving a team's member permission, you automatically receive all
-permissions that the team has.
-
-Teams permissions tracked separately from users in the database,
-which are called role-team-assignments.
-You can think of a team as a grouping of users who are members of that team.
-Thus, giving permissions to a team is a bulk assignment of all the users
-in the team. This is illustrated in the below image.
-
-![Team getting permission to an object](images/team_obj.svg)
-
-Abstractly, teams can also get the member permission **to another team**
-but this may or may not be enabled by the app using DAB RBAC
-based on usability concerns.
-
-## Organizations
-
-Similar to how teams are a grouping of users, organizations are a grouping
-of objects.
-Most objects tend to have an organization field which is filled in when
-creating the object, which may be required.
-
-A role with the organization **content_type** can include **permissions**
-for any **objects** inside of that organization.
-When a user or team is assigned a role listing those permissions,
-for a particular organization, they receive those permissions for
-**all** objects in that organization.
-This is illustrated below.
+Organizations group objects together. When you assign a role definition to a user for an organization, they receive those permissions for **all** objects within that organization.
 
 ![User getting an organization role](images/user_org.svg)
 
-### Resource Tree
+This is powerful for managing permissions at scale - one assignment can grant access to many related objects.
 
-This concept is mainly intended for organizations, but it generalized
-in DAB RBAC, so that any model can have child models if they have
-a relational link between them.
+#### Resource Hierarchy
 
-So if you consider the above illustration of a user gaining permission
-to an organization, the grouping of objects could have nested groupings.
+The organization concept is part of a broader resource hierarchy. Objects can have parent-child relationships, creating a tree structure where permissions granted at a parent level apply to all children.
 
-## Teams and Organizations
+### 3. System-Wide Assignments
 
-Teams can also be given organization-level roles.
-This means that _a single role assignment_ can give permission
-to multiple objects to multiple users.
-
-![Team getting an organization role](images/team_org.svg)
-
-## System-wide Roles
-
-DAB RBAC allows creating **system-wide role definitions**.
-System-wide role definitions are idenified by a **null content_type**.
-Any assignments given for this role will, correspondingly, have a **null object**.
-
-These roles will give their listed permissions **globaly**,
-in other words, for the entire system.
-In most cases, this means that users who are assigned these roles have
-the listed permissions to all objects of that type.
-
-If a global role gave **permission to change inventory**, for example,
-that would allow a user with that role to change **all inventories** in the system.
-
-System-wide roles give listed permission to objects even if they are in
-an organization that the user has no permission to.
-Because of this, they can be said to give "super" permissions, like how
-the superuser of the system has all permissions.
-System-wide roles also give permission to objects that are in no organization.
-This is illustrated below.
+System-wide role definitions have no content type restriction and provide **global** permissions. When assigned, users receive the listed permissions for **all** objects of the relevant types in the entire system.
 
 ![User getting a system-wide role](images/user_system.svg)
 
-You can think of the system as grouping of objects that includes all objects
-in the system. Even as some objects are a part of lower-level groupings,
-like an organization, they are still a part of the system grouping.
+System-wide assignments are powerful but require careful consideration to avoid confusing user experiences. For example, granting "change inventory" globally while not granting "view organization" could allow users to edit inventories in organizations they cannot see.
 
-Extra care is needed to make sure that system-wide roles do not create
-a disjointed user experience.
-For example, permission to view and edit all inventories in the system
-can be given to a user while still not giving that user to view all
-organizations. That would give the user permission to edit inventories
-which are in _organizations_ the user can not view.
-This example could be remedied by adding **permission to view organizations**
-to the role.
+## Team-Based Permission Management
+
+Teams provide a way to bulk-assign permissions to multiple users efficiently.
+
+### Team Membership
+
+Teams have a special **member** permission that acts as a multiplier. Users with team membership automatically inherit all permissions that have been assigned to the team.
+
+### Direct Team Assignments
+
+You can assign role definitions directly to teams. This grants the specified permissions to all team members.
+
+![Team getting permission to an object](images/team_obj.svg)
+
+### Combined Team and Organization Assignments
+
+Teams can receive organization-level assignments, meaning a single role assignment can grant permissions to multiple objects for multiple users simultaneously.
+
+![Team getting an organization role](images/team_org.svg)
+
+### Nested Team Membership
+
+Teams can be given member permission to other teams, creating nested hierarchies (if enabled by the application).

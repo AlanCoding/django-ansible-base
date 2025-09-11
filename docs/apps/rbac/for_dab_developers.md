@@ -1,116 +1,77 @@
 ## DAB RBAC System Design Principles
 
-This is derived from the RBAC system in AWX which was implemented roughly
-in the year 2015, and this remained stable until an overhaul, with early work
-proceeding in the year 2023.
+The current DAB RBAC system represents a fundamental architectural shift from graph-based role inheritance to a resource tree model with named permissions.
 
-The 2015 implementation had the following key distinguishing features:
- - object roles were auto-created when a resource was created
- - roles formed an acyclic (or cyclic) graph between each other via their parents and children
- - object roles were defined by the `ImplicitRoleField` declared on each model
- - teams gain permission by adding their `member_role` to parents of another role
+### Internal Terminology
 
-The key differences of the 2023 system are:
- - object roles are not auto-created, but only created as needed to perform assignments
- - resources are organized in a strict tree, mostly with organizations being the parents
- - role definitions list canonical Django Permission objects
- - teams are listed in a `role.teams.all()` relationship directly, similar to users
+For DAB developers working on the RBAC system itself:
 
-The main _commonality_ between the two systems is that Django signals are used to cache
-information that includes 3 bits of information (content_object, permission, object-role),
-and then this information is used to produce querysets of objects that a certain user
-has a certain permission for. This is done by matching object-roles to the object-roles
-the user has been given.
+- **Role Definition** - Always use this term; never "role" which is ambiguous
+- **Object Role** - Instantiation of a role definition for a specific object
+- **Role Assignment** - Record of user/team having a role definition (user assignment or team assignment)
+- **Permission** - Django Permission object representing an action on a model type
+- **Access** - Discouraged term; use specific permission checks instead
+- **Content Type** - Use DABContentType, not Django's ContentType
 
-Cached information allows for scaling a deep, rich, permission assigning system
-without performance death-spiral of querysets.
+### Evolution from Role Graphs to Resource Trees
 
-### What Constitutes a Graph?
+**Previous (2015) System:**
+The older system created a complex graph where roles had parent-child relationships with other roles. Each object auto-created its own roles, and permissions flowed through role inheritance chains. This created scenarios like an "inventory_admin" role automatically granting read permissions to job templates that used that inventory.
 
-The 2015 system, by auto-creating roles, was able to map roles directly to other roles
-to define parents and children. This also allowed highly specific inheritance paths
-along the lines of specific permissions... imagine an "inventory_admin" role
-giving read permissions to all the job templates that used that inventory.
+**Current (2023+) System:**
+The current system abandons role-to-role inheritance in favor of:
+- **Resource Tree Structure**: Resources are organized in a strict hierarchical tree (typically with organizations as parents)
+- **Named Permissions**: Instead of role inheritance, we use explicit Django Permission objects
+- **On-Demand Object Roles**: Object roles are only created when assignments are made, not automatically
+- **Direct Relationships**: Teams and users have direct relationships to role definitions
 
-Through the years when this system was in use, the inheritance rarely mapped
-from one type of permission to a different permission like the example.
+### Key Architectural Components
 
-Because of this, `ObjectRole`s in the 2023 system don't have the same parent/child
-link to other roles. But there are still two types of graphs at work:
- - Resources have parent resources, and could be drawn out as a tree structure
- - Teams can have member permissions to other teams
+#### Resource Hierarchy (Not Role Hierarchy)
+Resources form a tree where parent-child relationships are defined by the models themselves (e.g., inventories belong to organizations). Permission inheritance flows down this resource tree, not through a separate role graph.
 
-### System-Wide Roles
+#### Named Permissions Replace Role Inheritance
+Instead of roles inheriting from other roles, we explicitly list Django Permission objects in role definitions. This makes permission grants more transparent and predictable.
 
-The 2015 system treated the system admin and system auditor as system roles.
-However, because the role ancestors are cached for each role, this meant that
-every role had a link to the system admin role. To some extent, this threw cold
-water on adding more system roles. The storage and additional caching overhead
-for system roles did not encourage use of more system roles.
+#### Team Membership as Permission Multiplication
+Teams can have member permissions to other teams, but this is the only remaining "graph-like" structure. This is intentionally limited to team membership to keep complexity manageable.
 
-Ultimately, system roles do not need caching like object roles do.
-The querysets do not get out-of-control for the task of returning
-the permissions a user has. Nesting inside of more complex queries still can.
-Because of that, a method for handling system roles with an _entirely separate_
-system is offered here that hooks into the same bound methods as the object-role system.
+### Performance Through Caching
+
+Both the old and current systems use Django signals to cache permission evaluations. The `RoleEvaluation` table caches which users have which permissions to which objects, enabling efficient queryset filtering without performance degradation.
+
+#### System-Wide vs Object-Specific Roles
+System-wide roles are handled through a separate, lighter-weight system that doesn't require the same caching overhead as object-specific roles. This allows for more flexible global permission management.
 
 ## Models
 
-These models represent the underlying RBAC implementation and generally will be abstracted away from your daily development tasks by signals connected by the permission registry.
-
-You should also prefer to use the attached methods when possible.
-Those have some additional syntax aids, validation, and can take the user flags
-and the global roles system into account.
+These models represent the underlying RBAC implementation and are generally abstracted away from daily development tasks by signals connected through the permission registry.
 
 ### `ObjectRole`
 
-`ObjectRole` is an instantiation of a role definition for a particular object.
-The `give_permission` method creates an object role if one does not exist for that (object, role definition)
+`ObjectRole` represents an instantiation of a role definition for a particular object. Object roles are created on-demand when assignments are made, rather than being auto-created for every resource.
 
-#### `descendent_roles()`
-
-For a given object role, if that role offers a "member_team" permission, this gives all
-the roles that are implied by ownership of this role.
-
-For object roles that do not offer that permission, or do not apply to a team
-or a team's parent objects, this should return an empty set.
-
-#### `needed_cache_updates()`
-
-This shows the additions and removals needed to make the `RoleEvaluation` correct
-for the particular `ObjectRole` in question.
-This is used as a part of the re-computation logic to cache role-object-permission evaluations.
+Key characteristics:
+- Links a role definition to a specific object
+- Created by `give_permission` methods when assignments are made
+- Handles team membership inheritance through `descendent_roles()`
+- Manages cache updates for efficient permission evaluation
 
 ### `RoleEvaluation`
 
-`RoleEvaluation` gives cached permission evaluations for a role.
-Each entry tells you that ownership in the linked `role` field confers the
-permission listed in the `codename` field to the object defined by the
-fields `object_id` and `content_type_id`.
+`RoleEvaluation` provides cached permission evaluations for efficient querying. This is a performance optimization table that can be completely rebuilt from the source data.
 
-This is used for generating querysets and making role evaluations.
+Key characteristics:
+- Caches which users/teams have which permissions to which objects
+- Not the source of truth - can be deleted and regenerated
+- Enables efficient queryset filtering through class methods
+- Handles indirect permissions (parent objects, team inheritance)
 
-This table is _not_ the source of truth for information in any way.
-You can delete the entire table, and you should be able to re-populate it
-by calling the `compute_object_role_permissions()` method.
+## Integration with App Models
 
-Because its function is querysets and permission evaluations, it has
-class methods that serve these functions.
-Importantly, these consider _indirect_ permissions given by parent objects,
-teams, or both.
+For application developers using DAB RBAC, the system attaches methods directly to your registered models. These methods provide the primary interface for permission evaluation:
 
-#### `accessible_ids(cls, user, codename)`
+- `MyModel.access_qs(user, permission)` - Filter querysets by permission
+- `user.has_obj_perm(obj, permission)` - Check specific object permissions
 
-Returns a queryset which is a values list of ids for objects of `cls` type
-that `user` has the permission to, where that permission is given in `codename`.
-
-This is lighter weight and more efficient than using `accessible_objects` when it is needed
-as a subquery as a part of a larger query.
-
-#### `accessible_objects(cls, user, codename)`
-
-Return a queryset from `cls` model that `user` has the `codename` permission to.
-
-#### `get_permissions(user, obj)`
-
-Returns all permissions that `user` has to `obj`.
+For detailed documentation on these methods and their usage patterns, see the [App Developer Integration Guide](for_app_developers.md#evaluating-permissions).

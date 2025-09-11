@@ -1,47 +1,83 @@
 ## Using DAB RBAC as an API Client
 
-This section tells how to use the API endpoints as a client;
-what requests to make and how to build request data.
+This section explains how to use the RBAC API endpoints to manage permissions. The API follows a clear hierarchy that reflects the system architecture.
 
-You need a server running a Django project that uses this system.
-Use test_app in this repo for a demo, see `test_app/README.md` for bootstrap.
-The server runs at http://127.0.0.1:8000, and links within that will be referenced here.
-Default password for admin user is "admin".
+### Prerequisites
 
-### Create Custom Role (Definition)
+You need a server running a Django project that uses DAB RBAC.
+Use test_app in this repo for a demo (see `test_app/README.md` for setup).
+The server runs at http://127.0.0.1:8000, and examples reference this base URL.
+Default admin password is "admin".
 
-After logging in to test_app/, you can visit this endpoint to get the role definition API.
+### API Workflow Overview
 
-http://127.0.0.1:8000/api/v1/role_definitions/
+The RBAC API follows standard REST practices where models have relational dependencies. The typical order for establishing permissions:
 
-Perform an OPTIONS request, and you will find this gives choices for `content_type`.
-Out of the choices a single `content_type` needs to be chosen for a role definition.
+1. **Types** (`/api/v1/role_metadata/`) - Read-only, managed by app developers
+2. **Permissions** - Read-only, created when models are registered
+3. **Role Definitions** (`/api/v1/role_definitions/`) - Managed and custom roles
+4. **Role Assignments** - User assignments (`/api/v1/role_user_assignments/`) and team assignments (`/api/v1/role_team_assignments/`)
 
-Multiple permissions can be selected, and are accepted in the form of a list.
-To find out what permissions are valid for a role definition for a given `content_type`
-make a GET to `/api/v1/role_metadata/` and look up the type under "allowed_permissions".
+Users interact primarily with steps 3 and 4, while steps 1 and 2 are controlled by the application configuration.
 
-A POST to this endpoint will create a new role definition, example data:
+## Step 1: Understanding Available Types and Permissions
+
+### View Available Content Types
+
+Get the available content types and their permissions:
+
+```
+GET /api/v1/role_metadata/
+```
+
+This returns read-only information configured by app developers:
+- Available content types (e.g., "aap.inventory", "shared.organization")
+- Permissions allowed for each content type
+- No user interaction required with this data
+
+## Step 2: Creating Role Definitions
+
+### Create a Custom Role Definition
+
+```
+POST /api/v1/role_definitions/
+```
+
+Example request body:
 
 ```json
 {
     "permissions": ["view_inventory"],
     "content_type": "aap.inventory",
     "name": "View a single inventory",
-    "description": "custom role"
+    "description": "Custom role for inventory viewing"
 }
 ```
 
-Name can be any string that's not blank. Description can be any string.
+Required fields:
+- `permissions`: List of permission codenames (from step 1)
+- `content_type`: Content type string (from step 1)
+- `name`: Display name for the role definition
 
-### Assigning a User a Role to an Object
+Optional fields:
+- `description`: Additional context about the role definition
 
-Select a role definition from `/api/v1/role_definitions/`, use the id as `role_definition`
-and a user from `/api/v1/users/` and use the id as `user`.
-Given the type of the role definition, check the available objects of that type,
-in this case `/api/v1/inventories/` and obtain the desired id, this will become `object_id`.
+### Managed vs Custom Role Definitions
 
-With all 3 ids ready, POST to http://127.0.0.1:8000/api/v1/role_user_assignments/
+- **Managed roles**: Created by app developers, cannot be modified via API
+- **Custom roles**: Created by users, fully manageable via API
+
+## Step 3: User Role Assignments
+
+### Assign Role Definition to User for Object
+
+Once you have a role definition, assign it to a user for a specific object:
+
+```
+POST /api/v1/role_user_assignments/
+```
+
+Example request body:
 
 ```json
 {
@@ -51,26 +87,39 @@ With all 3 ids ready, POST to http://127.0.0.1:8000/api/v1/role_user_assignments
 }
 ```
 
-This will give user id=3 view permission to a single inventory id=3, assuming the role definition
-referenced is what was created in the last section.
+Required fields:
+- `role_definition`: ID from `/api/v1/role_definitions/`
+- `user`: ID from `/api/v1/users/`
+- `object_id`: ID of the target object (e.g., from `/api/v1/inventories/`)
 
-### Assigning a User as a Member of a Team
+This grants the user the role definition's permissions for only the specified object.
 
-While this is possible with the RBAC API, it is not covered here,
-because it may come from an external source.
+### Assign Role Definition to User Globally
 
-The "member_team" permission may later be prohibited from use in custom role definitions.
+For system-wide permissions, omit the `object_id`:
 
-### Assigning a Team a Role to an Object
+```json
+{
+    "role_definition": 5,
+    "user": 3
+}
+```
 
-If you used the test_app bootstrap script, then you will find the user "angry_spud"
-is a member of the "awx_devs" team.
+The role definition must have `content_type: null` for global assignments.
 
-Assuming the team id is 2, POST to
+## Step 4: Team Role Assignments
 
-http://127.0.0.1:8000/api/v1/role_team_assignments/
+### Team Membership
 
-with data
+First, users must be members of teams. Team membership grants the "member_team" permission and automatically inherits all permissions assigned to the team.
+
+### Assign Role Definition to Team
+
+```
+POST /api/v1/role_team_assignments/
+```
+
+Example request body:
 
 ```json
 {
@@ -80,36 +129,58 @@ with data
 }
 ```
 
-This has a similar effect to user assignments, but in this case will give
-permissions to all users of a team
+This grants the role definition's permissions to all members of the team for the specified object.
 
-### Viewing Assignments
+## Management Operations
 
-For the single inventory mentioned above, it is possible to view the existing permission
-assignments directly to that object.
+### View Existing Assignments
 
-GET
+List assignments for a specific object:
 
-http://127.0.0.1:8000/api/v1/role_team_assignments/?object_id=3&content_type__model=inventory
+```
+GET /api/v1/role_user_assignments/?object_id=3&content_type__model=inventory
+GET /api/v1/role_team_assignments/?object_id=3&content_type__model=inventory
+```
 
-http://127.0.0.1:8000/api/v1/role_user_assignments/?object_id=3&content_type__model=inventory
+### Revoke an Assignment
 
-### Revoking an Assignment
+Delete a specific assignment by ID:
 
-From any of the assignment lists, the user can select an assignment to revoke.
-Follow the "url" in the serializer from either user or team assignment lists.
+```
+DELETE /api/v1/role_user_assignments/1/
+```
 
-DELETE http://127.0.0.1:8000/api/v1/role_user_assignments/1/
+This removes the assignment and all permissions it granted.
 
-Will undo everything related to that assignment.
-The user or team's users will lose permission that was granted by the object-role-assignment.
+## Organization-Level Permissions
 
-### Assigning Organization Permission
+### Assigning Organization-Wide Permissions
 
-In the case of inventory, its parent object is its organization.
-Instead of giving permission to a single inventory, you can use roles to give
-permission to all inventories inside of an organization.
+To grant permissions to all objects within an organization:
 
-The difference in the above steps are that
-- when creating a custom role definition the `content_type` would be "shared.organization"
-- when creating the assignment, the `object_id` would be the id of an organization
+1. **Create an organization-level role definition:**
+   ```json
+   {
+       "permissions": ["view_inventory", "change_inventory"],
+       "content_type": "shared.organization",
+       "name": "Organization Inventory Manager"
+   }
+   ```
+
+2. **Assign to user/team using organization ID:**
+   ```json
+   {
+       "role_definition": 4,
+       "object_id": 1,  // organization ID
+       "user": 3
+   }
+   ```
+
+This grants the specified permissions to all inventories within organization ID 1.
+
+## Error Handling
+
+Common API errors:
+- **400 Bad Request**: Invalid role definition/object/user combination
+- **403 Forbidden**: Insufficient permissions to create assignment (you need "change" permission to the object to create role assignments)
+- **404 Not Found**: Referenced object does not exist

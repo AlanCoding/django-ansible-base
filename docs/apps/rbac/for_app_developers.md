@@ -4,9 +4,36 @@ These instructions are intended for someone applying this system to an existing 
 Start with `docs/Installation.md` for the core ansible_base setup.
 The app name is dab_rbac, INSTALLED_APPS path is "ansible_base.rbac".
 
-You can choose to use this entirely at the Django model level
- - you use roles to delegate permissions to users and teams
- - this system will efficiently filter querysets to a certain permission level for a certain user
+### DAB Models vs Django Models
+
+DAB RBAC uses specialized models that mirror Django's built-in auth models but are purpose-built for the RBAC system:
+
+- **`DABPermission`** - Mirrors Django's `Permission` model but only tracks permissions for RBAC-registered models and supports remote models
+- **`DABContentType`** - Mirrors Django's `ContentType` but with enhanced caching and support for remote models
+- **User/Team/Organization Models** - Configurable through settings, defaults to Django's built-in models
+
+This parallel structure provides:
+- Better performance through aggressive caching
+- Support for tracking permissions to remote services
+- Clean separation from Django's built-in auth system
+
+### Integration Approach
+
+You can use DAB RBAC entirely at the Django model level:
+- Use role definitions to delegate permissions to users and teams
+- The system efficiently filters querysets to show only objects a user has permission to access
+
+### Terminology for Developers
+
+When working with DAB RBAC code, use precise terminology:
+
+- **Role Definition** - Always use "role definition", never just "role" (which could refer to object roles or other concepts)
+- **Object Role** - The instantiation of a role definition for a specific object
+- **Role Assignment** - The record linking a user/team to a role definition for an object or globally
+- **Permission** - An action on a model type (e.g., "change_inventory")
+- **Access** - Avoid this term in code; use specific permission evaluations instead
+
+User-facing interfaces may simplify "role definition" to "role" for usability, but internal code should maintain precision.
 
 ### Migrations
 
