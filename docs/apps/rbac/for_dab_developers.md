@@ -1,6 +1,18 @@
 ## DAB RBAC System Design Principles
 
-The current DAB RBAC system represents a fundamental architectural shift from graph-based role inheritance to a resource tree model with named permissions.
+The DAB RBAC features and goals:
+ - Adheres to patterns created by django.contrib.auth, specifically its permission model
+ - Adds roles, containers of multiple permissions
+ - Adds teams, allowing bulk-assignment of permissions to a group of users
+ - Allows managing multiple "levels" of permissions
+   - object-level permission
+   - inheritance from an objects parent object, main organization
+   - system-wide permissions
+ - Be as lazy as possible
+
+This is a combination of former galaxy_ng/pulp and AWX systems.
+The galaxy_ng/pulp RBAC system had everything above except for inheritance.
+The AWX system did not enumerate permissions at all, and structured roles in a graph-based design.
 
 ### Internal Terminology
 
@@ -15,8 +27,8 @@ For DAB developers working on the RBAC system itself:
 
 ### Evolution from Role Graphs to Resource Trees
 
-**Previous (2015) System:**
-The older system created a complex graph where roles had parent-child relationships with other roles. Each object auto-created its own roles, and permissions flowed through role inheritance chains. This created scenarios like an "inventory_admin" role automatically granting read permissions to job templates that used that inventory.
+**Previous (2015) AWX System:**
+The older system created a complex graph where roles had parent-child relationships with other roles. Each object auto-created its own roles, and permissions flowed through role inheritance chains. This means you could have "admin_role" to a job template which would give CRUD permissions plus the ability to run the job template, or "execute_role" which would give ability to run but not the ability to edit. Inheritance worked by "admin_role" to an organization being a parent of the roles of all objects within the organization.
 
 **Current (2023+) System:**
 The current system abandons role-to-role inheritance in favor of:
