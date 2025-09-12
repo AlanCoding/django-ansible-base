@@ -255,14 +255,32 @@ def rbac_post_delete_remove_object_roles(instance, *args, **kwargs):
 
         # Similar to user deletion, clean up any orphaned object roles
         ObjectRole.objects.filter(users__isnull=True, teams__isnull=True).delete()
+        deleted_count, _ = ObjectRole.objects.filter(users__isnull=True, teams__isnull=True).delete()
+        if deleted_count:
+            had_object_assignments = True
 
     ct = permission_registry.content_type_model.objects.get_for_model(instance)
-    ObjectRole.objects.filter(content_type=ct, object_id=instance.pk).delete()
+
+    # Use bulk delete return value to determine if object-level assignments existed
+    # This avoids the inefficient .exists() query and works correctly for team deletion cases
+    deleted_count, _ = ObjectRole.objects.filter(content_type=ct, object_id=instance.pk).delete()
+    had_object_assignments = deleted_count > 0
 
     parent_field_name = permission_registry.get_parent_fd_name(instance)
     if parent_field_name:
         # Delete all evaluations from inherited permissions
         get_evaluation_model(instance).objects.filter(content_type_id=ct.id, object_id=instance.pk).delete()
+
+    # Only sync when object-level assignments existed - this is the key performance optimization
+    if had_object_assignments:
+        try:
+            from ansible_base.rbac.sync import maybe_reverse_sync_object_deletion
+
+            maybe_reverse_sync_object_deletion(instance)
+        except Exception:
+            # Continue with local deletion even if cross-service sync fails
+            # This ensures we don't break local operations due to network/auth issues
+            logger.exception(f"Failed to sync object deletion for {instance}")
 
 
 def rbac_post_user_delete(instance, *args, **kwargs):

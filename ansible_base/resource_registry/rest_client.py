@@ -212,6 +212,26 @@ class ResourceAPIClient:
 
         return self._sync_assignment(data, giving=False)
 
+    def sync_object_deletion(self, content_object):
+        """Sync object deletion to Gateway for cleanup of all related role assignments"""
+        from ansible_base.rbac.models import DABContentType
+
+        # Get the content type information
+        content_type = DABContentType.objects.get_for_model(content_object)
+
+        data = {
+            'resource_type': f'{content_type.app_label}.{content_type.model}',
+            'resource_pk': str(content_object.pk),  # Convert pk to string for JSON serialization
+        }
+
+        # Make single API call to the new object-delete endpoint
+        response = self._make_request("post", "object-delete/", data=data)
+
+        if response.status_code == 200:
+            return response.json()
+        else:
+            return {'error': f'Failed with status {response.status_code}', 'status_code': response.status_code}
+
     def _sync_assignment(self, data, giving=True):
         if giving:
             sub_url = 'assign'
@@ -224,4 +244,4 @@ class ResourceAPIClient:
 
         url = f'role-{actor_type}-assignments/{sub_url}/'
 
-        return self._make_request(method="post", path=url, data=data)
+        return self._make_request("post", url, data=data)
