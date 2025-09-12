@@ -1,5 +1,5 @@
 from django.db import transaction
-from rest_framework import permissions, status
+from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet, mixins
@@ -145,3 +145,65 @@ class ServiceRoleTeamAssignmentViewSet(BaseSerivceRoleAssignmentViewSet):
     @action(detail=False, methods=['post'], url_path='unassign')
     def unassign(self, request):
         return self._unassign(request)
+
+
+class ServiceObjectDeleteViewSet(viewsets.ViewSet):
+    """
+    Bulk deletion of role assignments for deleted objects.
+    Uses standard create() method to bypass service token authentication restrictions.
+    Handles both user and team assignments in a single API call.
+    """
+
+    permission_classes = [HasResourceRegistryPermissions]
+
+    def create(self, request):
+        """
+        Delete all role assignments (user and team) for a specific resource.
+
+        Expected request data:
+        {
+            "resource_type": "main.inventory",
+            "resource_pk": "4"
+        }
+        """
+        from ..models import DABContentType
+
+        # Validate request data
+        serializer_data = {
+            'resource_type': request.data.get('resource_type'),
+            'resource_pk': request.data.get('resource_pk'),
+        }
+
+        if not serializer_data['resource_type'] or not serializer_data['resource_pk']:
+            return Response({'error': 'Both resource_type and resource_pk are required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            # Parse resource_type (e.g., "main.inventory" -> app_label="main", model="inventory")
+            app_label, model_name = serializer_data['resource_type'].split('.', 1)
+        except ValueError:
+            return Response({'error': 'Invalid resource_type format. Expected: app_label.model_name'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            # Get the content type
+            content_type = DABContentType.objects.get(app_label=app_label, model=model_name)
+        except DABContentType.DoesNotExist:
+            return Response({'error': f'Content type not found: {serializer_data["resource_type"]}'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Perform bulk deletion in a transaction
+        with transaction.atomic():
+            # Delete user role assignments
+            user_deleted_count = RoleUserAssignment.objects.filter(content_type=content_type, object_id=serializer_data['resource_pk']).delete()[0]
+
+            # Delete team role assignments
+            team_deleted_count = RoleTeamAssignment.objects.filter(content_type=content_type, object_id=serializer_data['resource_pk']).delete()[0]
+
+        total_deleted = user_deleted_count + team_deleted_count
+
+        return Response(
+            {
+                'message': f'Deleted {total_deleted} role assignments for {serializer_data["resource_type"]} {serializer_data["resource_pk"]}',
+                'deleted_count': total_deleted,
+                'breakdown': {'user_assignments_deleted': user_deleted_count, 'team_assignments_deleted': team_deleted_count},
+            },
+            status=status.HTTP_200_OK,
+        )
