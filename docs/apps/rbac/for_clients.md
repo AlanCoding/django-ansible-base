@@ -156,6 +156,8 @@ DELETE /api/v1/role_user_assignments/1/
 
 This removes the assignment and all permissions it granted.
 
+If you remove an assignment that a team has, all members to that team will lose that permission.
+
 ## Organization-Level Permissions
 
 ### Assigning Organization-Wide Permissions
