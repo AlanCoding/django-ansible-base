@@ -107,7 +107,7 @@ class RoleDefinitionViewSet(AnsibleBaseDjangoAppApiView, ModelViewSet):
     but can be assigned to users.
     """
 
-    queryset = RoleDefinition.objects.prefetch_related('created_by', 'modified_by', 'content_type', 'permissions')
+    queryset = RoleDefinition.objects.prefetch_related('created_by', 'modified_by', 'content_type', 'permissions', 'resource')
     serializer_class = RoleDefinitionSerializer
     permission_classes = try_add_oauth2_scope_permission([RoleDefinitionPermissions])
 
