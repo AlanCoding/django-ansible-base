@@ -25,28 +25,6 @@ class DABPermissionSerializer(serializers.ModelSerializer):
         fields = ['api_slug', 'codename', 'content_type', 'name']
 
 
-class ObjectIDAnsibleIDField(serializers.Field):
-    "This is an ansible_id field intended to be used with source pointing to object_id, so, does conversion"
-
-    def to_representation(self, value):
-        "The source for this field is object_id, which is ignored, use content_object instead"
-        assignment = getattr(self, "_this_assignment", None)
-        if not assignment:
-            return None
-        content_object = assignment.content_object
-        if isinstance(content_object, RemoteObject):
-            return None
-        if hasattr(content_object, 'resource'):
-            return str(content_object.resource.ansible_id)
-        return None
-
-    def to_internal_value(self, value):
-        "Targeting object_id, this converts ansible_id into object_id"
-        resource_cls = apps.get_model('dab_resource_registry', 'Resource')
-        resource = resource_cls.objects.get(ansible_id=value)
-        return resource.object_id
-
-
 assignment_common_fields = ('created', 'created_by_ansible_id', 'object_id', 'object_ansible_id', 'content_type', 'role_definition')
 
 
@@ -54,14 +32,9 @@ class BaseAssignmentSerializer(serializers.ModelSerializer):
     content_type = serializers.SlugRelatedField(read_only=True, slug_field='api_slug')
     role_definition = serializers.SlugRelatedField(slug_field='name', queryset=RoleDefinition.objects.all())
     created_by_ansible_id = ActorAnsibleIdField(source='created_by', required=False, allow_null=True)
-    object_ansible_id = ObjectIDAnsibleIDField(source='object_id', required=False, allow_null=True)
+    object_ansible_id = serializers.UUIDField(read_only=True, allow_null=True)
     object_id = serializers.CharField(allow_blank=True, required=False, allow_null=True)
     from_service = serializers.CharField(write_only=True)
-
-    def to_representation(self, instance):
-        # hack to surface content_object for ObjectIDAnsibleIDField
-        self.fields["object_ansible_id"]._this_assignment = instance
-        return super().to_representation(instance)
 
     def get_created_by_ansible_id(self, obj):
         return str(obj.created_by.resource.ansible_id)
