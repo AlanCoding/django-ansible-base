@@ -95,6 +95,7 @@ class Resource(models.Model):
 
     @property
     def resource_type(self):
+        # TODO: better optimize
         return resource_type_cache(self.content_type_id).name
 
     @property
