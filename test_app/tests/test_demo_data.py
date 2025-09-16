@@ -71,7 +71,7 @@ def test_demo_data_large_mode_creates_roledefinitions(admin_user):
     assert sample_rd.content_type.model == 'organization'
 
     # Verify that over 25 permissions were assigned to users and teams
-    from ansible_base.rbac.models import ObjectRole, RoleTeamAssignment, RoleUserAssignment
+    from ansible_base.rbac.models import RoleTeamAssignment, RoleUserAssignment
 
     # Count user permissions (RoleUserAssignment records)
     user_assignments = RoleUserAssignment.objects.count()

@@ -4,7 +4,6 @@ import os
 import time
 
 import pytest
-from django.conf import settings
 from django.db import connection
 
 from ansible_base.rbac.models import DABContentType, DABPermission, RoleDefinition
