@@ -1,5 +1,6 @@
 import logging
 from contextlib import contextmanager
+from threading import local
 from typing import Optional, Union
 from uuid import UUID
 
@@ -24,6 +25,68 @@ Sounds simple, but is actually more complicated that the caching logic itself.
 
 
 dab_post_migrate = Signal()
+
+
+# Thread-local storage for bulk caching state
+_bulk_cache_state = local()
+
+
+def _get_bulk_cache_state():
+    """Get or initialize the bulk cache state for the current thread"""
+    if not hasattr(_bulk_cache_state, 'active'):
+        _bulk_cache_state.active = False
+        _bulk_cache_state.needs_team_update = False
+        _bulk_cache_state.object_roles_to_update = set()
+    return _bulk_cache_state
+
+
+@contextmanager
+def bulk_rbac_caching():
+    """
+    Context manager that defers expensive RBAC cache updates during bulk operations.
+
+    Instead of calling update_after_assignment for each permission change,
+    this collects all the updates and performs them once when exiting the context.
+
+    Usage:
+        with bulk_rbac_caching():
+            # Multiple permission assignments/removals
+            role_def.give_permission(user1, obj1)
+            role_def.give_permission(user2, obj2)
+            role_def.remove_permission(user3, obj3)
+            # Cache updates happen here when exiting the context
+    """
+    state = _get_bulk_cache_state()
+
+    if state.active:
+        # Already in a bulk context, just yield (nested calls)
+        yield
+        return
+
+    # Enter bulk mode
+    state.active = True
+    state.needs_team_update = False
+    state.object_roles_to_update = set()
+
+    try:
+        yield
+    finally:
+        # Exit bulk mode and perform deferred updates
+        needs_team_update = state.needs_team_update
+        object_roles_to_update = state.object_roles_to_update.copy()
+
+        # Reset state
+        state.active = False
+        state.needs_team_update = False
+        state.object_roles_to_update = set()
+
+        # Perform the global update
+        if needs_team_update or object_roles_to_update:
+            logger.info(f'Performing bulk RBAC cache update: teams={needs_team_update}, object_roles={len(object_roles_to_update)}')
+            if needs_team_update:
+                compute_team_member_roles()
+            if object_roles_to_update:
+                compute_object_role_permissions(object_roles=object_roles_to_update)
 
 
 def team_ancestor_roles(team):
@@ -85,6 +148,17 @@ def needed_updates_on_assignment(role_definition, actor, object_role, created=Fa
 
 def update_after_assignment(update_teams, to_update):
     "Call this with the output of needed_updates_on_assignment"
+    state = _get_bulk_cache_state()
+
+    # If we're in bulk mode, defer the updates
+    if state.active:
+        if update_teams:
+            state.needs_team_update = True
+        if to_update:
+            state.object_roles_to_update.update(to_update)
+        return
+
+    # Normal mode - perform updates immediately
     if update_teams:
         compute_team_member_roles()
 
