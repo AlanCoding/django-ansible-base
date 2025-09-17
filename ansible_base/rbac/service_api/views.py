@@ -126,7 +126,7 @@ class ServiceRoleUserAssignmentViewSet(BaseSerivceRoleAssignmentViewSet):
     """List of user assignments for cross-service communication"""
 
     queryset = RoleUserAssignment.objects.prefetch_related('user__resource__content_type', *prefetch_related).annotate(
-        object_ansible_id=resource_ansible_id_expr()
+        _object_ansible_id_annotation=resource_ansible_id_expr()
     )
     serializer_class = service_serializers.ServiceRoleUserAssignmentSerializer
     filter_backends = AnsibleBaseDjangoAppApiView.filter_backends + [
@@ -147,7 +147,7 @@ class ServiceRoleTeamAssignmentViewSet(BaseSerivceRoleAssignmentViewSet):
     """List of team role assignments for cross-service communication"""
 
     queryset = RoleTeamAssignment.objects.prefetch_related('team__resource__content_type', *prefetch_related).annotate(
-        object_ansible_id=resource_ansible_id_expr()
+        _object_ansible_id_annotation=resource_ansible_id_expr()
     )
     serializer_class = service_serializers.ServiceRoleTeamAssignmentSerializer
     filter_backends = AnsibleBaseDjangoAppApiView.filter_backends + [

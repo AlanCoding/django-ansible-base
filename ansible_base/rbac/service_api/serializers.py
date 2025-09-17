@@ -9,6 +9,45 @@ from ..models import DABContentType, DABPermission, RoleDefinition, RoleTeamAssi
 from ..remote import RemoteObject
 
 
+class ObjectAnsibleIdField(serializers.Field):
+    """
+    Field for object_ansible_id that supports both annotation optimization and fallback.
+
+    For read operations: Uses annotation when available, falls back to manual lookup.
+    For write operations: Converts ansible_id to object_id for internal use.
+    """
+
+    def to_representation(self, obj):
+        """Get object_ansible_id, using annotation when available, falling back to manual lookup"""
+        # First try to use the annotation from the queryset (for optimized list operations)
+        if hasattr(obj, '_object_ansible_id_annotation') and obj._object_ansible_id_annotation:
+            return str(obj._object_ansible_id_annotation)
+
+        # Fallback for cases where annotation is not available (creation, etc.)
+        if not obj.content_type_id or not obj.object_id:
+            return None
+
+        content_object = obj.content_object
+        if isinstance(content_object, RemoteObject):
+            return None
+        if hasattr(content_object, 'resource'):
+            return str(content_object.resource.ansible_id)
+        return None
+
+    def to_internal_value(self, value):
+        """Convert object_ansible_id to object_id for internal use"""
+        if not value:
+            return None
+
+        from ansible_base.resource_registry.models import Resource
+
+        try:
+            resource = Resource.objects.get(ansible_id=value)
+            return resource.object_id
+        except Resource.DoesNotExist:
+            raise serializers.ValidationError("Resource with this ansible_id does not exist.")
+
+
 class DABContentTypeSerializer(serializers.ModelSerializer):
     parent_content_type = serializers.SlugRelatedField(read_only=True, slug_field='api_slug')
 
@@ -32,7 +71,7 @@ class BaseAssignmentSerializer(serializers.ModelSerializer):
     content_type = serializers.SlugRelatedField(read_only=True, slug_field='api_slug')
     role_definition = serializers.SlugRelatedField(slug_field='name', queryset=RoleDefinition.objects.all())
     created_by_ansible_id = ActorAnsibleIdField(source='created_by', required=False, allow_null=True)
-    object_ansible_id = serializers.UUIDField(read_only=True, allow_null=True)
+    object_ansible_id = ObjectAnsibleIdField(source='object_id', required=False, allow_null=True)
     object_id = serializers.CharField(allow_blank=True, required=False, allow_null=True)
     from_service = serializers.CharField(write_only=True)
 
@@ -44,21 +83,15 @@ class BaseAssignmentSerializer(serializers.ModelSerializer):
 
         So this does the mutual validation to assure we have sufficient data.
         """
-        has_oid = bool(self.initial_data.get('object_id'))
-        has_oaid = bool(self.initial_data.get('object_ansible_id'))
-
         rd = attrs['role_definition']
-        if rd.content_type_id:
-            if not self.partial and not has_oid and not has_oaid:
-                raise serializers.ValidationError("You must provide either 'object_id' or 'object_ansible_id'.")
-            elif not has_oaid:
-                # need to remove blank and null fields or else it can overwrite the non-null non-blank field
-                attrs['object_id'] = self.initial_data['object_id']
-        else:
-            if has_oaid or has_oid:
-                raise serializers.ValidationError("Can not provide either 'object_id' or 'object_ansible_id' for system role")
+        has_object_id = 'object_id' in attrs and attrs['object_id']
 
-        # NOTE: right now not enforcing the case you provide both, could check for consistency later
+        if rd.content_type_id:
+            if not self.partial and not has_object_id:
+                raise serializers.ValidationError("You must provide either 'object_id' or 'object_ansible_id'.")
+        else:
+            if has_object_id:
+                raise serializers.ValidationError("Can not provide either 'object_id' or 'object_ansible_id' for system role")
 
         return super().validate(attrs)
 
