@@ -346,3 +346,131 @@ class TestBulkRBACCaching:
             # Should not call expensive functions if no changes were made
             mock_team_update.assert_not_called()
             mock_obj_update.assert_not_called()
+
+    def test_bulk_caching_memory_safe_mode(self, rando, team, inv_rd, org_inv_rd, inventory, organization):
+        """Test that memory_safe=True mode doesn't store object roles but still recomputes"""
+        with patch('ansible_base.rbac.triggers.compute_object_role_permissions') as mock_obj_update:
+
+            with bulk_rbac_caching(memory_safe=True):
+                # Multiple assignments that would normally collect object roles
+                inv_rd.give_permission(rando, inventory)
+                org_inv_rd.give_permission(team, organization)
+
+                # Should not be called during bulk mode
+                mock_obj_update.assert_not_called()
+
+            # Should be called once with no specific object roles (full recomputation)
+            mock_obj_update.assert_called_once_with()
+
+    def test_bulk_caching_memory_safe_vs_normal_mode(self, rando, inv_rd, inventory):
+        """Test that memory_safe mode calls recomputation while normal mode passes specific roles"""
+        # Test normal mode
+        with patch('ansible_base.rbac.triggers.compute_object_role_permissions') as mock_obj_update:
+            with bulk_rbac_caching(memory_safe=False):
+                assignment = inv_rd.give_permission(rando, inventory)
+
+            # Should be called with specific object roles
+            mock_obj_update.assert_called_once()
+            call_args = mock_obj_update.call_args
+            object_roles = call_args.kwargs['object_roles']
+            assert assignment.object_role in object_roles
+
+        # Clean up the assignment
+        inv_rd.remove_permission(rando, inventory)
+
+        # Test memory-safe mode
+        with patch('ansible_base.rbac.triggers.compute_object_role_permissions') as mock_obj_update:
+            with bulk_rbac_caching(memory_safe=True):
+                inv_rd.give_permission(rando, inventory)
+
+            # Should be called with no specific object roles (full recomputation)
+            mock_obj_update.assert_called_once_with()
+
+    def test_bulk_caching_memory_safe_with_team_updates(self, rando, team, member_rd):
+        """Test that memory_safe mode works correctly with team updates"""
+        with (
+            patch('ansible_base.rbac.triggers.compute_team_member_roles') as mock_team_update,
+            patch('ansible_base.rbac.triggers.compute_object_role_permissions') as mock_obj_update,
+        ):
+
+            with bulk_rbac_caching(memory_safe=True):
+                # Assignment that affects team membership
+                member_rd.give_permission(rando, team)
+
+                # Should not be called during bulk mode
+                mock_team_update.assert_not_called()
+                mock_obj_update.assert_not_called()
+
+            # Both should be called, but object role update should be full recomputation
+            mock_team_update.assert_called_once()
+            mock_obj_update.assert_called_once_with()
+
+    def test_bulk_caching_memory_safe_empty_context(self):
+        """Test that empty memory_safe context doesn't call cache functions"""
+        with (
+            patch('ansible_base.rbac.triggers.compute_team_member_roles') as mock_team_update,
+            patch('ansible_base.rbac.triggers.compute_object_role_permissions') as mock_obj_update,
+        ):
+
+            with bulk_rbac_caching(memory_safe=True):
+                # No operations performed
+                pass
+
+            # Should not call expensive functions if no changes were made, even in memory_safe mode
+            mock_team_update.assert_not_called()
+            mock_obj_update.assert_not_called()
+
+    def test_bulk_caching_memory_safe_nested_contexts(self, rando, inv_rd, inventory):
+        """Test that nested contexts with memory_safe work correctly"""
+        with patch('ansible_base.rbac.triggers.compute_object_role_permissions') as mock_obj_update:
+
+            with bulk_rbac_caching(memory_safe=True):
+                inv_rd.give_permission(rando, inventory)
+
+                # Nested context (memory_safe is ignored in nested calls)
+                with bulk_rbac_caching(memory_safe=False):
+                    # Another assignment in nested context
+                    # Should still not trigger updates
+                    pass
+
+                # Still in outer context, should not be called yet
+                mock_obj_update.assert_not_called()
+
+            # Only called once when exiting outermost context, with full recomputation
+            mock_obj_update.assert_called_once_with()
+
+    def test_bulk_caching_memory_safe_with_removal(self, rando, inv_rd, inventory):
+        """Test memory_safe mode when object role gets deleted during removal"""
+        # First give permission normally
+        inv_rd.give_permission(rando, inventory)
+
+        with patch('ansible_base.rbac.triggers.compute_object_role_permissions') as mock_obj_update:
+
+            with bulk_rbac_caching(memory_safe=True):
+                # Remove permission in bulk mode - this will delete the object role
+                inv_rd.remove_permission(rando, inventory)
+                mock_obj_update.assert_not_called()
+
+            # Should not call recomputation since object role was deleted (nothing to update)
+            # This matches the existing behavior in regular bulk mode
+            mock_obj_update.assert_not_called()
+
+    def test_bulk_caching_memory_safe_mixed_operations(self, rando, team, inv_rd, org_inv_rd, inventory, organization):
+        """Test memory_safe mode with mixed add/remove operations that result in net changes"""
+        with patch('ansible_base.rbac.triggers.compute_object_role_permissions') as mock_obj_update:
+
+            with bulk_rbac_caching(memory_safe=True):
+                # Add permissions (creates object roles)
+                inv_rd.give_permission(rando, inventory)
+                org_inv_rd.give_permission(team, organization)
+
+                # Remove one permission (may or may not delete object role)
+                inv_rd.remove_permission(rando, inventory)
+
+                # Add it back
+                inv_rd.give_permission(rando, inventory)
+
+                mock_obj_update.assert_not_called()
+
+            # Should call full recomputation since we had net updates
+            mock_obj_update.assert_called_once_with()

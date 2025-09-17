@@ -37,16 +37,23 @@ def _get_bulk_cache_state():
         _bulk_cache_state.active = False
         _bulk_cache_state.needs_team_update = False
         _bulk_cache_state.object_roles_to_update = set()
+        _bulk_cache_state.memory_safe = False
+        _bulk_cache_state.needs_object_role_update = False
     return _bulk_cache_state
 
 
 @contextmanager
-def bulk_rbac_caching():
+def bulk_rbac_caching(memory_safe=False):
     """
     Context manager that defers expensive RBAC cache updates during bulk operations.
 
     Instead of calling update_after_assignment for each permission change,
     this collects all the updates and performs them once when exiting the context.
+
+    Args:
+        memory_safe (bool): If True, doesn't store individual object roles to save memory.
+                           Instead performs a full re-computation of all object roles
+                           when exiting the context, similar to post_migrate behavior.
 
     Usage:
         with bulk_rbac_caching():
@@ -55,6 +62,11 @@ def bulk_rbac_caching():
             role_def.give_permission(user2, obj2)
             role_def.remove_permission(user3, obj3)
             # Cache updates happen here when exiting the context
+
+        with bulk_rbac_caching(memory_safe=True):
+            # For very large bulk operations where memory usage is a concern
+            # This will recompute all object roles instead of tracking specific ones
+            # ... many operations ...
     """
     state = _get_bulk_cache_state()
 
@@ -67,6 +79,8 @@ def bulk_rbac_caching():
     state.active = True
     state.needs_team_update = False
     state.object_roles_to_update = set()
+    state.memory_safe = memory_safe
+    state.needs_object_role_update = False
 
     try:
         yield
@@ -74,19 +88,30 @@ def bulk_rbac_caching():
         # Exit bulk mode and perform deferred updates
         needs_team_update = state.needs_team_update
         object_roles_to_update = state.object_roles_to_update.copy()
+        is_memory_safe = state.memory_safe
+        needs_object_role_update = state.needs_object_role_update
 
         # Reset state
         state.active = False
         state.needs_team_update = False
         state.object_roles_to_update = set()
+        state.memory_safe = False
+        state.needs_object_role_update = False
 
         # Perform the global update
-        if needs_team_update or object_roles_to_update:
-            logger.info(f'Performing bulk RBAC cache update: teams={needs_team_update}, object_roles={len(object_roles_to_update)}')
-            if needs_team_update:
-                compute_team_member_roles()
-            if object_roles_to_update:
-                compute_object_role_permissions(object_roles=object_roles_to_update)
+        if needs_team_update or object_roles_to_update or (is_memory_safe and needs_object_role_update):
+            if is_memory_safe and needs_object_role_update:
+                logger.info('Performing bulk RBAC cache update: memory_safe=True, recomputing all object roles')
+                if needs_team_update:
+                    compute_team_member_roles()
+                # In memory-safe mode, always recompute all object roles
+                compute_object_role_permissions()
+            elif not is_memory_safe:
+                logger.info(f'Performing bulk RBAC cache update: teams={needs_team_update}, object_roles={len(object_roles_to_update)}')
+                if needs_team_update:
+                    compute_team_member_roles()
+                if object_roles_to_update:
+                    compute_object_role_permissions(object_roles=object_roles_to_update)
 
 
 def team_ancestor_roles(team):
@@ -155,7 +180,12 @@ def update_after_assignment(update_teams, to_update):
         if update_teams:
             state.needs_team_update = True
         if to_update:
-            state.object_roles_to_update.update(to_update)
+            if state.memory_safe:
+                # In memory-safe mode, don't store individual object roles to save memory,
+                # but track that we need to do a full recomputation
+                state.needs_object_role_update = True
+            else:
+                state.object_roles_to_update.update(to_update)
         return
 
     # Normal mode - perform updates immediately
