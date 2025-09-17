@@ -110,7 +110,11 @@ def bulk_rbac_caching(memory_safe=False):
                 logger.info(f'Performing bulk RBAC cache update: teams={needs_team_update}, object_roles={len(object_roles_to_update)}')
                 if needs_team_update:
                     compute_team_member_roles()
-                if object_roles_to_update:
+                    # When team memberships change, always recompute object role permissions
+                    # to ensure the permission cache reflects new team relationships
+                    compute_object_role_permissions()
+                elif object_roles_to_update:
+                    # Only object roles changed, no team updates needed
                     compute_object_role_permissions(object_roles=object_roles_to_update)
 
 

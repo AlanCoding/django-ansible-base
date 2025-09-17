@@ -474,3 +474,41 @@ class TestBulkRBACCaching:
 
             # Should call full recomputation since we had net updates
             mock_obj_update.assert_called_once_with()
+
+    def test_bulk_caching_with_removal(self, rando, inv_rd, inventory):
+        """Test bulk caching when object role gets deleted during removal"""
+        # First give permission normally
+        inv_rd.give_permission(rando, inventory)
+
+        with patch('ansible_base.rbac.triggers.compute_object_role_permissions') as mock_obj_update:
+
+            with bulk_rbac_caching():
+                # Remove permission in bulk mode - this will delete the object role
+                inv_rd.remove_permission(rando, inventory)
+                mock_obj_update.assert_not_called()
+
+            # Should not be called since object role was deleted (nothing to update)
+            mock_obj_update.assert_not_called()
+
+    def test_bulk_caching_team_only_updates_fix(self, rando, team, member_rd):
+        """Test that team-only updates properly call compute_object_role_permissions"""
+        with (
+            patch('ansible_base.rbac.triggers.compute_team_member_roles') as mock_team_update,
+            patch('ansible_base.rbac.triggers.compute_object_role_permissions') as mock_obj_update,
+        ):
+
+            with bulk_rbac_caching():
+                # This assignment affects team membership but doesn't create a new object role
+                # that would be added to object_roles_to_update
+                member_rd.give_permission(rando, team)
+
+                # Should not be called during bulk mode
+                mock_team_update.assert_not_called()
+                mock_obj_update.assert_not_called()
+
+            # CRITICAL: Both should be called when team updates happen
+            # This ensures the permission cache reflects new team relationships
+            mock_team_update.assert_called_once()
+            # This is the bug fix - compute_object_role_permissions should be called
+            # even when only team updates occurred (no object_roles_to_update)
+            mock_obj_update.assert_called_once_with()
