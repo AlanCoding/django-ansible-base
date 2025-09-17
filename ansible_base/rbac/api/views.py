@@ -225,7 +225,7 @@ class RoleTeamAssignmentViewSet(BaseAssignmentViewSet):
     """
 
     serializer_class = RoleTeamAssignmentSerializer
-    prefetch_related = ('team',)
+    prefetch_related = ('team__resource',)
     filter_backends = BaseAssignmentViewSet.filter_backends + [
         ansible_id_backend.TeamAnsibleIdAliasFilterBackend,
         ansible_id_backend.RoleAssignmentFilterBackend,
@@ -245,7 +245,7 @@ class RoleUserAssignmentViewSet(BaseAssignmentViewSet):
     """
 
     serializer_class = RoleUserAssignmentSerializer
-    prefetch_related = ('user',)
+    prefetch_related = ('user__resource',)
     filter_backends = BaseAssignmentViewSet.filter_backends + [
         ansible_id_backend.UserAnsibleIdAliasFilterBackend,
         ansible_id_backend.RoleAssignmentFilterBackend,
