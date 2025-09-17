@@ -178,18 +178,6 @@ def api_root(request, format=None):
     list_endpoints['role-metadata'] = get_fully_qualified_url('role-metadata')
     list_endpoints['timeout-view'] = get_fully_qualified_url('test-timeout-view')
 
-    from uuid import uuid4
-
-    from ansible_base.rbac.models import DABContentType, RoleDefinition
-    from test_app.models import Organization, User
-
-    DABContentType.objects.warm_cache()
-
-    rd = RoleDefinition.objects.get(name='Organization Admin')
-    user = User.objects.create(username=str(uuid4()))
-    org, _ = Organization.objects.get_or_create(name='Default')
-    rd.give_permission(user, org)
-
     return Response(list_endpoints)
 
 
