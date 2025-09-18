@@ -11,7 +11,7 @@ COMPOSE_UP_OPTS ?=
 DOCKER_COMPOSE ?= docker compose
 
 .PHONY: PYTHON_VERSION clean build\
-	check lint check_black check_flake8 check_isort check_pure_python_imports git_hooks_config
+	check lint check_black check_flake8 check_isort git_hooks_config
 
 PYTHON_VERSION:
 	@echo "$(subst python,,$(PYTHON))"
