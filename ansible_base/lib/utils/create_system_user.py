@@ -68,4 +68,5 @@ def get_system_username() -> Tuple[Optional[str], str]:
 
     from django.core.exceptions import ImproperlyConfigured
     from django.utils.translation import gettext as _
+
     raise ImproperlyConfigured(_("Setting %(setting_name)s needs to be a string not a %(type)s") % {'setting_name': setting_name, 'type': type(value)})
