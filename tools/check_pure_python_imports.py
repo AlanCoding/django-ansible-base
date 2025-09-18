@@ -8,10 +8,10 @@ requiring Django apps to be initialized.
 """
 
 import os
-import sys
 import subprocess
-import importlib.util
+import sys
 from pathlib import Path
+
 
 def find_python_modules(lib_path):
     """Find all Python modules in the lib directory."""
@@ -32,6 +32,7 @@ def find_python_modules(lib_path):
 
     return sorted(modules)
 
+
 def test_pure_python_import(module_name, base_path):
     """Test if a module can be imported with pure Python (no Django setup)."""
     test_script = f'''
@@ -51,13 +52,7 @@ except Exception as e:
         del env['DJANGO_SETTINGS_MODULE']
 
     try:
-        result = subprocess.run(
-            ['python', '-c', test_script],
-            capture_output=True,
-            text=True,
-            env=env,
-            timeout=30
-        )
+        result = subprocess.run(['python', '-c', test_script], capture_output=True, text=True, env=env, timeout=30)
 
         if result.returncode == 0 and "SUCCESS" in result.stdout:
             return True, None
@@ -68,6 +63,7 @@ except Exception as e:
         return False, "Import test timed out"
     except Exception as e:
         return False, f"Failed to run test: {e}"
+
 
 def main():
     """Main function to test all modules in ansible_base/lib."""
@@ -145,6 +141,7 @@ def main():
         if expected_failures:
             print(f"({len(expected_failures)} modules have expected failures due to Django dependencies)")
         sys.exit(0)
+
 
 if __name__ == "__main__":
     main()
