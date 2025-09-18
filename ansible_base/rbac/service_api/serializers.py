@@ -78,9 +78,6 @@ class BaseAssignmentSerializer(serializers.ModelSerializer):
     object_id = serializers.CharField(allow_blank=True, required=False, allow_null=True)
     from_service = serializers.CharField(write_only=True)
 
-    def get_created_by_ansible_id(self, obj):
-        return str(obj.created_by.resource.ansible_id)
-
     def validate(self, attrs):
         """The object_id vs ansible_id is the only dual-write case, where we have to accept either
 
