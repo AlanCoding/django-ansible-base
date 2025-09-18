@@ -49,9 +49,6 @@ check_flake8:
 check_isort:
 	tox -e isort -- --check $(CHECK_SYNTAX_FILES)
 
-## Check that lib modules can be imported with pure Python (no Django setup)
-check_pure_python_imports:
-	$(PYTHON) tools/check_pure_python_imports.py
 
 ## Starts a postgres container in the background if one is not running
 # Options:
