@@ -10,5 +10,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        # Removed team admins and user relationsips
+        # Removed team admins and user relationships
     ]
