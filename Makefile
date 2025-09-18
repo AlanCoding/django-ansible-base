@@ -11,7 +11,7 @@ COMPOSE_UP_OPTS ?=
 DOCKER_COMPOSE ?= docker compose
 
 .PHONY: PYTHON_VERSION clean build\
-	check lint check_black check_flake8 check_isort git_hooks_config
+	check lint check_black check_flake8 check_isort check_pure_python_imports git_hooks_config
 
 PYTHON_VERSION:
 	@echo "$(subst python,,$(PYTHON))"
@@ -48,6 +48,10 @@ check_flake8:
 ## Run isort syntax check
 check_isort:
 	tox -e isort -- --check $(CHECK_SYNTAX_FILES)
+
+## Check that lib modules can be imported with pure Python (no Django setup)
+check_pure_python_imports:
+	$(PYTHON) check_pure_python_imports.py
 
 ## Starts a postgres container in the background if one is not running
 # Options:

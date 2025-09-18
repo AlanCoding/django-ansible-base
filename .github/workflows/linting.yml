@@ -22,6 +22,8 @@ jobs:
             command: check_black
           - name: api-isort
             command: check_isort
+          - name: pure-python-imports
+            command: check_pure_python_imports
     steps:
       - name: Install make
         run: sudo apt install make
