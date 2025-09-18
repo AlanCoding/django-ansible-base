@@ -45,6 +45,8 @@ jobs:
         run: |
           pip3.11 install -r requirements/requirements.in
           pip3.11 install -r requirements/requirements_testing.txt
+          pip3.11 install -r requirements/requirements_channels.in
+          pip3.11 install -r requirements/requirements_redis_client.in
 
       - name: Run pure-python-imports check
         if: matrix.tests.name == 'pure-python-imports'
