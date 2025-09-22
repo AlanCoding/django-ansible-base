@@ -18,13 +18,14 @@ from django.db.models import QuerySet
 from django.db.utils import Error, IntegrityError
 from requests import HTTPError
 
-from ansible_base.rbac.models.role import AssignmentBase, RoleDefinition, RoleTeamAssignment, RoleUserAssignment
 from ansible_base.resource_registry.models import Resource, ResourceType
 from ansible_base.resource_registry.models.service_identifier import service_id
 from ansible_base.resource_registry.registry import get_registry
 from ansible_base.resource_registry.rest_client import ResourceAPIClient, get_resource_server_client
 
 logger = logging.getLogger('ansible_base.resources_api.tasks.sync')
+
+_is_rbac_installed = 'ansible_base.rbac' in settings.INSTALLED_APPS
 
 
 class ManifestNotFound(HTTPError):
@@ -139,7 +140,9 @@ def fetch_manifest(
     return [ManifestItem(**row) for row in csv_reader]
 
 
-def get_ansible_id_or_pk(assignment: AssignmentBase) -> str:
+def get_ansible_id_or_pk(assignment) -> str:
+    if not _is_rbac_installed:
+        raise RuntimeError("get_ansible_id_or_pk requires ansible_base.rbac to be installed")
     # For object-scoped assignments, try to get the object's ansible_id
     if assignment.content_type.model in ('organization', 'team'):
         object_resource = Resource.objects.filter(object_id=assignment.object_id, content_type__model=assignment.content_type.model).first()
@@ -153,7 +156,9 @@ def get_ansible_id_or_pk(assignment: AssignmentBase) -> str:
     return str(ansible_id_or_pk)
 
 
-def get_content_object(role_definition: RoleDefinition, assignment_tuple: AssignmentTuple) -> Any:
+def get_content_object(role_definition, assignment_tuple: AssignmentTuple) -> Any:
+    if not _is_rbac_installed:
+        raise RuntimeError("get_content_object requires ansible_base.rbac to be installed")
     content_object = None
     if role_definition.content_type.model in ('organization', 'team'):
         object_resource = Resource.objects.get(ansible_id=assignment_tuple.ansible_id_or_pk)
@@ -167,6 +172,8 @@ def get_content_object(role_definition: RoleDefinition, assignment_tuple: Assign
 
 def get_remote_assignments(api_client: ResourceAPIClient) -> set[AssignmentTuple]:
     """Fetch remote assignments from the resource server and convert to tuples."""
+    if not _is_rbac_installed:
+        raise RuntimeError("get_remote_assignments requires ansible_base.rbac to be installed")
     assignments = set()
 
     # Fetch user assignments with pagination
@@ -238,6 +245,10 @@ def get_remote_assignments(api_client: ResourceAPIClient) -> set[AssignmentTuple
 
 def get_local_assignments() -> set[AssignmentTuple]:
     """Get local assignments and convert to tuples."""
+    if not _is_rbac_installed:
+        raise RuntimeError("get_local_assignments requires ansible_base.rbac to be installed")
+    from ansible_base.rbac.models.role import RoleTeamAssignment, RoleUserAssignment
+
     assignments = set()
 
     # Get user assignments
@@ -294,6 +305,10 @@ def get_local_assignments() -> set[AssignmentTuple]:
 
 def delete_local_assignment(assignment_tuple: AssignmentTuple) -> bool:
     """Delete a local assignment based on the tuple."""
+    if not _is_rbac_installed:
+        raise RuntimeError("delete_local_assignment requires ansible_base.rbac to be installed")
+    from ansible_base.rbac.models.role import RoleDefinition
+
     try:
         role_definition = RoleDefinition.objects.get(name=assignment_tuple.role_definition_name)
 
@@ -320,6 +335,10 @@ def delete_local_assignment(assignment_tuple: AssignmentTuple) -> bool:
 
 def create_local_assignment(assignment_tuple: AssignmentTuple) -> bool:
     """Create a local assignment based on the tuple."""
+    if not _is_rbac_installed:
+        raise RuntimeError("create_local_assignment requires ansible_base.rbac to be installed")
+    from ansible_base.rbac.models.role import RoleDefinition
+
     try:
         role_definition = RoleDefinition.objects.get(name=assignment_tuple.role_definition_name)
 
@@ -692,6 +711,10 @@ class SyncExecutor:
     def _sync_assignments(self):
         """Synchronize role assignments between local and remote systems."""
         if not self.sync_assignments:
+            return
+
+        if not _is_rbac_installed:
+            self.write(">>> Skipping role assignments sync (rbac not installed)")
             return
 
         self.write(">>> Syncing role assignments")

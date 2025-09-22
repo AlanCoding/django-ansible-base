@@ -6,8 +6,16 @@ from typing import Optional
 import requests
 import urllib3
 from django.apps import apps
+from django.conf import settings
 
 from ansible_base.resource_registry.resource_server import get_resource_server_config, get_service_token
+
+
+def _check_rbac_installed():
+    """Check if ansible_base.rbac is installed and raise RuntimeError if not."""
+    if 'ansible_base.rbac' not in settings.INSTALLED_APPS:
+        raise RuntimeError("This operation requires ansible_base.rbac to be installed")
+
 
 ResourceRequestBody = namedtuple(
     "ResourceRequestBody",
@@ -166,13 +174,16 @@ class ResourceAPIClient:
 
     # RBAC related methods
     def list_role_types(self, filters: Optional[dict] = None):
+        _check_rbac_installed()
         return self._make_request("get", "role-types/", params=filters)
 
     def list_role_permissions(self, filters: Optional[dict] = None):
+        _check_rbac_installed()
         return self._make_request("get", "role-permissions/", params=filters)
 
     def list_user_assignments(self, user_ansible_id: Optional[str] = None, filters: Optional[dict] = None):
         """List user role assignments."""
+        _check_rbac_installed()
         params = (filters or {}).copy()
         if user_ansible_id is not None:
             params['user_ansible_id'] = user_ansible_id
@@ -180,12 +191,14 @@ class ResourceAPIClient:
 
     def list_team_assignments(self, team_ansible_id: Optional[str] = None, filters: Optional[dict] = None):
         """List team role assignments."""
+        _check_rbac_installed()
         params = (filters or {}).copy()
         if team_ansible_id is not None:
             params['team_ansible_id'] = team_ansible_id
         return self._make_request("get", "role-team-assignments/", params=params)
 
     def sync_assignment(self, assignment):
+        _check_rbac_installed()
         from ansible_base.rbac.service_api.serializers import ServiceRoleTeamAssignmentSerializer, ServiceRoleUserAssignmentSerializer
 
         if assignment._meta.model_name == 'roleuserassignment':
@@ -196,6 +209,7 @@ class ResourceAPIClient:
         return self._sync_assignment(serializer.data)
 
     def sync_unassignment(self, role_definition, actor, content_object):
+        _check_rbac_installed()
         data = {'role_definition': role_definition.name}
         data[f'{actor._meta.model_name}_ansible_id'] = str(actor.resource.ansible_id)
 
@@ -214,6 +228,7 @@ class ResourceAPIClient:
 
     def sync_object_deletion(self, content_object):
         """Sync object deletion to Gateway for cleanup of all related role assignments"""
+        _check_rbac_installed()
         from ansible_base.rbac.models import DABContentType
 
         # Get the content type information

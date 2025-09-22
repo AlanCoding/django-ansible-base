@@ -23,5 +23,11 @@ _service_id = None
 def service_id():
     global _service_id
     if not _service_id:
-        _service_id = str(ServiceID.objects.first().pk)
+        service_obj = ServiceID.objects.first()
+        if service_obj:
+            _service_id = str(service_obj.pk)
+        else:
+            # Create a ServiceID if none exists
+            service_obj = ServiceID.objects.create()
+            _service_id = str(service_obj.pk)
     return _service_id

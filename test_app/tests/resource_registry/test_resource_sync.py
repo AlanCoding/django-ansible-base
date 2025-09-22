@@ -71,12 +71,14 @@ def stdout():
     return Stdout()
 
 
+@pytest.mark.django_db
 def test_manifest_not_found(static_api_client, stdout):
     executor = SyncExecutor(api_client=static_api_client, resource_type_names=["shared.team"], stdout=stdout)
     executor.run()
     assert 'manifest for shared.team NOT FOUND.' in stdout.lines
 
 
+@pytest.mark.django_db
 def test_raises_manifest_stream_is_unavailable(static_api_client, stdout):
     static_api_client.router["resource-types/shared.organization/manifest/"] = {"status_code": 500, "content": "Server Error"}
     with pytest.raises(ResourceSyncHTTPError):
