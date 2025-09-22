@@ -21,8 +21,6 @@ from ansible_base.authentication.utils.authenticator_map import check_role_type,
 from ansible_base.lib.abstract_models import AbstractOrganization, AbstractTeam, CommonModel
 from ansible_base.lib.utils.auth import get_organization_model, get_team_model
 from ansible_base.lib.utils.string import is_empty
-from ansible_base.rbac.models import DABContentType
-from ansible_base.rbac.remote import get_local_resource_prefix
 
 from .trigger_definition import TRIGGER_DEFINITION
 
@@ -30,6 +28,9 @@ logger = logging.getLogger('ansible_base.authentication.utils.claims')
 Organization = get_organization_model()
 Team = get_team_model()
 User = get_user_model()
+
+
+is_rbac_installed = 'ansible_base.rbac' in settings.INSTALLED_APPS
 
 
 class TriggerResult(Enum):
@@ -722,7 +723,7 @@ class ReconcileUser:
 
         claims = getattr(user, 'claims', authenticator_user.claims)
 
-        if 'ansible_base.rbac' in settings.INSTALLED_APPS:
+        if is_rbac_installed:
             cls(claims, user, authenticator_user).manage_permissions()
         else:
             logger.info(_("Skipping user claims with RBAC roles, because RBAC app is not installed"))
@@ -876,7 +877,11 @@ class RoleUserAssignmentsCache:
     def __init__(self):
         self.cache = {}
         # NOTE(cutwater): We may probably execute this query once and cache the query results.
-        self.content_types = {content_type.model: content_type for content_type in DABContentType.objects.get_for_models(Organization, Team).values()}
+        self.content_types = {}
+        if is_rbac_installed:
+            from ansible_base.rbac.models import DABContentType
+
+            self.content_types = {content_type.model: content_type for content_type in DABContentType.objects.get_for_models(Organization, Team).values()}
         self.role_definitions = {}
 
     def items(self):
@@ -956,6 +961,12 @@ class RoleUserAssignmentsCache:
             - All cached assignments are marked with STATUS_EXISTING status
             - Role definitions are also cached separately in self.role_definitions
         """
+        local_resource_prefixes = ["shared"]
+        if is_rbac_installed:
+            from ansible_base.rbac.remote import get_local_resource_prefix
+
+            local_resource_prefixes.append(get_local_resource_prefix())
+
         for role_assignment in role_assignments:
             # Cache role definition
             if (role_definition := self._rd_by_id(role_assignment)) is None:
@@ -965,7 +976,7 @@ class RoleUserAssignmentsCache:
             # Skip role assignments that should not be cached
             if not (
                 role_assignment.content_type is None  # Global/system roles (e.g., System Auditor)
-                or role_assignment.content_type.service in [get_local_resource_prefix(), "shared"]
+                or role_assignment.content_type.service in local_resource_prefixes
             ):  # Local object roles
                 continue
 
