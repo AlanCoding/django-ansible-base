@@ -1,5 +1,6 @@
 # Logging
 
+
 django-ansible-base uses Python's logging library to emit messages as needed. If you would like to control the messages coming out of django-ansible-base you can add a logger for `ansible_base` like:
 
 ```
