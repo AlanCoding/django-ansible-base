@@ -1,5 +1,7 @@
+import sys
 import uuid
 
+from django.conf import settings
 from django.db import models
 
 
@@ -23,5 +25,11 @@ _service_id = None
 def service_id():
     global _service_id
     if not _service_id:
-        _service_id = str(ServiceID.objects.first().pk)
+        obj = ServiceID.objects.first()
+        if obj is None:
+            if settings.DEBUG or any("pytest" in arg for arg in sys.argv):
+                obj = ServiceID.objects.create()
+            else:
+                raise RuntimeError('Expected ServiceID to be created in data migrations but was not found')
+        _service_id = str(obj.pk)
     return _service_id
