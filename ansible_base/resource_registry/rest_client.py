@@ -14,7 +14,7 @@ from ansible_base.resource_registry.resource_server import get_resource_server_c
 
 def _check_rbac_installed():
     """Check if ansible_base.rbac is installed and raise RuntimeError if not."""
-    if is_rbac_installed():
+    if not is_rbac_installed():
         raise RuntimeError("This operation requires ansible_base.rbac to be installed")
 
 
