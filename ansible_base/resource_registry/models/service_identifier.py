@@ -2,7 +2,7 @@ import sys
 import uuid
 
 from django.conf import settings
-from django.db import models
+from django.db import IntegrityError, models, transaction
 
 
 class ServiceID(models.Model):
@@ -27,8 +27,13 @@ def service_id():
     if not _service_id:
         obj = ServiceID.objects.first()
         if obj is None:
-            if settings.DEBUG or any("pytest" in arg for arg in sys.argv):
-                obj = ServiceID.objects.create()
+            if settings.DEBUG or "pytest" in sys.argv:
+                try:
+                    with transaction.atomic():
+                        obj = ServiceID.objects.create(pk=1)
+                except IntegrityError:
+                    # Another thread/process won the race—read it
+                    obj = ServiceID.objects.get(pk=1)
             else:
                 raise RuntimeError('Expected ServiceID to be created in data migrations but was not found')
         _service_id = str(obj.pk)
