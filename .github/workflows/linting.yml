@@ -50,7 +50,7 @@ jobs:
 
       - name: Run pure-python-imports check
         if: matrix.tests.name == 'pure-python-imports'
-        run: python tools/check_pure_python_imports.py
+        run: python tools/scripts/check_pure_python_imports.py
 
       - name: Run check ${{ matrix.tests.name }}
         if: matrix.tests.name != 'pure-python-imports'

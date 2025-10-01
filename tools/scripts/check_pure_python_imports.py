@@ -67,7 +67,7 @@ except Exception as e:
 
 def main():
     """Main function to test all modules in ansible_base/lib."""
-    script_dir = Path(__file__).parent.parent  # Go up one level since we're in tools/
+    script_dir = Path(__file__).parent.parent.parent  # Go up two levels since we're in tools/scripts/
     lib_path = script_dir / "ansible_base" / "lib"
 
     if not lib_path.exists():
