@@ -30,10 +30,15 @@ def service_id():
             if settings.DEBUG or "pytest" in sys.argv:
                 try:
                     with transaction.atomic():
-                        obj = ServiceID.objects.create(pk=1)
+                        obj = ServiceID.objects.create()
+                        # Check if another process also created one during the race
+                        if ServiceID.objects.count() > 1:
+                            # We lost the race, delete ours and use the other
+                            obj.delete()
+                            obj = ServiceID.objects.first()
                 except IntegrityError:
                     # Another thread/process won the race—read it
-                    obj = ServiceID.objects.get(pk=1)
+                    obj = ServiceID.objects.first()
             else:
                 raise RuntimeError('Expected ServiceID to be created in data migrations but was not found')
         _service_id = str(obj.pk)
