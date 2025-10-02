@@ -136,7 +136,7 @@ legacy_tox_ini = """
         -r{toxinidir}/requirements/requirements_all.txt
         -r{toxinidir}/requirements/requirements_dev.txt
     commands_pre =
-        python -m pip install --upgrade "Django==5.2.8"
+        python -m pip install --upgrade "Django==5.2.7"
     docker = db
 
     [testenv:py311-django5]
@@ -144,7 +144,7 @@ legacy_tox_ini = """
         -r{toxinidir}/requirements/requirements_all.txt
         -r{toxinidir}/requirements/requirements_dev.txt
     commands_pre =
-        python -m pip install --upgrade "Django==5.2.8"
+        python -m pip install --upgrade "Django==5.2.7"
     docker = db
 
     [testenv:py312-django5]
@@ -152,7 +152,7 @@ legacy_tox_ini = """
         -r{toxinidir}/requirements/requirements_all.txt
         -r{toxinidir}/requirements/requirements_dev.txt
     commands_pre =
-        python -m pip install --upgrade "Django==5.2.8"
+        python -m pip install --upgrade "Django==5.2.7"
     docker = db
 
     [docker:db]
