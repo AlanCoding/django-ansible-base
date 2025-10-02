@@ -24,6 +24,18 @@ defusedxml==0.8.0rc2
     # via
     #   python3-openid
     #   social-auth-core
+django==4.2.21
+    # via
+    #   -r requirements/requirements.in
+    #   channels
+    #   django-auth-ldap
+    #   django-crum
+    #   django-flags
+    #   django-oauth-toolkit
+    #   django-redis
+    #   djangorestframework
+    #   drf-spectacular
+    #   social-auth-app-django
 django-auth-ldap==5.1.0
     # via -r requirements/requirements_authentication.in
 django-crum==0.7.9

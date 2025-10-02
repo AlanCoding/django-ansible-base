@@ -133,23 +133,26 @@ legacy_tox_ini = """
 
     [testenv:py310-django5]
     deps =
-        Django>=5.2
         -r{toxinidir}/requirements/requirements_all.txt
         -r{toxinidir}/requirements/requirements_dev.txt
+    commands_pre =
+        python -m pip install --upgrade "Django==5.2.8"
     docker = db
 
     [testenv:py311-django5]
     deps =
-        Django>=5.2
         -r{toxinidir}/requirements/requirements_all.txt
         -r{toxinidir}/requirements/requirements_dev.txt
+    commands_pre =
+        python -m pip install --upgrade "Django==5.2.8"
     docker = db
 
     [testenv:py312-django5]
     deps =
-        Django>=5.2
         -r{toxinidir}/requirements/requirements_all.txt
         -r{toxinidir}/requirements/requirements_dev.txt
+    commands_pre =
+        python -m pip install --upgrade "Django==5.2.8"
     docker = db
 
     [docker:db]
