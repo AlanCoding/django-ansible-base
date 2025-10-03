@@ -47,6 +47,10 @@ class CustomForwardOneToOneDescriptor(ForwardOneToOneDescriptor):
             False,
         )
 
+    def get_prefetch_querysets(self, instances, queryset=None):
+        # Django 5 compatibility: renamed from get_prefetch_queryset
+        return self.get_prefetch_queryset(instances, queryset)
+
 
 class AnsibleResourceField(models.ForeignObject):
     """
