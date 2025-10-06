@@ -15,7 +15,7 @@ class CustomForwardOneToOneDescriptor(ForwardOneToOneDescriptor):
 
     def get_prefetch_querysets(self, instances, querysets=None):
         if querysets and len(querysets) != 1:
-            raise ValueError("querysets argument of get_prefetch_querysets() should have a length " "of 1.")
+            raise ValueError("querysets argument of get_prefetch_querysets() should have a length of 1.")
         queryset = querysets[0] if querysets else self.get_queryset()
         queryset._add_hints(instance=instances[0])
 
