@@ -13,9 +13,11 @@ class CustomForwardOneToOneDescriptor(ForwardOneToOneDescriptor):
     def get_queryset(self, **hints):
         return self.field.remote_field.model._base_manager.db_manager(hints=hints).filter(content_type=ContentType.objects.get_for_model(self.field.model))
 
-    def get_prefetch_querysets(self, instances, queryset=None):
-        if not queryset:
+    def get_prefetch_querysets(self, instances, querysets=None):
+        if querysets is None:
             queryset = self.get_queryset()
+        else:
+            queryset = querysets[0]
         queryset._add_hints(instance=instances[0])
 
         query = models.Q.create(
@@ -49,7 +51,9 @@ class CustomForwardOneToOneDescriptor(ForwardOneToOneDescriptor):
 
     def get_prefetch_queryset(self, instances, queryset=None):
         # Django 4 compatibility: renamed to get_prefetch_querysets in Django 5
-        return self.get_prefetch_querysets(instances, queryset)
+        if queryset is None:
+            return self.get_prefetch_querysets(instances)
+        return self.get_prefetch_querysets(instances, [queryset])
 
 
 class AnsibleResourceField(models.ForeignObject):
