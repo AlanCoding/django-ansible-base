@@ -48,7 +48,7 @@ class CustomForwardOneToOneDescriptor(ForwardOneToOneDescriptor):
             False,
         )
 
-    def get_prefetch_queryset(self, instances, queryset=None):  # NOSONAR
+    def get_prefetch_queryset(self, instances, queryset=None):  # NOSONAR  # pragma: no cover
         # Django 4 compatibility: renamed to get_prefetch_querysets in Django 5
         if queryset is None:
             return self.get_prefetch_querysets(instances)
