@@ -674,7 +674,7 @@ def org_member_rd():
 
 @pytest.fixture
 def member_rd():
-    "Member role for a team, place in root conftest because it is needed for the team users tracked relationship"
+    "Member role for a team"
     RoleDefinition.objects.managed.clear()
     yield RoleDefinition.objects.managed.team_member
     RoleDefinition.objects.managed.clear()
@@ -682,7 +682,7 @@ def member_rd():
 
 @pytest.fixture
 def admin_rd():
-    "Member role for a team, place in root conftest because it is needed for the team users tracked relationship"
+    "Admin role for a team"
     RoleDefinition.objects.managed.clear()
     yield RoleDefinition.objects.managed.team_admin
     RoleDefinition.objects.managed.clear()
