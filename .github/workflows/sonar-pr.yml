@@ -61,8 +61,8 @@ jobs:
           HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Find all downloaded coverage XML files
-          coverage_files=$(find . -name "coverage-*.xml" -type f | tr '\n' ',' | sed 's/,$//')
+          # Find all downloaded coverage XML files (artifacts are extracted into subdirectories)
+          coverage_files=$(find ./coverage-* -name "coverage.xml" -type f 2>/dev/null | tr '\n' ',' | sed 's/,$//')
           echo "Found coverage files: $coverage_files"
           echo "COVERAGE_PATHS=$coverage_files" >> $GITHUB_ENV
 
@@ -72,7 +72,7 @@ jobs:
           echo "├── Repo: $REPO_NAME"
 
           # Extract PR number from first coverage.xml file found
-          first_coverage=$(find . -name "coverage-*.xml" -type f | head -1)
+          first_coverage=$(find ./coverage-* -name "coverage.xml" -type f 2>/dev/null | head -1)
           if [ -f "$first_coverage" ]; then
             PR_NUMBER=$(grep -m 1 '<!-- PR' "$first_coverage" | awk '{print $3}' || echo "")
           else
@@ -154,8 +154,8 @@ jobs:
           BRANCH_NAME: ${{ github.event.workflow_run.head_branch }}
           REPO_NAME: ${{ github.event.repository.full_name }}
         run: |
-          # Find all downloaded coverage XML files
-          coverage_files=$(find . -name "coverage-*.xml" -type f | tr '\n' ',' | sed 's/,$//')
+          # Find all downloaded coverage XML files (artifacts are extracted into subdirectories)
+          coverage_files=$(find ./coverage-* -name "coverage.xml" -type f 2>/dev/null | tr '\n' ',' | sed 's/,$//')
           echo "Found coverage files: $coverage_files"
           echo "COVERAGE_PATHS=$coverage_files" >> $GITHUB_ENV
 
