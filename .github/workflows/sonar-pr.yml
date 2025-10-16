@@ -44,14 +44,14 @@ jobs:
         with:
           show-progress: false
 
-      # Download coverage artifact from CI workflow
-      - name: Download coverage artifact
+      # Download all individual coverage artifacts from CI workflow
+      - name: Download coverage artifacts
         uses: dawidd6/action-download-artifact@246dbf436b23d7c49e21a7ab8204ca9ecd1fe615
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           workflow: CI
           run_id: ${{ github.event.workflow_run.id }}
-          name: coverage
+          pattern: coverage-*
 
       # Extract PR metadata from workflow_run event
       - name: Set PR metadata and prepare for analysis
@@ -61,14 +61,20 @@ jobs:
           HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # Find all downloaded coverage XML files (artifacts are extracted into subdirectories)
+          coverage_files=$(find ./coverage-* -name "coverage.xml" -type f 2>/dev/null | tr '\n' ',' | sed 's/,$//')
+          echo "Found coverage files: $coverage_files"
+          echo "COVERAGE_PATHS=$coverage_files" >> $GITHUB_ENV
+
           echo "🔍 SonarCloud Analysis Decision Summary"
           echo "========================================"
           echo "├── CI Event: ✅ Pull Request"
           echo "├── Repo: $REPO_NAME"
 
-          # Extract PR number from coverage.xml
-          if [ -f coverage.xml ]; then
-            PR_NUMBER=$(grep -m 1 '<!-- PR' coverage.xml | awk '{print $3}' || echo "")
+          # Extract PR number from first coverage.xml file found
+          first_coverage=$(find ./coverage-* -name "coverage.xml" -type f 2>/dev/null | head -1)
+          if [ -f "$first_coverage" ]; then
+            PR_NUMBER=$(grep -m 1 '<!-- PR' "$first_coverage" | awk '{print $3}' || echo "")
           else
             PR_NUMBER=""
           fi
@@ -92,6 +98,14 @@ jobs:
           echo "├── Head Branch: $PR_HEAD"
           echo "├── Coverage Data: ✅ Available"
           echo "└── Result: ✅ Running SonarCloud PR analysis"
+
+          # Validate coverage paths
+          if [ -z "$coverage_files" ]; then
+            echo "##[error]❌ FATAL: No coverage files found"
+            echo "##[error]This job requires coverage data to run analysis."
+            echo "##[error]The CI workflow should have uploaded coverage artifacts."
+            exit 1
+          fi
 
           # Export to GitHub env for later steps
           echo "PR_NUMBER=$PR_NUMBER" >> $GITHUB_ENV
@@ -118,6 +132,7 @@ jobs:
             -Dsonar.pullrequest.key=${{ env.PR_NUMBER }}
             -Dsonar.pullrequest.branch=${{ env.PR_HEAD }}
             -Dsonar.pullrequest.base=${{ env.PR_BASE }}
+            -Dsonar.python.coverage.reportPaths=${{ env.COVERAGE_PATHS }}
 
   sonar-branch-analysis:
     name: SonarCloud Branch Analysis
@@ -132,33 +147,39 @@ jobs:
         with:
           show-progress: false
 
-      # Download coverage artifact from CI workflow (optional for branch pushes)
-      - name: Download coverage artifact
+      # Download all individual coverage artifacts from CI workflow (optional for branch pushes)
+      - name: Download coverage artifacts
         continue-on-error: true
         uses: dawidd6/action-download-artifact@246dbf436b23d7c49e21a7ab8204ca9ecd1fe615
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           workflow: CI
           run_id: ${{ github.event.workflow_run.id }}
-          name: coverage
+          pattern: coverage-*
 
       - name: Print SonarCloud Analysis Summary
         env:
           BRANCH_NAME: ${{ github.event.workflow_run.head_branch }}
           REPO_NAME: ${{ github.event.repository.full_name }}
         run: |
+          # Find all downloaded coverage XML files (artifacts are extracted into subdirectories)
+          coverage_files=$(find ./coverage-* -name "coverage.xml" -type f 2>/dev/null | tr '\n' ',' | sed 's/,$//')
+          echo "Found coverage files: $coverage_files"
+          echo "COVERAGE_PATHS=$coverage_files" >> $GITHUB_ENV
+
           echo "🔍 SonarCloud Analysis Summary"
           echo "=============================="
           echo "├── CI Event: ✅ Push (via workflow_run)"
           echo "├── Repo: $REPO_NAME"
           echo "├── Branch: $BRANCH_NAME"
-          
-          if [ -f coverage.xml ]; then
+          echo "├── Coverage Files: ${coverage_files:-none}"
+
+          if [ -n "$coverage_files" ]; then
             echo "├── Coverage Data: ✅ Available"
           else
             echo "├── Coverage Data: ⚠️  Not available (analysis will proceed without coverage)"
           fi
-          
+
           echo "└── Result: ✅ Running SonarCloud branch analysis"
 
       - name: SonarCloud Scan
@@ -170,3 +191,4 @@ jobs:
           args: >
             -Dsonar.scm.revision=${{ github.event.workflow_run.head_sha }}
             -Dsonar.branch.name=${{ github.event.workflow_run.head_branch }}
+            ${{ env.COVERAGE_PATHS && format('-Dsonar.python.coverage.reportPaths={0}', env.COVERAGE_PATHS) || '' }}
