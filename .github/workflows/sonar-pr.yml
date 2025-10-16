@@ -99,6 +99,14 @@ jobs:
           echo "├── Coverage Data: ✅ Available"
           echo "└── Result: ✅ Running SonarCloud PR analysis"
 
+          # Validate coverage paths
+          if [ -z "$coverage_files" ]; then
+            echo "##[error]❌ FATAL: No coverage files found"
+            echo "##[error]This job requires coverage data to run analysis."
+            echo "##[error]The CI workflow should have uploaded coverage artifacts."
+            exit 1
+          fi
+
           # Export to GitHub env for later steps
           echo "PR_NUMBER=$PR_NUMBER" >> $GITHUB_ENV
           echo "PR_BASE=$PR_BASE" >> $GITHUB_ENV
