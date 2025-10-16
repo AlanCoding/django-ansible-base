@@ -4,32 +4,7 @@ on:
   pull_request:
   push:
 jobs:
-  check:
-    name: django-ansible-base - check
-    runs-on: ubuntu-latest
-    permissions:
-      packages: write
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          show-progress: false
-
-      - name: Install build requirements
-        run: sudo apt-get update && sudo apt-get install -y libsasl2-dev libldap2-dev libssl-dev libxmlsec1-dev
-
-      - name: Install python 3.11
-        uses: actions/setup-python@v4
-        with:
-          python-version: "3.11"
-
-      - name: Install tox
-        run: pip3.11 install tox tox-docker
-
-      - name: Run linters via tox
-        run: tox --colored yes -e check
-
-  test:
+  tox:
     name: django-ansible-base - ${{ matrix.tests.env }}
     runs-on: ubuntu-latest
     permissions:
@@ -39,17 +14,25 @@ jobs:
       fail-fast: false
       matrix:
         tests:
+          - env: check
+            python-version: "3.11"
+            sonar: false
+            junit-xml-upload: false
           - env: py312
             python-version: "3.12"
+            sonar: false
             junit-xml-upload: false
           - env: py310
             python-version: "3.10"
+            sonar: false
             junit-xml-upload: false
           - env: py311
             python-version: "3.11"
+            sonar: true
             junit-xml-upload: true
           - env: py311sqlite
             python-version: "3.11"
+            sonar: false
             junit-xml-upload: false
     steps:
       - uses: actions/checkout@v4
@@ -73,12 +56,12 @@ jobs:
           tox --colored yes -e ${{ matrix.tests.env }}
 
       - name: Inject PR number into coverage.xml
-        if: hashFiles('coverage.xml') != ''
+        if: matrix.tests.env != 'check' && hashFiles('coverage.xml') != ''
         run: sed -i '2i <!-- PR ${{ github.event.number }} -->' coverage.xml
 
       - name: Upload coverage as artifact
         uses: actions/upload-artifact@v4
-        if: hashFiles('coverage.xml') != ''
+        if: matrix.tests.env != 'check' && hashFiles('coverage.xml') != ''
         with:
           name: coverage-${{ matrix.tests.env }}
           path: coverage.xml
