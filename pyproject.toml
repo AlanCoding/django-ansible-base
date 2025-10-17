@@ -172,9 +172,6 @@ legacy_tox_ini = """
         -r{toxinidir}/requirements/requirements_feature_flags.in
         -r{toxinidir}/requirements/requirements_testing.txt
         -r{toxinidir}/requirements/requirements_dev.txt
-    docker = db
-    allowlist_externals = sh
-    commands = pytest -n auto --color=yes --cov=. --cov-report=xml:coverage.xml --cov-report=html --cov-report=json --cov-branch --junit-xml=django-ansible-base-test-results.xml {env:ANSIBLE_BASE_PYTEST_ARGS} {env:ANSIBLE_BASE_TEST_DIRS:test_app/tests} {posargs}
 
     [docker:db]
     dockerfile = {toxinidir}/tools/dev_postgres/Dockerfile
