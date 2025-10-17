@@ -98,7 +98,7 @@ legacy_tox_ini = """
     env_list =
         check
         py312
-        py312sqlite
+        py312-sqlite
         py312-django4
     labels =
         test = py311-check, py312-check, py311, py312, py311-sqlite, py312-sqlite, py312-django4, py311-in-files, py312-in-files
