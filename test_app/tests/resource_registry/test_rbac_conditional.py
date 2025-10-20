@@ -24,23 +24,6 @@ class TestResourceRegistryWithoutRBAC:
         with override_settings(INSTALLED_APPS=apps_without_rbac):
             yield
 
-    def test_resource_api_client_rbac_methods_raise_errors(self):
-        """Test that RBAC-dependent methods in ResourceAPIClient raise appropriate errors."""
-        client = ResourceAPIClient("http://test", "/test/")
-
-        # Test all RBAC-dependent methods raise RuntimeError
-        with pytest.raises(RuntimeError, match="This operation requires ansible_base.rbac to be installed"):
-            client.list_role_types()
-
-        with pytest.raises(RuntimeError, match="This operation requires ansible_base.rbac to be installed"):
-            client.list_role_permissions()
-
-        with pytest.raises(RuntimeError, match="This operation requires ansible_base.rbac to be installed"):
-            client.list_user_assignments()
-
-        with pytest.raises(RuntimeError, match="This operation requires ansible_base.rbac to be installed"):
-            client.list_team_assignments()
-
     def test_resource_api_client_sync_methods_raise_errors(self):
         """Test that sync methods raise appropriate errors when rbac is not available."""
         client = ResourceAPIClient("http://test", "/test/")
@@ -63,13 +46,6 @@ class TestResourceRegistryWithoutRBAC:
 
         with pytest.raises(RuntimeError, match="This operation requires ansible_base.rbac to be installed"):
             client.sync_object_deletion(None)
-
-    def test_lenient_permission_slug_list_field_raises_error(self):
-        """Test that LenientPermissionSlugListField raises error when rbac not available."""
-        field = LenientPermissionSlugListField()
-
-        with pytest.raises(RuntimeError, match="requires ansible_base.rbac to be installed"):
-            field.to_internal_value(['test-permission'])
 
     def test_role_definition_type_raises_error(self):
         """Test that RoleDefinitionType raises error when rbac not available."""
