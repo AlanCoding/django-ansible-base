@@ -6,7 +6,6 @@ from typing import Optional
 import requests
 import urllib3
 from django.apps import apps
-from django.conf import settings
 
 from ansible_base.lib.utils.apps import is_rbac_installed
 from ansible_base.resource_registry.resource_server import get_resource_server_config, get_service_token
