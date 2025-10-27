@@ -1,17 +1,16 @@
 import logging
-from urllib.parse import urljoin
 
-import requests
 from django.contrib.auth import get_user_model
 from django.contrib.auth.backends import ModelBackend
-from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
-from requests.auth import HTTPBasicAuth
+from rest_framework import serializers
+from rest_framework.serializers import ValidationError
 
 from ansible_base.authentication.authenticator_plugins.base import AbstractAuthenticatorPlugin, BaseAuthenticatorConfiguration
 from ansible_base.authentication.utils.authentication import get_or_create_authenticator_user
 from ansible_base.authentication.utils.claims import update_user_claims
-from ansible_base.lib.utils.settings import get_setting
+from ansible_base.lib.serializers.fields import ListField
+from ansible_base.lib.utils.imports import MODULE_PATH_PATTERN, import_object
 
 logger = logging.getLogger('ansible_base.authentication.authenticator_plugins.local')
 
@@ -24,10 +23,42 @@ UserModel = get_user_model()
 class LocalConfiguration(BaseAuthenticatorConfiguration):
     documentation_url = "https://docs.djangoproject.com/en/4.2/ref/contrib/auth/#django.contrib.auth.backends.ModelBackend"
 
-    def validate(self, data):
-        if data != {}:
-            raise ValidationError(_({"configuration": "Can only be {} for local authenticators"}))
-        return data
+    fallback_authentication = ListField(
+        help_text=_(
+            'List of fallback authentication handler modules to attempt when primary authentication fails. '
+            'Each item should be a Python module path containing a FallbackAuthenticator class '
+            '(e.g., "my_app.authentication.fallbacks.my_fallback_service"). '
+            'The module must contain a class named "FallbackAuthenticator". '
+            'Fallbacks are attempted in the order specified.'
+        ),
+        allow_null=True,
+        required=False,
+        default=[],
+        ui_field_label=_('Fallback Authentication Handlers'),
+        child=serializers.CharField(),
+    )
+
+    def validate(self, attrs):
+        """
+        Validate the configuration and ensure fallback authenticators are valid module paths.
+        """
+        # Call parent validation
+        attrs = super().validate(attrs)
+
+        # Validate fallback_authentication module paths
+        fallback_paths = attrs.get('fallback_authentication', [])
+        if fallback_paths:
+            errors = {}
+            for index, path in enumerate(fallback_paths):
+                if not isinstance(path, str):
+                    errors[index] = _('Must be a string representing a Python module path')
+                elif not MODULE_PATH_PATTERN.match(path):
+                    errors[index] = _('Invalid module path format. Must be a valid Python module path with at least one dot (e.g., "myapp.fallbacks.handler")')
+
+            if errors:
+                raise ValidationError({'fallback_authentication': errors})
+
+        return attrs
 
 
 class AuthenticatorPlugin(ModelBackend, AbstractAuthenticatorPlugin):
@@ -50,25 +81,12 @@ class AuthenticatorPlugin(ModelBackend, AbstractAuthenticatorPlugin):
             logger.info(f"Local authenticator {self.database_instance.name} is disabled, skipping")
             return None
 
+        # Try standard ModelBackend authentication first
         user = super().authenticate(request, username, password, **kwargs)
-        controller_login_results = None
-        if (
-            not user
-            and request
-            and request.path.startswith('/api/gateway/v1/login/')
-            and (controller_login_results := self._can_authenticate_from_controller(username, password))
-        ):
-            logger.warning("User has been validated by controller, updating gateway user.")
-            self.update_gateway_user(username, password)
-            user = super().authenticate(request, username, password, **kwargs)
-        elif not user:
-            logger.info(
-                "Fallback authentication condition not met: "
-                f"username={username}, "
-                f"request={'set' if request else 'None'}, "
-                f"login_path={'True' if request and request.path.startswith('/api/gateway/v1/login/') else 'False'}, "
-                f"controller_login_results={controller_login_results}"
-            )
+
+        # If authentication failed, try fallback authenticators
+        if not user:
+            user = self._try_fallback_authenticators(request, username, password, **kwargs)
 
         # This auth class doesn't create any new local users, but we still need to make sure
         # it has an AuthenticatorUser associated with it.
@@ -88,137 +106,63 @@ class AuthenticatorPlugin(ModelBackend, AbstractAuthenticatorPlugin):
             )
         return update_user_claims(user, self.database_instance, [])
 
-    def _can_authenticate_from_controller(self, username, password):
+    def _try_fallback_authenticators(self, request, username, password, **kwargs):
         """
-        Check if a user exists in the AuthenticatorUser table with the local authenticator provider.
-        If the user is valid, update the gateway users credentials with the controller credentials.
+        Try each configured fallback authenticator in order.
+
+        Fallback authenticators are loaded as plugins from the 'fallback_authentication' configuration
+        field, which should be a list of module paths. Each module must contain a class named
+        'FallbackAuthenticator'.
+
+        Example:
+            Configuration: ['my_service.authentication.fallbacks.my_fallback_service']
+            Loads: my_service.authentication.fallbacks.my_fallback_service.FallbackAuthenticator
+
+        Each fallback authenticator is instantiated and checked to see if it should be attempted
+        using its should_attempt() method. If so, its authenticate() method is called.
+
+        If a fallback authenticator returns a user, we use that user. Otherwise, we continue
+        to the next fallback authenticator.
+
+        Args:
+            request: The HTTP request object
+            username: The username to authenticate
+            password: The password to authenticate
+            **kwargs: Additional authentication parameters
+
+        Returns:
+            The authenticated user object if successful, None otherwise
         """
-        try:
-            user = UserModel._default_manager.get_by_natural_key(username)
-        except UserModel.DoesNotExist:
-            logger.warning(f"User '{username}' does not exist in the database.")
-            return False
+        configuration = self.database_instance.configuration if self.database_instance else {}
+        fallback_paths = configuration.get('fallback_authentication', [])
 
-        # Skip controller authentication if user has use_controller_password field set to False
-        # Default to False when field doesn't exist (test environments)
-        if not getattr(user, 'use_controller_password', False):
-            logger.warning(f"User '{username}' password not in Controller.")
-            return False
+        for module_path in fallback_paths:
+            try:
+                # Load the fallback plugin (must contain a class named 'FallbackAuthenticator')
+                fallback_class = import_object(module_path, 'FallbackAuthenticator')
 
-        if controller_user := self._get_controller_user(username, password):
-            # Validate controller_user has a ldap_dn field, if it is not None, then the user is a local user
-            ldap_dn = controller_user.get("ldap_dn")
-            if ldap_dn is None or ldap_dn != "":
-                logger.warning(f"User '{username}' is an ldap user and can not be authenticated.")
-                return False
-            if controller_user.get('password', None) != "$encrypted$":
-                logger.warning(f"User '{username}' is an enterprise user and can not be authenticated.")
-                return False
-            return True
+                # Instantiate the fallback authenticator
+                fallback_authenticator = fallback_class()
+
+                logger.info(f"Attempting fallback authenticator: {module_path}")
+
+                # Try the fallback authentication
+                user = fallback_authenticator.authenticate(request, username, password, **kwargs)
+
+                # If fallback returned a user, use it
+                if user:
+                    logger.info(f"Fallback authenticator {module_path} returned user {user.username}")
+                    return user
+
+            except (ImportError, AttributeError, ValueError) as e:
+                logger.error(f"Failed to load fallback authenticator plugin from {module_path}: {e}")
+                continue
+            except Exception as e:
+                logger.error(f"Error in fallback authenticator {module_path}: {e}")
+                continue
+
+        if not fallback_paths:
+            logger.debug("No fallback authenticators configured")
         else:
-            return False
-
-    def _get_controller_user(self, username: str, password: str):
-        """
-        Get the user from the controller by making a request to the controller API /me/ endpoint.
-        If the user is not found, return None.
-        If the user is found, return the user.
-        """
-
-        controller_base_domain = get_setting('gateway_proxy_url')
-        if not controller_base_domain:
-            logger.warning("Controller authentication failed, unable to get controller base domain")
-            return None
-        controller_url = urljoin(controller_base_domain, "/api/controller/v2/me/")
-
-        timeout = get_setting('GRPC_SERVER_AUTH_SERVICE_TIMEOUT')
-        timeout = self._convert_to_seconds(timeout)
-
-        try:
-            response = requests.get(controller_url, auth=HTTPBasicAuth(username, password), timeout=int(timeout))
-            response.raise_for_status()
-            user_data = response.json()
-
-            # Check if count exists and equals 1
-            count = user_data.get("count")
-            if count != 1:
-                logger.warning(f"Unable to authenticate user '{username}' with controller.")
-                return None
-
-            # Check if results exists and is a non-empty list
-            results = user_data.get("results")
-            if not results or not isinstance(results, list) or len(results) == 0:
-                logger.info(f"Unable to authenticate user '{username}' with controller. Invalid or empty results.")
-                return None
-            if not isinstance(results[0], dict):
-                logger.warning(f"Unable to authenticate user '{username}' with controller. user was not a dictionary.")
-                return False
-
-            return results[0]
-        except requests.exceptions.HTTPError as http_err:
-            logger.warning(f"HTTP error occurred: {http_err}")
-            return None
-        except requests.exceptions.ConnectionError as conn_err:
-            logger.warning(f"Connection error occurred: {conn_err}")
-            return None
-        except requests.exceptions.Timeout as timeout_err:
-            logger.warning(f"Timeout error occurred: {timeout_err}")
-            return None
-        except requests.exceptions.RequestException as err:
-            logger.warning(f"An unexpected error occurred: {err}")
-            return None
-        except ValueError as json_err:
-            logger.warning(f"JSON decode error occurred: {json_err}")
-            return None
-        except Exception as err:
-            logger.warning(f"An unexpected error occurred: {err}")
-            return None
-
-    def update_gateway_user(self, username, password):
-        """
-        Update the gateway user with the controller credentials and set is_partially_migrated to False.
-        """
-        user = UserModel._default_manager.get_by_natural_key(username)
-        user.set_password(password)
-
-        # Set use_controller_password to False if the field exists
-        update_fields = ['password']
-        if hasattr(user, 'use_controller_password'):
-            user.use_controller_password = False
-            update_fields.append('use_controller_password')
-
-        user.save(update_fields=update_fields)
-        logger.info(f"Updated user {username} gateway account")
-
-    def _convert_to_seconds(self, s):
-        """
-        Converts a time string like '15s', '5m', '1h', '2d', '3w' to seconds.
-        """
-        default = 10
-        try:
-            unit = s[-1].lower()
-            value = int(s[:-1])
-
-            ret_val = 0
-            # Check units
-            if unit == '-':
-                ret_val = default
-            elif unit == 's':
-                ret_val = value
-            elif unit == 'm':
-                ret_val = value * 60
-            elif unit == 'h':
-                ret_val = value * 3600  # 60 * 60
-            elif unit == 'd':
-                ret_val = value * 86400  # 60 * 60 * 24
-            elif unit == 'w':
-                ret_val = value * 604800  # 60 * 60 * 24 * 7
-            else:
-                ret_val = int(s)
-            # If less than or equal to 0, return default
-            if ret_val <= 0:
-                ret_val = default
-            return ret_val
-        except Exception:
-            logger.warning(f"Invalid duration format: '{s}'")
-            return default
+            logger.debug("All fallback authenticators exhausted, authentication failed")
+        return None
