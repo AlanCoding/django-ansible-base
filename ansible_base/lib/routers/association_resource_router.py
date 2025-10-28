@@ -3,7 +3,6 @@ import logging
 from itertools import chain
 from typing import Type
 
-from django.conf import settings
 from django.db.models import Model
 from django.db.models.fields import IntegerField
 from django.db.models.query import QuerySet
@@ -16,6 +15,8 @@ from rest_framework.permissions import SAFE_METHODS
 from rest_framework.request import clone_request
 from rest_framework.response import Response
 from rest_framework.viewsets import ViewSetMixin
+
+from ansible_base.lib.utils.apps import is_rbac_installed
 
 logger = logging.getLogger('ansible_base.lib.routers.association_resource_router')
 
@@ -117,7 +118,7 @@ class RelatedListMixin:
         will not check "change" permissions to the parent object on POST
         this method checks parent change permission, view permission should be handled by filter_queryset
         """
-        if (request.method not in SAFE_METHODS) and 'ansible_base.rbac' in settings.INSTALLED_APPS:
+        if (request.method not in SAFE_METHODS) and is_rbac_installed():
             from ansible_base.rbac.permission_registry import permission_registry
 
             if permission_registry.is_registered(parent_obj):

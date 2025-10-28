@@ -960,10 +960,9 @@ class RoleUserAssignmentsCache:
             - Role definitions are also cached separately in self.role_definitions
         """
         local_resource_prefixes = ["shared"]
-        if is_rbac_installed():
-            from ansible_base.rbac.remote import get_local_resource_prefix
+        from ansible_base.rbac.remote import get_local_resource_prefix  # RBAC must be installed to use method
 
-            local_resource_prefixes.append(get_local_resource_prefix())
+        local_resource_prefixes.append(get_local_resource_prefix())
 
         for role_assignment in role_assignments:
             # Cache role definition
