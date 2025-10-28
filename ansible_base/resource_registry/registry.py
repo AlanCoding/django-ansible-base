@@ -1,10 +1,10 @@
 from collections import namedtuple
 from typing import List, Optional
 
-from django.conf import settings
 from django.contrib.auth import authenticate
 from django.utils.translation import gettext_lazy as _
 
+from ansible_base.lib.utils.apps import is_rbac_installed
 from ansible_base.resource_registry.utils.resource_type_processor import ResourceTypeProcessor, RoleDefinitionProcessor
 
 ParentResource = namedtuple("ParentResource", ["model", "field_name"])
@@ -31,7 +31,7 @@ class ServiceAPIConfig:
             "shared.organization": ResourceTypeProcessor,
             "shared.user": ResourceTypeProcessor,
         }
-        if 'ansible_base.rbac' in settings.INSTALLED_APPS:
+        if is_rbac_installed():
             processors["shared.roledefinition"] = RoleDefinitionProcessor
         return processors
 

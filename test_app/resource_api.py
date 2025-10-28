@@ -1,9 +1,9 @@
-from django.conf import settings
 from django.contrib.auth import get_user_model
 
 from ansible_base.authentication.models import Authenticator
+from ansible_base.rbac.models import RoleDefinition
 from ansible_base.resource_registry.registry import ResourceConfig, ServiceAPIConfig, SharedResource
-from ansible_base.resource_registry.shared_types import OrganizationType, TeamType, UserType
+from ansible_base.resource_registry.shared_types import OrganizationType, RoleDefinitionType, TeamType, UserType
 from ansible_base.resource_registry.utils.resource_type_processor import ResourceTypeProcessor
 from test_app.models import Organization, Original1, Proxy2, ResourceMigrationTestModel, Team
 
@@ -38,21 +38,13 @@ RESOURCE_LIST = [
         Organization,
         shared_resource=SharedResource(serializer=OrganizationType, is_provider=False),
     ),
+    ResourceConfig(
+        RoleDefinition,
+        shared_resource=SharedResource(serializer=RoleDefinitionType, is_provider=False),
+    ),
     # Authenticators won't be a shared resource in production, but it's a convenient model to use for testing.
     ResourceConfig(Authenticator),
     ResourceConfig(ResourceMigrationTestModel),
     ResourceConfig(Original1),
     ResourceConfig(Proxy2),
 ]
-
-# Conditionally add RoleDefinition if RBAC is installed
-if 'ansible_base.rbac' in settings.INSTALLED_APPS:
-    from ansible_base.rbac.models import RoleDefinition
-    from ansible_base.resource_registry.shared_types import RoleDefinitionType
-
-    RESOURCE_LIST.append(
-        ResourceConfig(
-            RoleDefinition,
-            shared_resource=SharedResource(serializer=RoleDefinitionType, is_provider=False),
-        )
-    )
