@@ -47,10 +47,12 @@ def delete_authenticator(authenticator):
 class StaticResourceAPIClient(ResourceAPIClient):
     """A testing API client that reads response router attribute or static files."""
 
-    router = {}
-    # Route is used to force a certain status,response for a route
-    # It has to be a mutable default but the fixture instantiates one for
-    # each test.
+    def __init__(self, *args, **kwargs):
+        # Route is used to force a certain status,response for a route
+        # It has to be a mutable default but the fixture instantiates one for
+        # each test.
+        self.router = {}
+        super().__init__(*args, **kwargs)
 
     def _make_request(self, method, path, data=None, params=None, stream=False):
         response = Response()

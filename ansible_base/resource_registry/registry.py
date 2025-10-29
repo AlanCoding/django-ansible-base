@@ -4,6 +4,7 @@ from typing import List, Optional
 from django.contrib.auth import authenticate
 from django.utils.translation import gettext_lazy as _
 
+from ansible_base.lib.utils.apps import is_rbac_installed
 from ansible_base.resource_registry.utils.resource_type_processor import ResourceTypeProcessor, RoleDefinitionProcessor
 
 ParentResource = namedtuple("ParentResource", ["model", "field_name"])
@@ -23,12 +24,16 @@ class ServiceAPIConfig:
     This will be the interface for configuring the resource registry for each service.
     """
 
-    _default_resource_processors = {
-        "shared.team": ResourceTypeProcessor,
-        "shared.organization": ResourceTypeProcessor,
-        "shared.user": ResourceTypeProcessor,
-        "shared.roledefinition": RoleDefinitionProcessor,
-    }
+    @classmethod
+    def _get_default_resource_processors(cls):
+        processors = {
+            "shared.team": ResourceTypeProcessor,
+            "shared.organization": ResourceTypeProcessor,
+            "shared.user": ResourceTypeProcessor,
+        }
+        if is_rbac_installed():
+            processors["shared.roledefinition"] = RoleDefinitionProcessor
+        return processors
 
     custom_resource_processors = {}
 
@@ -43,7 +48,7 @@ class ServiceAPIConfig:
 
     @classmethod
     def get_processor(cls, resource_type):
-        combined_processors = {**cls._default_resource_processors, **cls.custom_resource_processors}
+        combined_processors = {**cls._get_default_resource_processors(), **cls.custom_resource_processors}
         return combined_processors[resource_type]
 
 

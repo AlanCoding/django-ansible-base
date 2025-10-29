@@ -7,7 +7,15 @@ import requests
 import urllib3
 from django.apps import apps
 
+from ansible_base.lib.utils.apps import is_rbac_installed
 from ansible_base.resource_registry.resource_server import get_resource_server_config, get_service_token
+
+
+def _check_rbac_installed():
+    """Check if ansible_base.rbac is installed and raise RuntimeError if not."""
+    if not is_rbac_installed():
+        raise RuntimeError("This operation requires ansible_base.rbac to be installed")
+
 
 ResourceRequestBody = namedtuple(
     "ResourceRequestBody",
@@ -186,6 +194,7 @@ class ResourceAPIClient:
         return self._make_request("get", "role-team-assignments/", params=params)
 
     def sync_assignment(self, assignment):
+        _check_rbac_installed()
         from ansible_base.rbac.service_api.serializers import ServiceRoleTeamAssignmentSerializer, ServiceRoleUserAssignmentSerializer
 
         if assignment._meta.model_name == 'roleuserassignment':
@@ -196,6 +205,7 @@ class ResourceAPIClient:
         return self._sync_assignment(serializer.data)
 
     def sync_unassignment(self, role_definition, actor, content_object):
+        _check_rbac_installed()
         data = {'role_definition': role_definition.name}
         data[f'{actor._meta.model_name}_ansible_id'] = str(actor.resource.ansible_id)
 
@@ -214,6 +224,7 @@ class ResourceAPIClient:
 
     def sync_object_deletion(self, content_object):
         """Sync object deletion to Gateway for cleanup of all related role assignments"""
+        _check_rbac_installed()
         from ansible_base.rbac.models import DABContentType
 
         # Get the content type information

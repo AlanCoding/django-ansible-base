@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 
-from ansible_base.rbac.models import DABContentType, DABPermission
+from ansible_base.lib.utils.apps import is_rbac_installed
 from ansible_base.resource_registry.utils.resource_type_serializers import AnsibleResourceForeignKeyField, SharedResourceTypeSerializer
 from ansible_base.resource_registry.utils.sso_provider import get_sso_provider_server
 
@@ -84,6 +84,8 @@ class LenientPermissionSlugListField(serializers.ListField):
     child = serializers.CharField()
 
     def to_internal_value(self, data):
+        from ansible_base.rbac.models import DABPermission
+
         data = super().to_internal_value(data)
         return list(DABPermission.objects.filter(api_slug__in=data))
 
@@ -98,13 +100,23 @@ class RoleDefinitionType(SharedResourceTypeSerializer):
     name = serializers.CharField()
     description = serializers.CharField(default="", allow_blank=True)
     managed = serializers.BooleanField()
-    content_type = serializers.SlugRelatedField(
-        slug_field='api_slug',
-        queryset=DABContentType.objects.all(),
-        allow_null=True,
-        default=None,
-    )
     permissions = LenientPermissionSlugListField()
+
+    def __init__(self, *args, **kwargs):
+        if not is_rbac_installed():
+            raise RuntimeError("RoleDefinitionType requires ansible_base.rbac to be installed")
+
+        super().__init__(*args, **kwargs)
+
+        # Set up content_type field only when rbac is available
+        from ansible_base.rbac.models import DABContentType
+
+        self.fields['content_type'] = serializers.SlugRelatedField(
+            slug_field='api_slug',
+            queryset=DABContentType.objects.all(),
+            allow_null=True,
+            default=None,
+        )
 
     def is_valid(self, raise_exception=False):
         try:
