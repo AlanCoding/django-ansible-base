@@ -14,6 +14,7 @@ from ansible_base.jwt_consumer.common.cache import JWTCache
 from ansible_base.jwt_consumer.common.cert import JWTCert, JWTCertException
 from ansible_base.jwt_consumer.common.exceptions import HTTP_498_INVALID_TOKEN, InvalidTokenException
 from ansible_base.lib.logging.runtime import log_excess_runtime
+from ansible_base.lib.utils.apps import is_rbac_installed
 from ansible_base.lib.utils.auth import get_user_by_ansible_id
 from ansible_base.lib.utils.translations import translatableConditionally as _
 from ansible_base.resource_registry.models import Resource, ResourceType
@@ -353,3 +354,26 @@ class JWTAuthentication(BaseAuthentication):
             self.common_auth.process_rbac_permissions()
         else:
             logger.info("process_permissions was not overridden for JWTAuthentication")
+
+
+class RbacAwareJWTAuthentication(JWTAuthentication):
+    use_rbac_permissions = False
+
+    def __init__(self):
+        super().__init__()
+        self.use_rbac_permissions = is_rbac_installed()
+
+
+try:
+    from drf_spectacular.extensions import OpenApiAuthenticationExtension
+
+    class RbacAwareJWTAuthScheme(OpenApiAuthenticationExtension):
+        target_class = RbacAwareJWTAuthentication
+        name = "RbacAwareJWTAuthentication"
+
+        def get_security_definition(self, auto_schema):
+            return {"type": "apiKey", "name": "X-DAB-JW-TOKEN", "in": "header"}
+
+except ImportError:
+    # drf_spectacular is not available, skip the schema definition
+    pass
