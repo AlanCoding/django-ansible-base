@@ -91,7 +91,8 @@ class BaseAssignmentSerializer(serializers.ModelSerializer):
             if not self.partial and not has_object_id and not has_object_ansible_id:
                 raise serializers.ValidationError("You must provide either 'object_id' or 'object_ansible_id'.")
             # If object_ansible_id was provided and converted, use that for object_id
-            if has_object_ansible_id and not has_object_id:
+            # Prioritize object_ansible_id when both are provided (defensive behavior)
+            if has_object_ansible_id:
                 attrs['object_id'] = attrs['object_ansible_id']
         else:
             if has_object_id or has_object_ansible_id:
