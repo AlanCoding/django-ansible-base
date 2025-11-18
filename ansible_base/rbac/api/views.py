@@ -2,6 +2,7 @@ import uuid
 from collections import OrderedDict
 from typing import Type
 
+import requests.exceptions
 from django.apps import apps
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
@@ -192,7 +193,15 @@ class BaseAssignmentViewSet(AnsibleBaseDjangoAppApiView, ModelViewSet):
 
     def perform_create(self, serializer):
         ret = super().perform_create(serializer)
-        self.remote_sync_assignment(serializer.instance)
+        try:
+            self.remote_sync_assignment(serializer.instance)
+        except requests.exceptions.HTTPError as e:
+            # If the resource server rejected the assignment with a 400, re-raise as a DRF 400
+            if e.response is not None and e.response.status_code == 400:
+                original_error = e.response.text
+                raise ValidationError(f"Prohibited by resource server: {original_error}")
+            # For other HTTP errors, re-raise the original exception (will result in 500)
+            raise
         return ret
 
     def perform_destroy(self, instance):
