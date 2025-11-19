@@ -507,6 +507,7 @@ class TestRestClientSyncAssignment:
     def test_sync_assignment_sends_only_object_ansible_id_for_registered_objects(self, rando, organization, org_admin_rd):
         """Test that sync_assignment removes object_id when object_ansible_id is present"""
         from unittest.mock import MagicMock, patch
+
         from ansible_base.resource_registry.rest_client import ResourceAPIClient
 
         # Create an assignment to an organization (which has a resource)
@@ -534,6 +535,7 @@ class TestRestClientSyncAssignment:
     def test_sync_assignment_sends_only_object_id_for_non_registered_objects(self, rando, inventory, inv_rd):
         """Test that sync_assignment keeps object_id when object_ansible_id is None"""
         from unittest.mock import MagicMock, patch
+
         from ansible_base.resource_registry.rest_client import ResourceAPIClient
 
         # Create an assignment to an inventory (which doesn't have a resource)
