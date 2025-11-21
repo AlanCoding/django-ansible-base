@@ -253,16 +253,6 @@ _OBJECT_ID_ONEOF = {
     ]
 }
 
-_ROLE_USER_ASSIGNMENT_REQUEST_SCHEMA = {
-    'schema': {
-        'allOf': [
-            {'$ref': '#/components/schemas/RoleUserAssignment'},
-            _USER_ACTOR_ONEOF,
-            _OBJECT_ID_ONEOF,
-        ]
-    }
-}
-
 
 class RoleUserAssignmentViewSet(BaseAssignmentViewSet):
 
@@ -277,9 +267,13 @@ class RoleUserAssignmentViewSet(BaseAssignmentViewSet):
 
     @extend_schema_if_available(
         request={
-            'application/json': _ROLE_USER_ASSIGNMENT_REQUEST_SCHEMA,
-            'application/x-www-form-urlencoded': _ROLE_USER_ASSIGNMENT_REQUEST_SCHEMA,
-            'multipart/form-data': _ROLE_USER_ASSIGNMENT_REQUEST_SCHEMA,
+            'application/json': {
+                'allOf': [
+                    {'$ref': '#/components/schemas/RoleUserAssignment'},
+                    _USER_ACTOR_ONEOF,
+                    _OBJECT_ID_ONEOF,
+                ]
+            },
         },
         description="Give a user permission to a resource, an organization, or globally (when allowed)."
         "Must specify 'role_definition' and exactly one of 'user' or 'user_ansible_id'."
