@@ -193,7 +193,15 @@ class ResourceAPIClient:
         else:
             serializer = ServiceRoleTeamAssignmentSerializer(assignment)
 
-        return self._sync_assignment(serializer.data)
+        data = serializer.data
+
+        # Remove object_id if object_ansible_id is present to avoid sending both
+        # For registered objects: send only object_ansible_id
+        # For non-registered objects: send only object_id
+        if data.get('object_ansible_id') is not None:
+            data.pop('object_id', None)
+
+        return self._sync_assignment(data)
 
     def sync_unassignment(self, role_definition, actor, content_object):
         data = {'role_definition': role_definition.name}
