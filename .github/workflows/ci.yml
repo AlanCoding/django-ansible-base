@@ -18,10 +18,6 @@ jobs:
             python-version: "3.11"
             sonar: false
             junit-xml-upload: false
-          - env: py39
-            python-version: "3.9"
-            sonar: false
-            junit-xml-upload: false
           - env: py310
             python-version: "3.10"
             sonar: false
@@ -32,6 +28,10 @@ jobs:
             junit-xml-upload: true
           - env: py311sqlite
             python-version: "3.11"
+            sonar: false
+            junit-xml-upload: false
+          - env: py312
+            python-version: "3.12"
             sonar: false
             junit-xml-upload: false
     steps:

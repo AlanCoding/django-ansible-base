@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -ue
 
-PYTHON=python3.11
+PYTHON=python3.12
 
 for FILE in requirements.in requirements_all.txt ; do
 	if [ ! -f ${FILE} ] ; then
@@ -53,7 +53,7 @@ main() {
       echo ""
       NEEDS_HELP=1
     ;;
-  esac 
+  esac
 
   if [[ "$NEEDS_HELP" == "1" ]] ; then
     echo "This script generates requirements_all.txt from requirements[_*].in"

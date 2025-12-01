@@ -15,7 +15,7 @@ pip install -r requirements/requirements_dev.txt
 ### Run
 To run the test suite locally you can use tox. By default, with no arguments, tox will attempt to run the tests in various version of python. To run a specific version you can add the `-e` parameter like:
 ```
-tox -e 311
+tox -e 312
 ```
 
 ### Test database
@@ -50,7 +50,7 @@ brew edit $USER/local/libxmlsec1@1.2.37
 	Change any occurrences of "openssl@1.1" to "openssl@3"
 
 brew install $USER/local/libxmlsec1@1.2.37
-tox -e 311
+tox -e 312
 
 unset HOMEBREW_NO_INSTALL_FROM_API
 brew untap homebrew/core
