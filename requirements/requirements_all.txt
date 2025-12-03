@@ -1,4 +1,4 @@
-asgiref==3.10.0
+asgiref==3.11.0
     # via
     #   -r requirements/requirements_resource_registry.in
     #   channels
@@ -7,15 +7,15 @@ attrs==25.4.0
     # via
     #   jsonschema
     #   referencing
-certifi==2025.10.5
+certifi==2025.11.12
     # via requests
 cffi==2.0.0
     # via cryptography
-channels==4.3.1
+channels==4.3.2
     # via -r requirements/requirements_channels.in
 charset-normalizer==3.4.4
     # via requests
-cryptography==46.0.2
+cryptography==46.0.3
     # via
     #   -r requirements/requirements.in
     #   jwcrypto
@@ -24,7 +24,7 @@ defusedxml==0.8.0rc2
     # via
     #   python3-openid
     #   social-auth-core
-django==5.2.8
+django==5.2.9
     # via
     #   -r requirements/requirements.in
     #   channels
@@ -40,7 +40,7 @@ django-auth-ldap==5.2.0
     # via -r requirements/requirements_authentication.in
 django-crum==0.7.9
     # via -r requirements/requirements.in
-django-flags==5.0.14
+django-flags==5.1.0
     # via -r requirements/requirements_feature_flags.in
 django-oauth-toolkit==2.3.0
     # via -r requirements/requirements_oauth2_provider.in
@@ -106,7 +106,7 @@ python3-saml==1.16.0
     # via -r requirements/requirements_authentication.in
 pyyaml==6.0.3
     # via drf-spectacular
-redis==6.4.0
+redis==7.1.0
     # via
     #   -r requirements/requirements_redis_client.in
     #   django-redis
@@ -123,7 +123,7 @@ requests==2.32.5
     #   social-auth-core
 requests-oauthlib==2.0.0
     # via social-auth-core
-rpds-py==0.27.1
+rpds-py==0.30.0
     # via
     #   jsonschema
     #   referencing
@@ -137,7 +137,7 @@ social-auth-core==4.5.4
     # via
     #   -r requirements/requirements_authentication.in
     #   social-auth-app-django
-sqlparse==0.5.3
+sqlparse==0.5.4
     # via
     #   -r requirements/requirements.in
     #   django
