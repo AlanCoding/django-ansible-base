@@ -100,7 +100,7 @@ legacy_tox_ini = """
         py312sqlite
         py312-django4
     labels =
-        test = check, py3123, py312sqlite, py3123-django4
+        test = check, py312, py312sqlite, py312-django4
         lint = flake8, black, isort
 
     [testenv]
