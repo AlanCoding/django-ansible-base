@@ -20,6 +20,6 @@ pytest-cov
 pytest-django
 pytest-mock
 setuptools-scm
-sqlparse==0.5.2
+sqlparse==0.5.4
 psycopg[binary]
 sdb
