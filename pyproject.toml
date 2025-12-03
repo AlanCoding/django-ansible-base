@@ -9,7 +9,7 @@ authors = [
 ]
 description = "A Django app used by ansible services"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 keywords = ["ansible", "django"]
 license = {text = "Apache-2.0"}
 classifiers = [
@@ -23,8 +23,6 @@ classifiers = [
     "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
 ]
 dynamic = ["version", "dependencies", "optional-dependencies"]
@@ -98,12 +96,11 @@ legacy_tox_ini = """
     no_package = true
     env_list =
         check
-        py310
-        py311
-        py311sqlite
         py312
+        py312sqlite
+        py312-django4
     labels =
-        test = py310, py311, py311sqlite, py312, check
+        test = check, py3123, py312sqlite, py3123-django4
         lint = flake8, black, isort
 
     [testenv]
@@ -123,7 +120,7 @@ legacy_tox_ini = """
         python3 manage.py check
         python3 manage.py makemigrations --check
 
-    [testenv:py311sqlite]
+    [testenv:py312sqlite]
     docker = db
     setenv =
         DJANGO_SETTINGS_MODULE = test_app.sqlite3settings
