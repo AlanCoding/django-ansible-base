@@ -110,8 +110,9 @@ redis==7.1.0
     # via
     #   -r requirements/requirements_redis_client.in
     #   django-redis
-referencing==0.37.0
+referencing==0.36.2
     # via
+    #   -r requirements/requirements_api_documentation.in
     #   jsonschema
     #   jsonschema-specifications
 requests==2.32.5
