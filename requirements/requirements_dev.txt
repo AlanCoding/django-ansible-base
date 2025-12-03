@@ -13,7 +13,7 @@ jsonschema
 tox
 tox-docker
 typeguard
-openapi-spec-validator
+openapi-spec-validator>=0.6.1  # Adapted to changing import locations in jsonschema
 pytest
 pytest-asyncio
 pytest-xdist
