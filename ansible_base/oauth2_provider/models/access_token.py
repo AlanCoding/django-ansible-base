@@ -1,4 +1,5 @@
 import hashlib
+import logging
 
 import oauth2_provider.models as oauth2_models
 from django.conf import settings
@@ -9,10 +10,13 @@ from django.utils.translation import gettext_lazy as _
 from oauthlib import oauth2
 
 from ansible_base.lib.abstract_models.common import CommonModel
+from ansible_base.lib.logging import log_auth_event
 from ansible_base.lib.utils.hashing import hash_string
 from ansible_base.lib.utils.models import prevent_search
 from ansible_base.lib.utils.settings import get_setting
 from ansible_base.oauth2_provider.utils import is_external_account
+
+logger = logging.getLogger('ansible_base.oauth2_provider.models.access_token')
 
 SCOPES = ['read', 'write']
 
@@ -36,7 +40,8 @@ if 'ansible_base.activitystream' in settings.INSTALLED_APPS:
 class OAuth2AccessToken(CommonModel, oauth2_models.AbstractAccessToken, activitystream):
     router_basename = 'token'
     ignore_relations = ['refresh_token']
-    activity_stream_excluded_field_names = ['last_used']
+    activity_stream_excluded_field_names = ['last_used', "modified", "modified_by"]
+    trivial_fields = activity_stream_excluded_field_names
 
     class Meta(oauth2_models.AbstractAccessToken.Meta):
         verbose_name = _('access token')
@@ -93,7 +98,18 @@ class OAuth2AccessToken(CommonModel, oauth2_models.AbstractAccessToken, activity
                 )
 
     def save(self, *args, **kwargs):
+        update_fields = kwargs.get('update_fields')
+        has_non_trivial_fields = self._has_non_trivial_changes(update_fields)
+        logging_verb = 'Modified'
         if not self.pk:
             self.validate_external_users()
             self.token = hash_string(self.token, hasher=hashlib.sha256, algo="sha256")
+            logging_verb = 'Created'
         super().save(*args, **kwargs)
+        app_name = self.application.name if self.application else "N/A (Personal Access Token)"
+        user_name = self.user.username if self.user else "N/A"
+        if has_non_trivial_fields:
+            log_auth_event(
+                f"{logging_verb} OAuth2 access token {self.pk} for user '{user_name}' with application '{app_name}' and scope '{self.scope}'",
+                second_logger=logger,
+            )
