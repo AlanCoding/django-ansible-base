@@ -205,6 +205,7 @@ def test_oauth2_provider_application_validator(admin_api_client):
     assert 'organization' in response.data
     assert 'This field is required' in str(response.data['organization'])
 
+
 @pytest.mark.parametrize(
     "client_fixture,expected_status",
     [
