@@ -14,19 +14,43 @@ jobs:
       fail-fast: false
       matrix:
         tests:
-          - env: check
+          - env: py311-check
+            python-version: "3.11"
+            sonar: false
+            junit-xml-upload: false
+          - env: py312-check
             python-version: "3.12"
+            sonar: false
+            junit-xml-upload: false
+          - env: py311
+            python-version: "3.11"
             sonar: false
             junit-xml-upload: false
           - env: py312
             python-version: "3.12"
             sonar: true
             junit-xml-upload: true
-          - env: py312sqlite
+          - env: py311-sqlite
+            python-version: "3.11"
+            sonar: false
+            junit-xml-upload: false
+          - env: py312-sqlite
             python-version: "3.12"
             sonar: false
             junit-xml-upload: false
+          - env: py311-django4
+            python-version: "3.11"
+            sonar: false
+            junit-xml-upload: false
           - env: py312-django4
+            python-version: "3.12"
+            sonar: false
+            junit-xml-upload: false
+          - env: py311-in-files
+            python-version: "3.11"
+            sonar: false
+            junit-xml-upload: false
+          - env: py312-in-files
             python-version: "3.12"
             sonar: false
             junit-xml-upload: false

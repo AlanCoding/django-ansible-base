@@ -1,7 +1,6 @@
 from django.core.exceptions import ObjectDoesNotExist
 from django.utils.translation import gettext_lazy as _
 from oauth2_provider.generators import generate_client_secret
-from rest_framework.fields import empty
 
 from ansible_base.lib.serializers.common import NamedCommonModelSerializer
 from ansible_base.lib.utils.encryption import ENCRYPTED_STRING
@@ -18,7 +17,7 @@ class OAuth2ApplicationSerializer(NamedCommonModelSerializer):
         read_only_on_update_fields = ('user', 'authorization_grant_type')
         extra_kwargs = {
             'user': {'allow_null': True, 'required': False},
-            'organization': {'allow_null': False, 'required': True, 'default': empty},
+            'organization': {'allow_null': False},
             'authorization_grant_type': {'allow_null': False, 'label': _('Authorization Grant Type')},
             'client_secret': {'label': _('Client Secret')},
             'client_type': {'label': _('Client Type')},

@@ -24,7 +24,7 @@ defusedxml==0.8.0rc2
     # via
     #   python3-openid
     #   social-auth-core
-django==4.2.26
+django==4.2.27
     # via
     #   -r requirements/requirements.in
     #   channels
@@ -110,8 +110,9 @@ redis==7.1.0
     # via
     #   -r requirements/requirements_redis_client.in
     #   django-redis
-referencing==0.37.0
+referencing==0.36.2
     # via
+    #   -r requirements/requirements_api_documentation.in
     #   jsonschema
     #   jsonschema-specifications
 requests==2.32.5
@@ -151,7 +152,7 @@ typing-extensions==4.15.0
     #   referencing
 uritemplate==4.2.0
     # via drf-spectacular
-urllib3==2.5.0
+urllib3==2.6.1
     # via
     #   -r requirements/requirements_resource_registry.in
     #   requests
