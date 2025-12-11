@@ -4,7 +4,7 @@ build
 django<6
 django-debug-toolbar
 django-extensions
-djangorestframework<3.16
+djangorestframework
 flake8==7.1.1           # Linting tool, if changed update pyproject.toml as well
 Flake8-pyproject==1.2.3 # Linting tool, if changed update pyproject.toml as well
 ipython
