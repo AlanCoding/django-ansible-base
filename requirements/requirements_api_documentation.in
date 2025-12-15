@@ -1,2 +1,2 @@
-drf-spectacular==0.26.5
+drf-spectacular<1.0  # matters a great deal for the OpenAPI spec version, but apps are allowed to decide
 referencing<0.37.0  # consistent with pin from jsonschema-path, via openapi-spec-validator
