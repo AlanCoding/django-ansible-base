@@ -12,20 +12,26 @@ jobs:
       contents: read
     strategy:
       fail-fast: false
+    env:
+      tower_image: "quay.io/aap/tower_devel:${{ github.base_ref }}"
     steps:
       - uses: actions/checkout@v4
         with:
           show-progress: false
 
+      - name: Log in to Quay
+        run: |
+          echo "${{ secrets.QUAY_TOKEN }}" | docker login quay.io -u ${{ vars.QUAY_USER }} --password-stdin
+
       - name: Pull AWX devel image
-        run: docker pull ghcr.io/ansible/awx_devel:devel
+        run: docker pull ${{ env.tower_image }}
 
       # Generate a docker image that includes current DAB
       - name: Create image for AWX devel that includes our DAB
         run: |
           mkdir awx-dockerfile
           cat <<EOF > awx-dockerfile/Dockerfile
-          FROM ghcr.io/ansible/awx_devel:devel
+          FROM ${{ env.tower_image }}
           COPY . /opt/dab/
           RUN pip install -e /opt/dab/
           RUN pip install jq
