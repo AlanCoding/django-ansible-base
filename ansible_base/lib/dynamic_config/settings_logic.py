@@ -292,6 +292,18 @@ def get_mergeable_dab_settings(settings: dict) -> dict:  # NOSONAR
         if oauth2_authentication_class not in rest_framework['DEFAULT_AUTHENTICATION_CLASSES']:
             rest_framework['DEFAULT_AUTHENTICATION_CLASSES'].insert(0, oauth2_authentication_class)
 
+        # OAuth2 OpenAPI schema settings (only apply when oauth2_provider is installed)
+        spectacular_settings.setdefault('OAUTH2_FLOWS', ['authorizationCode', 'password'])
+        spectacular_settings.setdefault('OAUTH2_AUTHORIZATION_URL', '/o/authorize/')
+        spectacular_settings.setdefault('OAUTH2_TOKEN_URL', '/o/token/')
+        spectacular_settings.setdefault(
+            'OAUTH2_SCOPES',
+            {
+                'read': 'Read access to resources',
+                'write': 'Write access to resources (includes read)',
+            },
+        )
+
         # These have to be defined for the migration to function
         dab_data['OAUTH2_PROVIDER_APPLICATION_MODEL'] = DEFAULT_OAUTH2_APPLICATION_MODEL
         dab_data['OAUTH2_PROVIDER_ACCESS_TOKEN_MODEL'] = DEFAULT_OAUTH2_ACCESS_TOKEN
