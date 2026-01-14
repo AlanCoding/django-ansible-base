@@ -43,6 +43,7 @@ jobs:
           repository: ansible-automation-platform/tower
           path: awx
           ref: stable-2.6
+          token: ${{ secrets.ALANCODING_DOWNSTREAM_CHECKS_AAP_ORG_TOKEN }}
 
       - name: Run AWX tests in the generated image
         run: |
