@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
     env:
-      tower_image: "quay.io/aap/tower_devel:${{ github.base_ref }}"
+      tower_image: "quay.io/aap/tower_devel:stable-2.6"
     steps:
       - uses: actions/checkout@v4
         with:
