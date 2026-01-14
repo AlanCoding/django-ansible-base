@@ -40,7 +40,7 @@ jobs:
 
       - uses: actions/checkout@v4
         with:
-          repository: ansible/tower
+          repository: ansible-automation-platform/tower
           path: awx
           ref: stable-2.6
 
