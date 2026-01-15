@@ -24,7 +24,7 @@ defusedxml==0.8.0rc2
     # via
     #   python3-openid
     #   social-auth-core
-django==5.2.9
+django==5.2.10
     # via
     #   -r requirements/requirements.in
     #   channels
@@ -62,7 +62,7 @@ inflection==0.5.1
     #   drf-spectacular
 isodate==0.7.2
     # via python3-saml
-jsonschema==4.25.1
+jsonschema==4.26.0
     # via drf-spectacular
 jsonschema-specifications==2025.9.1
     # via jsonschema
@@ -70,7 +70,7 @@ jwcrypto==1.5.6
     # via django-oauth-toolkit
 ldap-filter==1.0.1
     # via -r requirements/requirements_authentication.in
-lxml==6.0.2
+lxml==5.3.0
     # via
     #   -r requirements/requirements_authentication.in
     #   python3-saml
@@ -139,7 +139,7 @@ social-auth-core==4.5.4
     # via
     #   -r requirements/requirements_authentication.in
     #   social-auth-app-django
-sqlparse==0.5.4
+sqlparse==0.5.5
     # via
     #   -r requirements/requirements.in
     #   django
@@ -153,7 +153,7 @@ typing-extensions==4.15.0
     #   referencing
 uritemplate==4.2.0
     # via drf-spectacular
-urllib3==2.6.2
+urllib3==2.6.3
     # via
     #   -r requirements/requirements_resource_registry.in
     #   requests

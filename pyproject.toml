@@ -96,10 +96,16 @@ legacy_tox_ini = """
     min_version = 4.0
     no_package = true
     env_list =
-        check
-        py312
-        py312-sqlite
-        py312-django4
+      py311-check
+      py312-check
+      py311
+      py312
+      py311-sqlite
+      py312-sqlite
+      py311-django4
+      py312-django4
+      py311-in-files
+      py312-in-files
     labels =
         test = py311-check, py312-check, py311, py312, py311-sqlite, py312-sqlite, py312-django4, py311-in-files, py312-in-files
         lint = flake8, black, isort
