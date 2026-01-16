@@ -7,6 +7,8 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from flags.sources import get_flags
 
+from ansible_base.lib.utils.db import migrations_are_complete
+
 logger = logging.getLogger('ansible_base.feature_flags.utils')
 
 
@@ -87,6 +89,10 @@ def purge_feature_flags():
     If a feature flag has been removed from the platform flags list, purge it from the database.
     """
     from ansible_base.resource_registry.signals.handlers import no_reverse_sync
+
+    if not migrations_are_complete():
+        logger.debug('Not running purge_feature_flags logic because migrations not incomplete')
+        return
 
     all_flags = apps.get_model('dab_feature_flags', 'AAPFlag').objects.all()
     for flag in all_flags:
