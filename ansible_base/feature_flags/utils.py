@@ -57,6 +57,10 @@ def load_feature_flags():
     from ansible_base.resource_registry.models import Resource
     from ansible_base.resource_registry.signals.handlers import no_reverse_sync
 
+    if not migrations_are_complete():
+        logger.debug('Not running load_feature_flags logic because migrations not incomplete')
+        return
+
     feature_flags_model = apps.get_model('dab_feature_flags', 'AAPFlag')
     for flag in feature_flags_list():
         try:
