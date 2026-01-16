@@ -16,6 +16,10 @@ from ansible_base.rbac.validators import permissions_allowed_for_role
 def visible_users(request_user, queryset=None, always_show_superusers=True, always_show_self=True) -> QuerySet:
     """Gives a queryset of users that another user should be able to view"""
     user_cls = permission_registry.user_model
+
+    if not getattr(request_user, "is_authenticated", False):
+        return user_cls.objects.none()
+
     org_cls = apps.get_model(settings.ANSIBLE_BASE_ORGANIZATION_MODEL)
 
     if can_view_all_users(request_user):
