@@ -1,6 +1,7 @@
 import pytest
+from django.contrib.auth.models import AnonymousUser
 
-from ansible_base.rbac.policies import can_change_user
+from ansible_base.rbac.policies import can_change_user, visible_users
 from test_app.models import User
 
 
@@ -32,3 +33,12 @@ def test_superuser_can_change_new_user(admin_user):
 def test_user_can_manage_themselves():
     alice = User.objects.create(username='alice')
     assert can_change_user(alice, alice)
+
+
+@pytest.mark.django_db
+def test_visible_users_anonymous_user():
+    User.objects.create(username='alice')
+    User.objects.create(username='bob', is_superuser=True)
+
+    qs = visible_users(AnonymousUser())
+    assert not qs.exists()
