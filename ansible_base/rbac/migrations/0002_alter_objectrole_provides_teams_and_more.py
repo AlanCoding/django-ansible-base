@@ -28,12 +28,12 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name='objectrole',
             name='teams',
-            field=models.ManyToManyField(help_text='Teams or groups who have access to the permissions defined by this object role.', related_name='has_roles', through='dab_rbac.RoleTeamAssignment', to=settings.ANSIBLE_BASE_TEAM_MODEL),
+            field=models.ManyToManyField(help_text='Teams or groups who have access to the permissions defined by this object role.', related_name='has_roles', through='dab_rbac.RoleTeamAssignment', through_fields=('object_role', 'team'), to=settings.ANSIBLE_BASE_TEAM_MODEL),
         ),
         migrations.AlterField(
             model_name='objectrole',
             name='users',
-            field=models.ManyToManyField(help_text='Users who have access to the permissions defined by this object role.', related_name='has_roles', through='dab_rbac.RoleUserAssignment', to=settings.AUTH_USER_MODEL),
+            field=models.ManyToManyField(help_text='Users who have access to the permissions defined by this object role.', related_name='has_roles', through='dab_rbac.RoleUserAssignment', through_fields=('object_role', 'user'), to=settings.AUTH_USER_MODEL),
         ),
         migrations.AlterField(
             model_name='roledefinition',
