@@ -10,7 +10,7 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('dab_feature_flags', '0002_manual_20251222'),
+        ('dab_feature_flags', '0003_manual_20260113'),
     ]
 
     operations = [
