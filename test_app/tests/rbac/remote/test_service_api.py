@@ -201,6 +201,7 @@ def test_unassign_endpoint_for_team(team, org_inv_rd, inventory, admin_api_clien
 @pytest.mark.django_db
 def test_service_user_assignment_requires_object_permission(inv_rd, inventory, rando):
     requester = User.objects.create(username='service-requester')
+    rando.resource_api_actions = "*"  # specific to internal requests
     client = APIClient()
     client.force_authenticate(user=requester)
 
@@ -211,7 +212,7 @@ def test_service_user_assignment_requires_object_permission(inv_rd, inventory, r
     assert response.status_code == 403, response.data
 
     # Should still get a 403 even if assignment already exists
-    inv_rd.give_permission(requester, inventory)
+    inv_rd.give_permission(rando, inventory)
     response = client.post(url, data=data)
     assert response.status_code == 403, response.data
 
