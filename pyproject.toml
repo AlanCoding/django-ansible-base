@@ -116,19 +116,16 @@ legacy_tox_ini = """
         -r{toxinidir}/requirements/requirements_dev.txt
     allowlist_externals = sh
     commands = pytest -n auto --color=yes --cov=. --cov-report=xml:coverage.xml --cov-report=html --cov-report=json --cov-branch --junit-xml=django-ansible-base-test-results.xml {env:ANSIBLE_BASE_PYTEST_ARGS} {env:ANSIBLE_BASE_TEST_DIRS:test_app/tests} {posargs}
-    docker = db
 
     [testenv:py311-check,py312-check]
     deps =
         -r{toxinidir}/requirements/requirements_all.txt
         -r{toxinidir}/requirements/requirements_dev.txt
-    docker = db
     commands =
         python3 manage.py check
         python3 manage.py makemigrations --check
 
     [testenv:py311-sqlite,py312-sqlite]
-    docker = db
     setenv =
         DJANGO_SETTINGS_MODULE = test_app.sqlite3settings
 
@@ -138,7 +135,6 @@ legacy_tox_ini = """
         -r{toxinidir}/requirements/requirements_dev.txt
     commands_pre =
         python -m pip install --upgrade "Django>=4.2.21,<4.3.0"
-    docker = db
 
     [testenv:py311-in-files,py312-in-files]
     deps =
@@ -157,29 +153,21 @@ legacy_tox_ini = """
         -r{toxinidir}/requirements/requirements_testing.txt
         -r{toxinidir}/requirements/requirements_dev.txt
 
-    [docker:db]
-    dockerfile = {toxinidir}/tools/dev_postgres/Dockerfile
-    expose =
-        DB_PORT=5432/tcp
-
     [testenv:flake8]
     deps =
         flake8==7.1.1
         Flake8-pyproject==1.2.3
-    docker =
     commands = flake8 {posargs:.}
 
     [testenv:black]
     deps =
         black==25.1.0
     allowlist_externals = sh
-    docker =
     commands = sh -c 'black --version && black {posargs:.}'
 
     [testenv:isort]
     deps =
         isort==6.0.0
-    docker =
     commands = isort {posargs:.}
 """
 

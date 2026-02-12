@@ -10,6 +10,20 @@ jobs:
     permissions:
       packages: write
       contents: read
+    services:
+      postgres:
+        image: mirror.gcr.io/library/postgres:15
+        env:
+          POSTGRES_DB: dab_db
+          POSTGRES_USER: dab
+          POSTGRES_PASSWORD: dabing
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dab -d dab_db"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     strategy:
       fail-fast: false
       matrix:
@@ -68,9 +82,12 @@ jobs:
           python-version: ${{ matrix.tests.python-version }}
 
       - name: Install tox
-        run: pip${{ matrix.tests.python-version }} install tox tox-docker
+        run: pip${{ matrix.tests.python-version }} install tox
 
       - name: Run tox
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
         run: |
           echo "::remove-matcher owner=python::"  # Disable annoying annotations from setup-python
           tox --colored yes -e ${{ matrix.tests.env }}
