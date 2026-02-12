@@ -1,5 +1,6 @@
 SHELL=/bin/bash
 
+
 # Prefer python 3.12 but take python3 if 3.12 is not installed
 PYTHON := $(notdir $(shell for i in python3.12 python3; do command -v $$i; done|sed 1q))
 CHECK_SYNTAX_FILES ?= .
