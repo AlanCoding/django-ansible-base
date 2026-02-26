@@ -2,8 +2,8 @@ import pytest
 from django.contrib.contenttypes.models import ContentType
 from django.db import models as db_models
 
-from ansible_base.activitystream.models import AuditableModel
 from ansible_base.activitystream.apps import get_activity_stream_entries
+from ansible_base.activitystream.models import AuditableModel
 from ansible_base.lib.utils.response import get_relative_url
 
 
