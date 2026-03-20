@@ -133,11 +133,11 @@ OPA does **not** need to understand groups or role assignment.
 
 Avoid ordinary `User.groups`.
 
-Use an explicit OPA-specific relation:
+The M2M relationship between users and OPA groups is defined on the `OPAGroup` model side:
 
-* `User.dab_opa_groups`
+* `OPAGroup.users = ManyToManyField(settings.AUTH_USER_MODEL, ...)`
 
-This prevents collision with existing Django/group semantics and is intentionally explicit.
+This avoids requiring host apps to modify their User model. Users can access their groups via the reverse relation (e.g., `user.opagroup_set` or a custom `related_name`).
 
 ### Group model naming
 
@@ -162,23 +162,24 @@ OPA-specific group/team model.
 ### Fields
 
 * `name`
-* `organization` FK
+* `organization` FK (to the model specified by `ANSIBLE_BASE_ORGANIZATION_MODEL`)
+* `users` M2M to `settings.AUTH_USER_MODEL`
 * standard created/modified metadata if desired
 * optional system/managed flags if useful later
 
 ### Notes
 
 * This is distinct from Django auth `Group`
-* Membership to users is ordinary Django M2M
+* The user M2M is defined on `OPAGroup`, not on the User model, so host apps do not need to modify their User model
 * One auto-created single-user `OPAGroup` should exist per user
 
 ---
 
 ## 5.2 User <-> OPAGroup membership
 
-On the user model, add:
+Defined on `OPAGroup`:
 
-* `dab_opa_groups = ManyToManyField(OPAGroup, ...)`
+* `users = ManyToManyField(settings.AUTH_USER_MODEL, related_name='dab_opa_groups', ...)`
 
 This relation is the only user-group membership used for DAB OPA resolution.
 
@@ -479,72 +480,59 @@ This is the only runtime principal reference allowed in v1.
 For a user request involving `(resource, action)`:
 
 1. if `user.is_superuser`, bypass and allow all
-2. get `user.dab_opa_groups`
-3. get roles assigned via `GroupRoleAssignment`
-4. gather all matching `Policy` rows where:
+2. send OPA request with `(user_id, is_superuser, resource, action)`
+3. OPA evaluates pre-loaded generated Rego (which encodes all user/group/role/policy data)
+4. receive resolved clauses from OPA
+5. compile clauses into Django `Q(...)`
+6. apply to queryset
 
-   * `resource == requested resource`
-   * `action == requested action`
-5. validate/serialize those policies into OPA input form
-6. send OPA request
-7. receive normalized result
-8. compile result into Django `Q(...)`
-9. apply to queryset
+Note: Steps 2-4 replace the old pattern of resolving groups/roles/policies in Django per-request. That resolution now happens at Rego generation time (see section 10).
 
 ---
 
 ## 10. OPA boundary
 
-## 10.1 Why policies are passed instead of roles
+## 10.1 Rego is dynamically generated
 
-Django already knows:
+The Rego policy loaded into OPA is **dynamically generated** by the `dab_opa` app from the Django data model. When roles, policies, or assignments change, the app regenerates the Rego and pushes it to OPA (via the OPA Bundle API or direct policy update).
 
-* user-group membership
-* group-role assignment
-* role-policy membership
+The generated Rego encodes:
 
-Therefore Django should flatten these relationships before calling OPA.
+* all effective policies for all users/groups
+* `is_superuser` bypass rules
+* `principal_user_id` substitution logic
+* OR combination of matching policies
 
-OPA should not need to understand:
+OPA does not receive per-request policy payloads. Instead, OPA has the full policy set pre-loaded and the per-request input is lightweight — just the principal and target.
 
-* roles
-* groups
-* group organizations
-* assignment tables
+### Why generate Rego from data
 
-OPA only evaluates effective policies for the request.
+* OPA evaluates pre-compiled Rego far more efficiently than interpreting dynamic policy lists per request.
+* The generated Rego is deterministic and auditable — it can be logged, diffed, and version-controlled.
+* Django does not need to resolve effective policies on every request — only on policy changes.
 
 ---
 
 ## 10.2 OPA request format
 
-Suggested request payload:
+Since Rego is pre-loaded with all policy data, the per-request input is minimal:
 
 ```json
 {
-  "principal": {
-    "user_id": 42,
-    "is_superuser": false
-  },
-  "target": {
-    "resource": "project",
-    "action": "read"
-  },
-  "policies": [
-    {
-      "field_name": "organization_id",
-      "operator": "eq",
-      "value_type": "constant",
-      "constant_value": "17"
+  "input": {
+    "principal": {
+      "user_id": 42,
+      "is_superuser": false
     },
-    {
-      "field_name": "created_by_id",
-      "operator": "eq",
-      "value_type": "principal_user_id"
+    "target": {
+      "resource": "project",
+      "action": "read"
     }
-  ]
+  }
 }
 ```
+
+OPA looks up the user's effective policies from the generated Rego data and returns the resolved scope.
 
 ---
 
@@ -552,48 +540,23 @@ Suggested request payload:
 
 OPA should:
 
-* honor `is_superuser` bypass if included in the request contract
+* evaluate the pre-loaded generated Rego policy
+* honor `is_superuser` bypass
 * substitute `principal_user_id` with actual `principal.user_id`
-* combine all policies by OR
+* combine all matching policies by OR
 * return a normalized scope representation Django can convert to `Q(...)`
 
 OPA should not:
 
-* resolve groups
-* resolve roles
-* resolve policy dependencies
+* resolve groups or roles (this is baked into the generated Rego)
 * introspect Django models
+* make external calls
 
 ---
 
 ## 10.4 OPA response format
 
-Suggested response shape:
-
-```json
-{
-  "scope": {
-    "any": [
-      {
-        "field_name": "organization_id",
-        "operator": "eq",
-        "value": 17
-      },
-      {
-        "field_name": "created_by_id",
-        "operator": "eq",
-        "value": 42
-      }
-    ]
-  }
-}
-```
-
-Even though v1 policies are atomic, returning a normalized OR container is reasonable because the effective result is a union of atomic clauses.
-
-Alternatively, OPA may return a flat list of resolved clauses, and Django may treat that as OR.
-
-Example flat response:
+Suggested response — a flat list of resolved clauses:
 
 ```json
 {
@@ -612,11 +575,18 @@ Example flat response:
 }
 ```
 
-This flatter form may fit v1 better.
+Django ORs these clauses into a `Q(...)` expression.
 
-### Recommendation
+## 10.5 Rego regeneration
 
-Use the flat `clauses` response in v1.
+The app regenerates and pushes Rego to OPA when:
+
+* a `Policy` is created, updated, or deleted
+* a `GroupRoleAssignment` is created or deleted
+* `OPAGroup` membership changes
+* a `Role` is modified
+
+This can be done via Django signals or an explicit `sync_opa()` call. The regeneration should be debounced or batched to avoid excessive updates during bulk operations.
 
 ---
 
@@ -870,7 +840,19 @@ This group should likely be marked as managed/system-generated.
 
 ---
 
-## 18. Group organization field
+## 18. Organization model setting
+
+DAB OPA requires a new setting to identify the host app's organization model:
+
+```python
+ANSIBLE_BASE_ORGANIZATION_MODEL = 'myapp.Organization'
+```
+
+This follows the same pattern as `ANSIBLE_BASE_TEAM_MODEL`. The `OPAGroup.organization` FK uses this setting to reference the correct model.
+
+---
+
+## 18.1 Group organization field
 
 `OPAGroup.organization` exists in v1 because:
 
@@ -890,11 +872,11 @@ Not runtime OPA input.
 
 ---
 
-## 19. Testing strategy
+## 20. Testing strategy
 
 There will be a lot of testing. The test plan should include:
 
-## 19.1 Registry validation tests
+## 20.1 Registry validation tests
 
 * invalid resource rejected
 * invalid action rejected
@@ -904,26 +886,26 @@ There will be a lot of testing. The test plan should include:
 * UUID coercion works
 * FK/integer coercion works
 
-## 19.2 Role dependency tests
+## 20.2 Role dependency tests
 
 * strict mode rejects missing required read policy
 * loose mode auto-adds required read policy
 * exact “corresponding policy” matching works
 
-## 19.3 Effective policy resolution tests
+## 20.3 Effective policy resolution tests
 
 * user gets policies through direct single-user OPA group
 * user gets policies through additional shared OPA groups
 * combined policies across roles are ORed
 * duplicate equivalent policies do not break behavior
 
-## 19.4 OPA contract tests
+## 20.4 OPA contract tests
 
 * Django -> OPA payload shape is correct
 * OPA returns expected resolved clauses
 * local evaluator matches OPA result
 
-## 19.5 Queryset tests
+## 20.5 Queryset tests
 
 * resolved clauses become correct `Q(...)`
 * empty policy set yields empty queryset
@@ -931,7 +913,7 @@ There will be a lot of testing. The test plan should include:
 
 ---
 
-## 20. Implementation phases
+## 21. Implementation phases
 
 ## Phase 1: skeleton and settings
 
@@ -984,7 +966,7 @@ There will be a lot of testing. The test plan should include:
 
 ---
 
-## 21. Recommended helper APIs
+## 22. Recommended helper APIs
 
 DAB OPA should expose Python helpers like:
 
@@ -1001,7 +983,7 @@ The guiding rule remains:
 
 ---
 
-## 22. Future planning note
+## 23. Future planning note
 
 At the end of the implementation/design document, include a separate future-planning note stating that later generalization may explore:
 
@@ -1017,7 +999,7 @@ But explicitly note that these are **not committed for v1**, and it is currently
 
 ---
 
-## 23. Final v1 summary
+## 24. Final v1 summary
 
 DAB OPA v1 is a constrained OPA integration for Django Ansible Base where:
 
@@ -1026,9 +1008,9 @@ DAB OPA v1 is a constrained OPA integration for Django Ansible Base where:
 * groups get roles
 * roles contain atomic policies
 * policies are validated against real Django model fields
-* effective policies are resolved in Django
-* effective policies, not roles, are sent to OPA
-* OPA returns resolved clause scopes
+* Rego is dynamically generated from the data model and pushed to OPA
+* per-request OPA input is just (user, resource, action)
+* OPA evaluates pre-loaded policy and returns resolved clause scopes
 * Django turns those scopes into queryset filters
 * all access is additive OR logic
 * `is_superuser` bypasses everything

@@ -96,22 +96,47 @@ The old system uses Django-style codename permissions (e.g., `view_inventory`, `
 - `view_{model}` -> `(resource, "read")`
 - `change_{model}` -> `(resource, "change")`
 - `delete_{model}` -> `(resource, "delete")`
-- `add_{model}` -> `(resource, "add")` (if supported)
+- `add_{model}` -> `(resource, "add")`
 - Custom permissions -> TBD based on resource registry
 
-### 4.4 Superuser handling
+### 4.4 Lazy role creation
+
+The migration should be lazy about creating OPA roles. A role is only created when there is an actual assignment that needs it. For example, if an org-admin role definition exists but is only assigned to 3 out of 50 organizations, the migration creates 3 OPA roles (one per organization, with `organization_id == X` policies), not 50.
+
+This is important because organization-scoped roles in the old system are a single `RoleDefinition` assigned to specific objects via `ObjectRole`. In the new system, each (role definition, organization) pair may become a distinct OPA `Role` with organization-specific policies.
+
+### 4.5 Superuser handling
 
 Superuser bypass exists outside both systems. No migration needed for superuser flags.
 
 ---
 
-## 5. Bootstrap script expansion
+## 5. Transition validation period
 
-### 5.1 Goal
+During the migration transition, both `dab_rbac` and `dab_opa` will be in `INSTALLED_APPS` simultaneously. This enables a validation mode where:
+
+- Both permission systems evaluate every request.
+- The OPA result is the authoritative one (used for actual access control).
+- The old RBAC result is computed in parallel for comparison.
+- Any discrepancy between the two results is logged with full context (user, resource, action, old result, new result).
+
+This dual-evaluation mode should be:
+
+- Enabled via a setting (e.g., `DAB_OPA_TRANSITION_VALIDATION = True`).
+- Designed to have minimal performance impact (the old RBAC check can be async or fire-and-forget).
+- Temporary — removed once the migration is validated and the old RBAC app is removed.
+
+The transition period should be as short as possible. Once validation confirms parity, the old RBAC app is removed from `INSTALLED_APPS` and all RBAC-referencing code is deleted.
+
+---
+
+## 6. Bootstrap script expansion
+
+### 6.1 Goal
 
 The `test_app/scripts/bootstrap.sh` and `test_app/management/commands/create_demo_data.py` must be expanded to create data covering all RBAC assignment types so the migration can be manually tested end-to-end.
 
-### 5.2 Data to create
+### 6.2 Data to create
 
 The demo data creator needs to produce:
 
@@ -125,7 +150,7 @@ The demo data creator needs to produce:
 - **Global/system-wide roles**: System Auditor assignments to verify system role migration.
 - **Edge cases**: roles with overlapping permissions, users with both direct and team-inherited permissions on the same object.
 
-### 5.3 Verification
+### 6.3 Verification
 
 After running the migration command, there should be a way to verify correctness:
 
@@ -135,7 +160,7 @@ After running the migration command, there should be a way to verify correctness
 
 ---
 
-## 6. Implementation phases
+## 7. Implementation phases
 
 ### Phase 1: Expand demo data
 
