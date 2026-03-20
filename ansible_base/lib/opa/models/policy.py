@@ -55,6 +55,11 @@ class Policy(models.Model):
         app_label = "dab_opa"
         ordering = ["role", "resource", "action", "position"]
 
+    def clean(self):
+        from ansible_base.lib.opa.validators import validate_policy
+
+        validate_policy(self)
+
     def __str__(self):
         if self.value_type == self.ValueType.PRINCIPAL_USER_ID:
             return f"{self.resource}.{self.action}: {self.field_name} {self.operator} <principal_user_id>"
