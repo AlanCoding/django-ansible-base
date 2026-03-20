@@ -15,7 +15,7 @@ services:
     command: >
       /usr/local/bin/opa run --server
         --addr 0.0.0.0:8181
-        --bundle /src/ansible_base/lib/opa/bundles
+        /src/ansible_base/lib/opa/bundles/policy.rego
     volumes:
       - '.:/src:z'
     ports:
