@@ -8,6 +8,24 @@ services:
     ports:
       - "55432:5432"
 
+  opa:
+    build:
+      context: .
+    container_name: dab_opa
+    command: >
+      /usr/local/bin/opa run --server
+        --addr 0.0.0.0:8181
+        --bundle /src/ansible_base/lib/opa/bundles
+    volumes:
+      - '.:/src:z'
+    ports:
+      - '8181:8181'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8181/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   test_app:
     build:
       context: .
@@ -20,12 +38,15 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      opa:
+        condition: service_healthy
     environment:
       DJANGO_SETTINGS_MODULE: test_app.settings
       DB_HOST: postgres
       DB_PORT: 5432
       DB_USER: dab
       DB_PASSWORD: dabing
+      DAB_OPA_SERVER_URL: http://opa:8181
     
     # the following 2 parameters makes the container interactive
     # for debugging purposes, a breakpoint can be set in the code

@@ -63,6 +63,15 @@ stop-postgres:
 	echo "Killing dab_postgres container"
 	$(DOCKER_COMPOSE) rm -fsv postgres
 
+## Starts an OPA container in the background if one is not running
+opa:
+	docker start dab_opa || $(DOCKER_COMPOSE) up -d opa --quiet-pull
+
+## Stops the OPA container started with 'make opa'
+stop-opa:
+	echo "Killing dab_opa container"
+	$(DOCKER_COMPOSE) rm -fsv opa
+
 # Build targets
 # --------------------------------------
 

@@ -16,6 +16,15 @@ function cleanup {
 
 trap cleanup EXIT
 
+# Start OPA alongside postgres
+opa_running=$(docker ps -aq -f name=dab_opa)
+if [[ -z "${opa_running// /}" ]]; then
+    echo "Starting OPA container"
+    make opa
+else
+    echo "dab_opa container is already running"
+fi
+
 docker_running=$(docker ps -aq -f name=dab_postgres)
 migrate_needed=1
 

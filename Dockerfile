@@ -27,3 +27,9 @@ RUN /venv/bin/pip install -r /tmp/requirements_all.txt
 
 COPY requirements/requirements_dev.txt /tmp/requirements_dev.txt
 RUN /venv/bin/pip install -r /tmp/requirements_dev.txt
+
+# Install OPA binary
+ARG OPA_VERSION=1.4.2
+RUN curl -L -o /usr/local/bin/opa \
+    "https://github.com/open-policy-agent/opa/releases/download/v${OPA_VERSION}/opa_linux_amd64_static" \
+    && chmod +x /usr/local/bin/opa
