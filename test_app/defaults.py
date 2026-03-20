@@ -66,6 +66,7 @@ INSTALLED_APPS = [
     'ansible_base.activitystream',
     'ansible_base.help_text_check',
     'ansible_base.feature_flags',
+    'ansible_base.lib.opa',
 ]
 
 MIDDLEWARE = [
@@ -184,6 +185,69 @@ ANSIBLE_BASE_RBAC_MODEL_REGISTRY = {
     "test_app.immutabletask": {"parent_field_name": None},
 }
 ANSIBLE_BASE_OAUTH2_PROVIDER_PERMISSIONS_CHECK_IGNORED_VIEWS = ["drf_spectacular.views.SpectacularSwaggerView"]
+
+# DAB OPA settings
+DAB_OPA_SERVER_URL = os.environ.get("DAB_OPA_SERVER_URL", "http://localhost:8181")
+DAB_OPA_TRANSITION_VALIDATION = False
+
+DAB_OPA = {
+    "strict_mode_default": False,
+    "shared_fields": {
+        "id": {
+            "django_path": "id",
+            "type": "pk",
+            "operators": ["eq"],
+        },
+        "organization_id": {
+            "django_path": "organization_id",
+            "type": "fk",
+            "operators": ["eq"],
+        },
+        "created_by_id": {
+            "django_path": "created_by_id",
+            "type": "fk",
+            "operators": ["eq"],
+        },
+    },
+    "resources": {
+        "organization": {
+            "model": "test_app.Organization",
+            "actions": ["read", "change", "delete", "add"],
+            "fields": {},
+            "action_dependencies": {
+                "change": ["read"],
+                "delete": ["read"],
+            },
+        },
+        "team": {
+            "model": "test_app.Team",
+            "actions": ["read", "change", "delete", "add"],
+            "fields": {},
+            "action_dependencies": {
+                "change": ["read"],
+                "delete": ["read"],
+            },
+        },
+        "inventory": {
+            "model": "test_app.Inventory",
+            "actions": ["read", "change", "delete", "add"],
+            "fields": {},
+            "action_dependencies": {
+                "change": ["read"],
+                "delete": ["read"],
+            },
+        },
+        "instancegroup": {
+            "model": "test_app.InstanceGroup",
+            "actions": ["read", "change", "delete", "add"],
+            "fields": {},
+            "action_dependencies": {
+                "change": ["read"],
+                "delete": ["read"],
+            },
+        },
+    },
+}
 ALLOW_SHARED_RESOURCE_CUSTOM_ROLES = True  # Allow making custom roles with org change permission, for example
 ALLOW_LOCAL_ASSIGNING_JWT_ROLES = False
 
