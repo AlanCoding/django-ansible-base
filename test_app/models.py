@@ -1,5 +1,6 @@
 import uuid
 
+from django.conf import settings
 from django.db import models
 from django.db.models import JSONField
 from rest_framework.exceptions import PermissionDenied as DRFPermissionDenied
@@ -145,6 +146,7 @@ class Inventory(models.Model):
     name = models.CharField(max_length=512)
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, null=True, related_name='inventories')
     credential = models.ForeignKey('test_app.Credential', on_delete=models.SET_NULL, null=True, related_name='inventories')
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='created_inventories')
 
     class Meta:
         app_label = 'test_app'

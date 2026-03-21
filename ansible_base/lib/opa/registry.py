@@ -37,6 +37,7 @@ class OPARegistry:
     def __init__(self):
         self._config = None
         self._validated = False
+        self._model_to_resource = None
 
     @property
     def config(self):
@@ -103,6 +104,24 @@ class OPARegistry:
         """Return action dependency mapping for a resource."""
         resource_def = self.get_resource(resource_name)
         return resource_def.get("action_dependencies", {})
+
+    def get_resource_name_for_model(self, model_cls):
+        """Return the resource name for a Django model class, or raise ValueError."""
+        if self._model_to_resource is None:
+            self._model_to_resource = {}
+            for rname, rdef in self.resources.items():
+                model_path = rdef["model"]
+                from django.apps import apps as django_apps
+
+                try:
+                    m = django_apps.get_model(model_path)
+                    self._model_to_resource[m] = rname
+                except LookupError:
+                    pass
+        try:
+            return self._model_to_resource[model_cls]
+        except KeyError:
+            raise ValueError(f"No OPA resource registered for model {model_cls.__name__}")
 
     def get_model(self, resource_name, apps=None):
         """Resolve the Django model class for a resource."""
