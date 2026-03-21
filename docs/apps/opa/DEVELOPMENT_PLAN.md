@@ -328,32 +328,15 @@ ansible_base/opa/
 
 ---
 
-## Phase 10: Cleanup
+## Phase 10: Remove DAB RBAC (future — not part of this patch)
 
-**Goal**: Remove old RBAC.
-
-### 10.1 Remove dab_rbac from test_app
-
-- Remove `ansible_base.rbac` from `INSTALLED_APPS` in test_app.
-- Remove all RBAC imports and references in test_app.
-- Remove RBAC-specific test data from `create_demo_data.py` (replace with OPA equivalents).
-
-### 10.2 Remove RBAC references from DAB apps
-
-- Audit all DAB apps that reference `ansible_base.rbac` (e.g., `ansible_base.api_documentation`, view mixins, etc.).
-- Replace with OPA equivalents or remove.
-
-### 10.3 Remove transition validation code
-
-- Remove `DAB_OPA_TRANSITION_VALIDATION` setting and dual-evaluation logic.
-- Remove `--verify` flag from migration command (migration itself may remain for downstream consumers).
-
-### 10.4 RBAC app deprecation
-
-- Mark `ansible_base.rbac` as deprecated.
-- Plan for eventual deletion (may need to keep for downstream migration support for one release cycle).
-
-**Deliverable**: test_app runs purely on OPA. Old RBAC code is deprecated/removed.
+> **This phase cannot be completed as part of the DAB OPA patch.**
+> Before `ansible_base.rbac` can be removed, every downstream application
+> that depends on it (AWX, Gateway, EDA, etc.) must first migrate to DAB OPA.
+> That migration work happens in each downstream repo, not here.
+>
+> See **[RBAC_REMOVAL.md](RBAC_REMOVAL.md)** for the full removal plan and
+> prerequisites for downstream applications.
 
 ---
 
@@ -380,7 +363,7 @@ Phase 8 (RBAC migration) -----+
     |
 Phase 9 (Transition validation)
     |
-Phase 10 (Cleanup)
+Phase 10 (Remove RBAC) ← future, requires downstream migration first
 ```
 
 Phases 0-3 are sequential prerequisites. Phases 4-7 can partially overlap (e.g., API serializers can start once models exist, even before Rego generation is complete). Phase 8 requires Phases 2, 4, and the old RBAC data model. Phase 9 requires Phase 8 plus the host app hooks from Phase 6.
