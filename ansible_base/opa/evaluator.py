@@ -3,8 +3,8 @@ from collections import defaultdict
 
 from django.db.models import Q
 
-from ansible_base.lib.opa.queryset import compile_clauses
-from ansible_base.lib.opa.registry import opa_registry
+from ansible_base.opa.queryset import compile_clauses
+from ansible_base.opa.registry import opa_registry
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +18,7 @@ def get_effective_policies(user, resource, action):
     Returns a list of resolved clause dicts matching the OPA response format:
         [{"field_name": "...", "operator": "...", "value": ...}, ...]
     """
-    from ansible_base.lib.opa.models import Policy
+    from ansible_base.opa.models import Policy
 
     # Get all policies reachable through user's OPA groups
     policies = Policy.objects.filter(

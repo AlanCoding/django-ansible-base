@@ -22,7 +22,7 @@ def generate_user_policies():
         }
     }
     """
-    from ansible_base.lib.opa.models import OPAGroup
+    from ansible_base.opa.models import OPAGroup
 
     # user_id -> resource -> action -> list of clause dicts
     user_policies = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))

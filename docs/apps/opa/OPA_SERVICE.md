@@ -38,7 +38,7 @@ A new `opa` service will be added to `docker-compose.yml`:
     command: >
       /usr/local/bin/opa run --server
         --addr 0.0.0.0:8181
-        --bundle /src/ansible_base/lib/opa/bundles
+        --bundle /src/ansible_base/opa/bundles
     volumes:
       - '.:/src:z'
     ports:
@@ -53,7 +53,7 @@ A new `opa` service will be added to `docker-compose.yml`:
 Key points:
 
 - Reuses the same Docker image as `test_app` (OPA binary is already installed there).
-- Mounts the repo so that Rego bundles under `ansible_base/lib/opa/bundles/` are available without a rebuild.
+- Mounts the repo so that Rego bundles under `ansible_base/opa/bundles/` are available without a rebuild.
 - Exposes port `8181` (the OPA default) to the host.
 - The `--bundle` flag points to the directory where DAB OPA Rego policies will live. This path will be created as part of the `dab_opa` app implementation.
 - Health check confirms OPA is responsive.
@@ -129,7 +129,7 @@ Inside `docker-compose.yml`, the `test_app` service overrides this to the contai
 OPA policy files (`.rego`) and optional `data.json` files will live under:
 
 ```
-ansible_base/lib/opa/bundles/
+ansible_base/opa/bundles/
 ```
 
 This directory is mounted into the container. OPA watches it automatically when started with `--bundle`, so policy changes during development are picked up on reload without restarting the container.

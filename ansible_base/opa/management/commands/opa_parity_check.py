@@ -2,10 +2,10 @@ from django.apps import apps as django_apps
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 
-from ansible_base.lib.opa.evaluator import local_filter_queryset
-from ansible_base.lib.opa.queryset import filter_queryset_for_user, get_opa_scope
-from ansible_base.lib.opa.registry import opa_registry
-from ansible_base.lib.opa.rego.sync import sync_to_opa
+from ansible_base.opa.evaluator import local_filter_queryset
+from ansible_base.opa.queryset import filter_queryset_for_user, get_opa_scope
+from ansible_base.opa.registry import opa_registry
+from ansible_base.opa.rego.sync import sync_to_opa
 
 
 class Command(BaseCommand):

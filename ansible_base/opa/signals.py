@@ -13,7 +13,7 @@ def ensure_user_opa_group(sender, instance, created, **kwargs):
     if not created:
         return
 
-    from ansible_base.lib.opa.models import OPAGroup
+    from ansible_base.opa.models import OPAGroup
 
     group_name = f"user:{instance.pk}"
     group, was_created = OPAGroup.objects.get_or_create(
@@ -27,7 +27,7 @@ def ensure_user_opa_group(sender, instance, created, **kwargs):
 
 def _trigger_sync(sender, **kwargs):
     """Signal handler that triggers a debounced OPA sync."""
-    from ansible_base.lib.opa.rego.sync import sync_to_opa
+    from ansible_base.opa.rego.sync import sync_to_opa
 
     sync_to_opa(debounce_seconds=SYNC_DEBOUNCE_SECONDS)
 
@@ -46,7 +46,7 @@ def connect_user_signal():
 
 def connect_sync_signals():
     """Connect signals that trigger OPA sync on policy/role/assignment/membership changes."""
-    from ansible_base.lib.opa.models import GroupRoleAssignment, OPAGroup, Policy, Role
+    from ansible_base.opa.models import GroupRoleAssignment, OPAGroup, Policy, Role
 
     # Policy changes
     post_save.connect(_trigger_sync, sender=Policy, dispatch_uid="dab_opa_sync_policy_save")

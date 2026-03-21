@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from ansible_base.lib.opa.models import GroupRoleAssignment, OPAGroup, Policy, Role
+from ansible_base.opa.models import GroupRoleAssignment, OPAGroup, Policy, Role
 
 
 class PolicyInline(admin.TabularInline):

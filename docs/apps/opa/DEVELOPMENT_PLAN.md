@@ -31,7 +31,7 @@ This is the implementation plan for the `dab_opa` app, the OPA service infrastru
 
 ### 0.5 Placeholder Rego bundle
 
-- Create `ansible_base/lib/opa/bundles/` directory with a minimal placeholder Rego policy that accepts requests and returns empty clauses. This lets the infrastructure work end-to-end before real policy generation exists.
+- Create `ansible_base/opa/bundles/` directory with a minimal placeholder Rego policy that accepts requests and returns empty clauses. This lets the infrastructure work end-to-end before real policy generation exists.
 
 **Deliverable**: `make opa` starts OPA, `curl localhost:8181/health` returns OK, test_app can be configured to point at it.
 
@@ -44,7 +44,7 @@ This is the implementation plan for the `dab_opa` app, the OPA service infrastru
 ### 1.1 Create app structure
 
 ```
-ansible_base/lib/opa/
+ansible_base/opa/
     __init__.py
     apps.py
     models/
@@ -163,7 +163,7 @@ ansible_base/lib/opa/
   - `is_superuser` bypass rule.
   - `principal_user_id` substitution.
   - OR combination of matching policies per (user, resource, action).
-- Output: one or more `.rego` files written to `ansible_base/lib/opa/bundles/`.
+- Output: one or more `.rego` files written to `ansible_base/opa/bundles/`.
 
 ### 4.2 OPA sync
 

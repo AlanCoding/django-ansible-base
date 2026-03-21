@@ -1,1 +1,1 @@
-default_app_config = 'ansible_base.lib.opa.apps.DABOPAConfig'
+default_app_config = 'ansible_base.opa.apps.DABOPAConfig'

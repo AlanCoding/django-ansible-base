@@ -2,7 +2,7 @@ import logging
 
 from django.db.models import Q
 
-from ansible_base.lib.opa.registry import opa_registry
+from ansible_base.opa.registry import opa_registry
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +113,7 @@ def get_opa_scope(user, resource, action):
     Returns:
         Dict with 'allow' (bool) and 'clauses' (list).
     """
-    from ansible_base.lib.opa.client import OPAClient
+    from ansible_base.opa.client import OPAClient
 
     client = OPAClient(base_url=opa_registry.server_url)
     return client.query(

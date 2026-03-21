@@ -5,7 +5,7 @@ import threading
 
 import requests
 
-from ansible_base.lib.opa.rego.generator import generate_user_policies
+from ansible_base.opa.rego.generator import generate_user_policies
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +69,7 @@ def _write_data_json(user_policies):
 
 def _push_to_opa(user_policies):
     """Push policy data to OPA via the Data API."""
-    from ansible_base.lib.opa.registry import opa_registry
+    from ansible_base.opa.registry import opa_registry
 
     url = f"{opa_registry.server_url}/v1/data/dab_opa/user_policies"
     try:

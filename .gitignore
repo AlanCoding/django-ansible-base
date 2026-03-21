@@ -54,4 +54,4 @@ compose/ingress/certs/*
 test_app/static_collected/
 
 # Generated OPA data
-ansible_base/lib/opa/bundles/data.json
+ansible_base/opa/bundles/data.json

@@ -101,8 +101,8 @@ python manage.py shell
 ```python
 from django.contrib.auth import get_user_model
 from test_app.models import Inventory
-from ansible_base.lib.opa.queryset import filter_queryset_for_user, user_can_access_obj
-from ansible_base.lib.opa.evaluator import local_filter_queryset
+from ansible_base.opa.queryset import filter_queryset_for_user, user_can_access_obj
+from ansible_base.opa.evaluator import local_filter_queryset
 
 User = get_user_model()
 user = User.objects.get(username='admin')
@@ -119,7 +119,7 @@ print([i.name for i in qs2])  # Should match
 ### Inspect the generated OPA data
 
 ```bash
-cat ansible_base/lib/opa/bundles/data.json | python3 -m json.tool
+cat ansible_base/opa/bundles/data.json | python3 -m json.tool
 ```
 
 ### Re-sync after manual changes

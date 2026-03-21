@@ -2,8 +2,8 @@ import logging
 
 from django.core.exceptions import ValidationError
 
-from ansible_base.lib.opa.models.policy import Policy
-from ansible_base.lib.opa.registry import opa_registry
+from ansible_base.opa.models.policy import Policy
+from ansible_base.opa.registry import opa_registry
 
 logger = logging.getLogger(__name__)
 

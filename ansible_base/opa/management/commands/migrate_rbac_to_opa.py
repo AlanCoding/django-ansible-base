@@ -5,9 +5,9 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 
-from ansible_base.lib.opa.models import GroupRoleAssignment, OPAGroup, Policy, Role
-from ansible_base.lib.opa.registry import opa_registry
-from ansible_base.lib.opa.rego.sync import sync_to_opa
+from ansible_base.opa.models import GroupRoleAssignment, OPAGroup, Policy, Role
+from ansible_base.opa.registry import opa_registry
+from ansible_base.opa.rego.sync import sync_to_opa
 
 logger = logging.getLogger(__name__)
 

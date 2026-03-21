@@ -66,7 +66,7 @@ INSTALLED_APPS = [
     'ansible_base.activitystream',
     'ansible_base.help_text_check',
     'ansible_base.feature_flags',
-    'ansible_base.lib.opa',
+    'ansible_base.opa',
 ]
 
 MIDDLEWARE = [

@@ -56,7 +56,7 @@ class Policy(models.Model):
         ordering = ["role", "resource", "action", "position"]
 
     def clean(self):
-        from ansible_base.lib.opa.validators import validate_policy
+        from ansible_base.opa.validators import validate_policy
 
         validate_policy(self)
 
