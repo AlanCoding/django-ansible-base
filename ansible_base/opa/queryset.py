@@ -60,6 +60,9 @@ def filter_queryset_for_user(queryset, user, action):
     Uses OPA to resolve the user's effective clauses for the queryset's
     model and the given action, then applies them as queryset filters.
 
+    When DAB_OPA_TRANSITION_VALIDATION is enabled, also compares the
+    result against RBAC and logs discrepancies.
+
     Args:
         queryset: a Django QuerySet
         user: the user requesting access
@@ -75,13 +78,20 @@ def filter_queryset_for_user(queryset, user, action):
     resource_name = opa_registry.get_resource_name_for_model(model_cls)
     result = get_opa_scope(user, resource_name, action)
     q = compile_clauses(result["clauses"], resource_name)
-    return queryset.filter(q)
+    filtered = queryset.filter(q)
+
+    from ansible_base.opa.transition import validate_queryset_filter
+
+    return validate_queryset_filter(filtered, user, action)
 
 
 def user_can_access_obj(user, obj, action):
     """Check if a user can perform an action on a specific object.
 
     Derived from queryset filtering — not separate logic.
+
+    When DAB_OPA_TRANSITION_VALIDATION is enabled, also compares the
+    result against RBAC and logs discrepancies.
 
     Args:
         user: the user requesting access
@@ -99,7 +109,11 @@ def user_can_access_obj(user, obj, action):
     result = get_opa_scope(user, resource_name, action)
     q = compile_clauses(result["clauses"], resource_name)
 
-    return model_cls.objects.filter(q, pk=obj.pk).exists()
+    opa_result = model_cls.objects.filter(q, pk=obj.pk).exists()
+
+    from ansible_base.opa.transition import validate_object_access
+
+    return validate_object_access(opa_result, user, obj, action)
 
 
 def get_opa_scope(user, resource, action):
