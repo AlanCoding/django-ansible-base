@@ -26,6 +26,7 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("--dry-run", action="store_true", help="Report what would be migrated without writing.")
         parser.add_argument("--sync", action="store_true", help="Run sync_opa after migration.")
+        parser.add_argument("--verify", action="store_true", help="After migration, compare RBAC vs OPA effective permissions for all users.")
 
     def handle(self, *args, **options):
         self.dry_run = options["dry_run"]
@@ -42,6 +43,10 @@ class Command(BaseCommand):
             self.stdout.write("Syncing to OPA...")
             sync_to_opa(debounce_seconds=0)
             self.stdout.write(self.style.SUCCESS("OPA sync complete."))
+
+        if options["verify"] and not self.dry_run:
+            self.stdout.write("")
+            self._verify_parity()
 
     def _build_resource_model_map(self):
         """Build mapping from Django model name to OPA resource name."""
@@ -234,10 +239,14 @@ class Command(BaseCommand):
         # Determine the scope field and value
         if object_id is None:
             # System-wide / singleton role — no object scoping
-            # These create policies without field constraints (global access)
-            # For now, skip these — they need special handling
-            self.stdout.write(f"    SKIP {actor_label} -> {rd.name}: system-wide role (no object scope)")
-            return None
+            # These create policies that grant access to ALL objects of each resource type
+            return self._migrate_global_assignment(
+                actor_label=actor_label,
+                actor_user=actor_user,
+                team=team,
+                role_definition=rd,
+                resource_actions=resource_actions,
+            )
 
         # Resolve the object to determine scoping
         if content_type is None:
@@ -305,7 +314,7 @@ class Command(BaseCommand):
                 field_name=field,
                 operator="eq",
                 value_type="constant",
-                defaults={"constant_value": value},
+                constant_value=value,
             )
             if created:
                 policies_created += 1
@@ -342,3 +351,167 @@ class Command(BaseCommand):
         GroupRoleAssignment.objects.get_or_create(group=group, role=opa_role)
 
         return policies_created
+
+    def _migrate_global_assignment(self, actor_label, actor_user, team, role_definition, resource_actions):
+        """Migrate a system-wide (global/singleton) role assignment.
+
+        Global roles have no object_id — they grant access to ALL objects of
+        matching resource types. Since we only support eq operator, we expand
+        global access into per-org or per-object policies for all existing data.
+        """
+        rd = role_definition
+        opa_role_name = f"rbac:{rd.name}@global"
+        org_model_path = getattr(settings, "ANSIBLE_BASE_ORGANIZATION_MODEL", "").lower()
+
+        if self.dry_run:
+            actions_str = ", ".join(f"{r}.{a}" for r, a in sorted(resource_actions))
+            self.stdout.write(f"    WOULD ASSIGN {actor_label} -> {opa_role_name} (global: {actions_str})")
+            return len(resource_actions)
+
+        opa_role, _ = Role.objects.get_or_create(
+            name=opa_role_name,
+            defaults={"description": f"Migrated global role: {rd.name}", "managed": True},
+        )
+
+        # For global roles, create policies scoped to each existing organization
+        # plus policies for non-org-scoped resources scoped to each existing object
+        from django.apps import apps as django_apps
+
+        policies_created = 0
+        for res, action in resource_actions:
+            res_def = opa_registry.get_resource(res)
+            res_model_path = res_def.get("model", "").lower()
+            model_cls = django_apps.get_model(res_def["model"])
+
+            if res_model_path == org_model_path:
+                # The resource IS the organization — scope by id for each org
+                for org_pk in model_cls.objects.values_list("pk", flat=True):
+                    _, created = Policy.objects.get_or_create(
+                        role=opa_role,
+                        resource=res,
+                        action=action,
+                        field_name="id",
+                        operator="eq",
+                        value_type="constant",
+                        constant_value=str(org_pk),
+                    )
+                    if created:
+                        policies_created += 1
+            elif hasattr(model_cls, "organization_id") or hasattr(model_cls, "organization"):
+                # Org-scoped resource — create policies for each org
+                org_model = django_apps.get_model(settings.ANSIBLE_BASE_ORGANIZATION_MODEL)
+                for org_pk in org_model.objects.values_list("pk", flat=True):
+                    _, created = Policy.objects.get_or_create(
+                        role=opa_role,
+                        resource=res,
+                        action=action,
+                        field_name="organization_id",
+                        operator="eq",
+                        value_type="constant",
+                        constant_value=str(org_pk),
+                    )
+                    if created:
+                        policies_created += 1
+            else:
+                # Non-org-scoped resource — create policies for each existing object
+                for obj_pk in model_cls.objects.values_list("pk", flat=True):
+                    _, created = Policy.objects.get_or_create(
+                        role=opa_role,
+                        resource=res,
+                        action=action,
+                        field_name="id",
+                        operator="eq",
+                        value_type="constant",
+                        constant_value=str(obj_pk),
+                    )
+                    if created:
+                        policies_created += 1
+
+        # Assign to actor's group
+        if actor_user:
+            group_name = f"user:{actor_user.pk}"
+            group, _ = OPAGroup.objects.get_or_create(name=group_name, defaults={"managed": True})
+            if not group.users.filter(pk=actor_user.pk).exists():
+                group.users.add(actor_user)
+        elif team:
+            group_name = f"team:{team.name}"
+            org = getattr(team, "organization", None)
+            group, _ = OPAGroup.objects.get_or_create(
+                name=group_name,
+                defaults={"managed": True, "organization": org},
+            )
+
+        GroupRoleAssignment.objects.get_or_create(group=group, role=opa_role)
+
+        self.stdout.write(f"    GLOBAL {actor_label} -> {opa_role_name} ({policies_created} policies)")
+        return policies_created
+
+    def _verify_parity(self):
+        """Compare RBAC and OPA effective permissions for all users."""
+        from ansible_base.opa.evaluator import local_filter_queryset
+        from ansible_base.rbac import permission_registry
+
+        User = get_user_model()
+        users = User.objects.all().order_by("username")
+
+        self.stdout.write(self.style.MIGRATE_HEADING("Verifying RBAC vs OPA parity..."))
+
+        mismatches = []
+        checks = 0
+
+        for user in users:
+            for resource_name, resource_def in opa_registry.resources.items():
+                model_cls = opa_registry.get_model(resource_name)
+                base_qs = model_cls.objects.all()
+
+                if not base_qs.exists():
+                    continue
+
+                # Check if model is registered in RBAC
+                if not permission_registry.is_registered(model_cls):
+                    continue
+
+                for action in resource_def["actions"]:
+                    checks += 1
+
+                    # OPA result (local evaluator, no OPA server needed)
+                    opa_qs = local_filter_queryset(base_qs, user, action)
+                    opa_pks = set(opa_qs.values_list("pk", flat=True))
+
+                    # RBAC result via access_qs
+                    rbac_pks = self._rbac_accessible_pks(user, model_cls, action, base_qs)
+
+                    if opa_pks != rbac_pks:
+                        mismatches.append((user.username, resource_name, action, opa_pks, rbac_pks))
+                        only_opa = opa_pks - rbac_pks
+                        only_rbac = rbac_pks - opa_pks
+                        self.stdout.write(
+                            self.style.ERROR(
+                                f"  MISMATCH {user.username} {resource_name}.{action}: "
+                                f"OPA-only={only_opa or set()} RBAC-only={only_rbac or set()}"
+                            )
+                        )
+
+        self.stdout.write(f"\nRan {checks} parity checks.")
+        if mismatches:
+            self.stdout.write(self.style.ERROR(f"{len(mismatches)} mismatches found."))
+        else:
+            self.stdout.write(self.style.SUCCESS("All parity checks passed!"))
+
+    def _rbac_accessible_pks(self, user, model_cls, action, base_qs):
+        """Get the set of PKs a user can access via RBAC for a given action."""
+        if user.is_superuser:
+            return set(base_qs.values_list("pk", flat=True))
+
+        # Map OPA action back to Django permission codename
+        reverse_action_map = {v: k for k, v in ACTION_PREFIX_MAP.items()}
+        django_action = reverse_action_map.get(action)
+        if django_action is None:
+            return set()
+
+        # Use RBAC's access_qs descriptor for queryset-based evaluation
+        try:
+            rbac_qs = model_cls.access_qs(user, django_action, queryset=base_qs)
+            return set(rbac_qs.values_list("pk", flat=True))
+        except Exception:
+            return set()

@@ -186,7 +186,92 @@ class Command(BaseCommand):
             client_type="confidential",
         )
 
+        # --- Additional RBAC scenarios for OPA migration testing ---
+        self._create_opa_migration_data(admin, awx, galaxy, operator_stuff, spud, awx_devs, awx_inv, galaxy_inv, isolated_group)
+
         self.stdout.write('Finished creating demo data!')
 
         if environ.get('LARGE') and not Organization.objects.filter(name__startswith='large').exists():
             self.create_large(settings.DEMO_DATA_COUNTS)
+
+    def _create_opa_migration_data(self, admin, awx, galaxy, operator_stuff, spud, awx_devs, awx_inv, galaxy_inv, isolated_group):
+        """Create comprehensive RBAC data to exercise the OPA migration command."""
+        from crum import impersonate
+
+        from ansible_base.rbac import permission_registry
+        from ansible_base.rbac.models import DABContentType, RoleDefinition
+
+        # Extra users for cross-org and multi-role scenarios
+        multi_org_user, _ = User.objects.get_or_create(username='multi_org_user')
+        multi_org_user.set_password('password')
+        multi_org_user.save()
+
+        auditor_user, _ = User.objects.get_or_create(username='auditor_user')
+        auditor_user.set_password('password')
+        auditor_user.save()
+
+        custom_role_user, _ = User.objects.get_or_create(username='custom_role_user')
+        custom_role_user.set_password('password')
+        custom_role_user.save()
+
+        # 1. Cross-organization assignments: same user is org admin in two orgs
+        RoleDefinition.objects.managed.org_admin.give_permission(multi_org_user, awx)
+        RoleDefinition.objects.managed.org_admin.give_permission(multi_org_user, galaxy)
+        self.stdout.write('  Created cross-org admin assignments')
+
+        # 2. Organization member assignments
+        RoleDefinition.objects.managed.org_member.give_permission(custom_role_user, awx)
+        RoleDefinition.objects.managed.org_member.give_permission(spud, galaxy)
+        self.stdout.write('  Created org member assignments')
+
+        # 3. System Auditor (global/system-wide role)
+        sys_auditor_rd = RoleDefinition.objects.managed.sys_auditor
+        sys_auditor_rd.give_global_permission(auditor_user)
+        self.stdout.write('  Created System Auditor assignment')
+
+        # 4. Custom role definitions with various permission combos
+        inv_ct = DABContentType.objects.get_for_model(Inventory)
+
+        inv_viewer, _ = RoleDefinition.objects.get_or_create(
+            name='Custom Inventory Viewer',
+            permissions=['view_inventory'],
+            defaults={'content_type': inv_ct, 'description': 'Custom read-only inventory role'},
+        )
+        inv_viewer.give_permission(custom_role_user, awx_inv)
+
+        inv_editor, _ = RoleDefinition.objects.get_or_create(
+            name='Custom Inventory Editor',
+            permissions=['view_inventory', 'change_inventory'],
+            defaults={'content_type': inv_ct, 'description': 'Custom edit inventory role'},
+        )
+        inv_editor.give_permission(custom_role_user, galaxy_inv)
+        self.stdout.write('  Created custom role definitions and assignments')
+
+        # 5. Team with role assignments (team gets permissions, members inherit)
+        ops_team, _ = Team.objects.get_or_create(name='ops_team', defaults={'organization': awx})
+        RoleDefinition.objects.managed.team_member.give_permission(multi_org_user, ops_team)
+        RoleDefinition.objects.managed.team_member.give_permission(custom_role_user, ops_team)
+
+        ig_ct = DABContentType.objects.get_for_model(InstanceGroup)
+        ig_viewer, _ = RoleDefinition.objects.get_or_create(
+            name='InstanceGroup Viewer',
+            permissions=['view_instancegroup'],
+            defaults={'content_type': ig_ct, 'description': 'View instance groups'},
+        )
+        ig_viewer.give_permission(ops_team, isolated_group)
+        self.stdout.write('  Created team role assignments')
+
+        # 6. Creator role scenario: objects created by specific users
+        with impersonate(custom_role_user):
+            Inventory.objects.get_or_create(
+                name='CustomUser Inventory',
+                defaults={'organization': awx, 'created_by': custom_role_user},
+            )
+        self.stdout.write('  Created creator-role test data')
+
+        # 7. Overlapping permissions: user has both direct and team-inherited
+        #    permissions on the same object (awx_inv via direct + awx_devs team)
+        inv_viewer.give_permission(spud, awx_inv)
+        self.stdout.write('  Created overlapping permission scenario')
+
+        self.stdout.write('OPA migration test data created.')
