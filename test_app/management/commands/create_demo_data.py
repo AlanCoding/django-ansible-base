@@ -112,6 +112,8 @@ class Command(BaseCommand):
         (spud, _) = User.objects.get_or_create(username='angry_spud')
         (team_member, _) = User.objects.get_or_create(username='team_member')
         (bull_bot, _) = User.objects.get_or_create(username='ansibullbot')
+        bull_bot.set_password('password')
+        bull_bot.save()
         (admin, _) = User.objects.get_or_create(username='admin')
         spud.set_password('password')
         spud.save()
