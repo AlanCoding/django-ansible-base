@@ -399,7 +399,54 @@ curl -s -u admin:admin \
 
 ---
 
-## 9. Transition validation (dual-evaluation mode)
+## 9. Django admin UI
+
+The OPA app includes full Django admin pages for managing roles, policies,
+groups, and assignments. Navigate to:
+
+```
+http://localhost:8000/admin/
+```
+
+Log in as `admin`/`admin`. Under **DAB_OPA** you'll see:
+
+- **Roles** — list with policy count, group count. Click a role to see its
+  policies inline, with clickable links to the referenced objects (e.g., a
+  policy that references `organization_id = 1` will show a link to "AWX_community").
+- **Policies** — list with resource, action, filter, value, and object links.
+  The add/edit form has **dropdown menus** for resource, action, and field name,
+  populated from the OPA registry. When creating a policy with a constant
+  value, click **Browse...** next to the value field to pick from existing
+  objects (organizations, inventories, etc.) in a searchable popup.
+- **OPA Groups** — list with user count and role count. The detail view shows a
+  horizontal filter widget for managing group membership, inline role
+  assignments, and an **Effective Permissions** summary table showing every
+  permission the group's users receive (role, resource, action, filter
+  condition, and a link to the referenced object).
+- **Group Role Assignments** — list with clickable links to both the group and
+  role. Uses autocomplete for the group and role dropdowns.
+
+### Admin actions
+
+All list views include a **"Sync to OPA"** action in the action dropdown.
+Select any items and run the action to push the current policy data to the
+OPA server.
+
+### Creating a role via admin
+
+1. Go to **Roles > Add Role**
+2. Enter a name and description
+3. In the **Policies** inline section, select a resource (e.g., "inventory"),
+   action (e.g., "read"), field (e.g., "organization_id"), and click
+   **Browse...** to pick the target organization
+4. Save the role
+5. Go to **OPA Groups**, pick a group, and in the **Group Role Assignments**
+   inline, assign the new role
+6. Use the **Sync to OPA** action to push changes
+
+---
+
+## 10. Transition validation (dual-evaluation mode)
 
 When migrating from RBAC to OPA, you can enable dual-evaluation to compare
 both systems on every request and log discrepancies.
@@ -428,7 +475,7 @@ python manage.py migrate_rbac_to_opa --verify
 
 ---
 
-## 10. Architecture summary
+## 11. Architecture summary
 
 ```
                                    +-----------+
