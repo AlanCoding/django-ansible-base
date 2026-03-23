@@ -325,6 +325,14 @@ class Command(BaseCommand):
             group, _ = OPAGroup.objects.get_or_create(name=group_name, defaults={"managed": True})
             if not group.users.filter(pk=actor_user.pk).exists():
                 group.users.add(actor_user)
+
+            # If this is an org-level assignment and the role has member_team
+            # permission, add the user to all team OPA groups in this org.
+            # This gives the org admin inherited team permissions through
+            # group membership rather than policy duplication.
+            if is_org_assignment:
+                self._inherit_team_memberships(actor_user, object_id, rd)
+
         elif team:
             group_name = f"team:{team.name}"
             org = getattr(team, "organization", None)
@@ -333,24 +341,69 @@ class Command(BaseCommand):
                 defaults={"managed": True, "organization": org},
             )
             # Add all team members to the OPA group
-            if hasattr(team, "users"):
-                for member in team.users.all():
-                    group.users.add(member)
-            elif hasattr(team, "member_roles"):
-                # Team membership via RBAC member roles
-                from ansible_base.rbac.models import ObjectRole
-                member_roles = ObjectRole.objects.filter(
-                    content_type__model="team",
-                    object_id=str(team.pk),
-                    role_definition__name__icontains="member",
-                )
-                for mr in member_roles:
-                    for u in mr.users.all():
-                        group.users.add(u)
+            self._add_team_members_to_group(team, group)
 
         GroupRoleAssignment.objects.get_or_create(group=group, role=opa_role)
 
         return policies_created
+
+    def _add_team_members_to_group(self, team, group):
+        """Add all members of an RBAC team to an OPA group."""
+        from ansible_base.rbac.models import ObjectRole
+
+        member_roles = ObjectRole.objects.filter(
+            content_type__model="team",
+            object_id=str(team.pk),
+            role_definition__permissions__codename__startswith="member",
+        ).prefetch_related("users")
+        for mr in member_roles:
+            for u in mr.users.all():
+                group.users.add(u)
+
+    def _inherit_team_memberships(self, user, org_id, role_definition):
+        """If the role grants member_team, add the user to all team OPA groups in the org.
+
+        This implements org admin team inheritance: org admins implicitly become
+        members of all teams in their org, inheriting all team permissions.
+        """
+        from ansible_base.rbac import permission_registry
+
+        team_perm = permission_registry.team_permission
+        has_team_perm = role_definition.permissions.filter(codename=team_perm).exists()
+        if not has_team_perm:
+            return
+
+        # Find all teams in this org
+        team_model = permission_registry.team_model
+        parent_field = permission_registry.get_parent_fd_name(team_model)
+        if not parent_field:
+            return
+
+        teams = team_model.objects.filter(**{f"{parent_field}_id": org_id})
+
+        if self.dry_run:
+            if teams.exists():
+                self.stdout.write(
+                    f"    WOULD ADD {user.username} to {teams.count()} team groups in org {org_id}"
+                )
+            return
+
+        added_count = 0
+        for team in teams:
+            group_name = f"team:{team.name}"
+            org = getattr(team, parent_field, None)
+            group, _ = OPAGroup.objects.get_or_create(
+                name=group_name,
+                defaults={"managed": True, "organization": org},
+            )
+            if not group.users.filter(pk=user.pk).exists():
+                group.users.add(user)
+                added_count += 1
+
+        if added_count:
+            self.stdout.write(
+                f"    TEAM INHERIT {user.username} added to {added_count} team groups in org {org_id}"
+            )
 
     def _migrate_global_assignment(self, actor_label, actor_user, team, role_definition, resource_actions):
         """Migrate a system-wide (global/singleton) role assignment.

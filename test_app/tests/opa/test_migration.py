@@ -319,6 +319,99 @@ class TestMigrationCommand:
         assert g1.users.filter(pk=u1.pk).exists()
 
 
+    def test_org_admin_inherits_team_permissions(self, rbac_orgs, rbac_users, rbac_inventories, rbac_team):
+        """Org admin should inherit permissions from teams in their org.
+
+        In RBAC, org admin has the member_team permission which grants them
+        membership in all teams in their org. This means they inherit all
+        permissions those teams hold — even on objects in other orgs.
+        """
+        org1, org2 = rbac_orgs
+        u1, u2 = rbac_users
+        inv1, inv2 = rbac_inventories
+
+        # Give team an inventory permission on inv2 (which is in org2!)
+        inv_ct = DABContentType.objects.get_for_model(Inventory)
+        inv_rd, _ = RoleDefinition.objects.get_or_create(
+            name="Team Inv Viewer",
+            permissions=["view_inventory"],
+            defaults={"content_type": inv_ct},
+        )
+        inv_rd.give_permission(rbac_team, inv2)
+
+        # Make u2 org admin of org1 (rbac_team is in org1)
+        RoleDefinition.objects.managed.org_admin.give_permission(u2, org1)
+
+        _clear_opa_data()
+        call_command("migrate_rbac_to_opa")
+
+        # u2 should now be in the team's OPA group
+        team_group = OPAGroup.objects.get(name=f"team:{rbac_team.name}")
+        assert team_group.users.filter(pk=u2.pk).exists()
+
+        # u2 should be able to read inv2 through team inheritance
+        opa_qs = local_filter_queryset(Inventory.objects.all(), u2, "read")
+        opa_pks = set(opa_qs.values_list("pk", flat=True))
+        assert inv2.pk in opa_pks, "Org admin should inherit team permissions on inv2"
+
+    def test_org_admin_team_inherit_matches_rbac(self, rbac_orgs, rbac_users, rbac_inventories, rbac_team):
+        """Verify that OPA and RBAC agree on org admin team-inherited permissions."""
+        org1, _ = rbac_orgs
+        _, u2 = rbac_users
+        inv1, inv2 = rbac_inventories
+
+        # Give team a cross-org inventory permission
+        inv_ct = DABContentType.objects.get_for_model(Inventory)
+        inv_rd, _ = RoleDefinition.objects.get_or_create(
+            name="Team Inv Viewer2",
+            permissions=["view_inventory"],
+            defaults={"content_type": inv_ct},
+        )
+        inv_rd.give_permission(rbac_team, inv2)
+
+        # Make u2 org admin of org1
+        RoleDefinition.objects.managed.org_admin.give_permission(u2, org1)
+
+        _clear_opa_data()
+        call_command("migrate_rbac_to_opa")
+
+        # Compare OPA vs RBAC
+        opa_qs = local_filter_queryset(Inventory.objects.all(), u2, "read")
+        opa_pks = set(opa_qs.values_list("pk", flat=True))
+
+        rbac_qs = Inventory.access_qs(u2, "view", queryset=Inventory.objects.all())
+        rbac_pks = set(rbac_qs.values_list("pk", flat=True))
+
+        assert opa_pks == rbac_pks, f"OPA={opa_pks} != RBAC={rbac_pks}"
+
+    def test_non_member_team_role_no_inheritance(self, rbac_orgs, rbac_users, rbac_inventories):
+        """Org member (no member_team perm) should NOT inherit team permissions."""
+        org1, _ = rbac_orgs
+        u1, _ = rbac_users
+        inv1, _ = rbac_inventories
+
+        # Create a team with inventory permission
+        team = Team.objects.create(name="NoInherit Team", organization=org1)
+        inv_ct = DABContentType.objects.get_for_model(Inventory)
+        inv_rd, _ = RoleDefinition.objects.get_or_create(
+            name="NoInherit Inv Viewer",
+            permissions=["view_inventory"],
+            defaults={"content_type": inv_ct},
+        )
+        inv_rd.give_permission(team, inv1)
+
+        # Make u1 org MEMBER (not admin) — org_member doesn't have member_team
+        RoleDefinition.objects.managed.org_member.give_permission(u1, org1)
+
+        _clear_opa_data()
+        call_command("migrate_rbac_to_opa")
+
+        # u1 should NOT be in the team's OPA group
+        team_groups = OPAGroup.objects.filter(name=f"team:{team.name}")
+        if team_groups.exists():
+            assert not team_groups.first().users.filter(pk=u1.pk).exists()
+
+
 @pytest.mark.django_db
 class TestMigrationVerify:
     """Test the --verify flag compares RBAC vs OPA."""

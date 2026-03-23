@@ -328,6 +328,20 @@ ansible_base/opa/
 
 ---
 
+## Next: Parity gaps and remaining work
+
+> Phases 0-9 establish the OPA system, migration path, and transition
+> validation. Before downstream adoption and RBAC removal, several parity
+> gaps must be addressed.
+>
+> See **[PARITY_GAPS.md](PARITY_GAPS.md)** for the full analysis, including:
+> - Org admin inheriting team permissions (migration gap)
+> - Related object permission checks for create/update (implementation gap)
+> - Acquirable permissions and "who can?" queries (design problem)
+> - Features intentionally not supported (teams-in-teams, extra bypass flags)
+
+---
+
 ## Phase 10: Remove DAB RBAC (future — not part of this patch)
 
 > **This phase cannot be completed as part of the DAB OPA patch.**
