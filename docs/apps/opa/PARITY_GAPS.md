@@ -108,11 +108,11 @@ fix.**
 
 ---
 
-## 3. Org admin team membership maintenance — Design problem
+## 3. Org admin team membership maintenance — Implemented (recompute-before-sync)
 
-Gap #1 (migration-time team inheritance) is fixed. But there's an ongoing
-concern: what happens at runtime when changes occur that affect which users
-should be in which team OPA groups?
+Gap #1 (migration-time team inheritance) is fixed. The runtime maintenance
+concern is now handled by `recompute_team_memberships()` in `sync.py`,
+which runs before every OPA sync.
 
 **The problem at migration time:** Solved. The migration adds org admin users
 to all existing team OPA groups in their org. When team permissions change
@@ -239,25 +239,42 @@ actions affecting team membership require a sync step.
 - **Con:** Behavior regression from RBAC
 - **Con:** Easy to forget
 
-### Recommendation
+### Current implementation: Option B (recompute before sync)
 
-**Option A is the most correct** but the signal surface is large. A pragmatic
-path is to start with **Option B** (recompute before sync) to get
-correctness without complexity, then migrate to signal-driven updates if the
-sync latency is unacceptable.
+`recompute_team_memberships()` in `ansible_base/opa/rego/sync.py` runs
+before every OPA sync. It:
 
-The recompute function would:
-1. For each OPA role, determine if it grants org-admin-level access to an
-   org (via an explicit marker or policy inspection)
-2. For each such role, find all users who hold it (through group
-   membership)
-3. For each such user, find all teams in the relevant org
-4. Ensure the user is in each team's OPA group
+1. Finds all OPA policies granting `change` on `team` scoped to an org
+   (i.e., `resource=team, action=change, field_name=organization_id`)
+2. Traces each policy back through role → group → users to find all users
+   who can modify teams in that org
+3. For each such user, ensures they are a member of every team OPA group
+   in that org
 
-This function runs as part of `sync_to_opa()` and during migration. It's
-idempotent and safe to run repeatedly. Signal-driven updates can be added
-later as an optimization to reduce the window between a change and OPA
-having the correct data.
+This avoids the "org admin-like" detection problem entirely — it doesn't
+care about role names or conventions. It asks the concrete question: "who
+has a policy that lets them change teams in org X?" Those users get added
+to team groups.
+
+The function is idempotent and handles all five events listed above,
+because it recomputes from scratch every time. The trade-off is that
+permissions are stale between syncs — if a new team is created and the
+sync hasn't run yet, the org admin won't be in that team's group until
+the next sync.
+
+**Tests:** 3 tests in `test_migration.py`:
+- `test_recompute_adds_user_to_new_team` — new team created after
+  migration, recompute adds org admin
+- `test_recompute_idempotent` — running twice doesn't duplicate
+- `test_recompute_skips_non_team_changers` — users who can only read
+  teams are not added
+
+### Future optimization: Option A (signals)
+
+If the sync latency gap is unacceptable, signal-driven updates can be
+added later. The signal surface is large (five events), but the logic
+is the same — just triggered incrementally instead of as a full
+recompute.
 
 ---
 
@@ -325,15 +342,10 @@ discrepancies during the switchover period.
 1. ~~**Org admin team inheritance** (Gap #1)~~ — **Done.** Migration adds
    org admin users to team OPA groups. Verified with 3 tests including
    RBAC parity comparison.
-2. **Org admin team membership maintenance** (Design problem #3) —
-   implement recompute-before-sync (Option B) first for correctness, then
-   evaluate whether signal-driven updates (Option A) are needed for
-   latency. This requires an "org admin-like" marker on the Role model or
-   a recompute function that inspects policies.
+2. ~~**Org admin team membership maintenance** (Design problem #3)~~ —
+   **Done.** `recompute_team_memberships()` runs before every sync,
+   finding users with `team/change` policies and adding them to team
+   groups. Verified with 3 tests.
 3. **Related object permission checks** (Gap #2) — view-level integration
    for create/update with parent and cross-resource checks. This is
-   structural and requires careful design.
-
-Items 1 and 2 are closely related — #1 handles the migration snapshot, #2
-handles the ongoing maintenance. Item 3 is independent and can be worked
-in parallel.
+   structural and requires careful design. **This is the next priority.**

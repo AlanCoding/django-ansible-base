@@ -384,8 +384,89 @@ class TestMigrationCommand:
 
         assert opa_pks == rbac_pks, f"OPA={opa_pks} != RBAC={rbac_pks}"
 
-    def test_non_member_team_role_no_inheritance(self, rbac_orgs, rbac_users, rbac_inventories):
-        """Org member (no member_team perm) should NOT inherit team permissions."""
+    def test_recompute_adds_user_to_new_team(self, rbac_orgs, rbac_users, rbac_inventories):
+        """After migration, creating a new team and recomputing should add org admins to it."""
+        from ansible_base.opa.rego.sync import recompute_team_memberships
+
+        org1, _ = rbac_orgs
+        _, u2 = rbac_users
+        inv1, _ = rbac_inventories
+
+        # Make u2 org admin of org1
+        RoleDefinition.objects.managed.org_admin.give_permission(u2, org1)
+
+        _clear_opa_data()
+        call_command("migrate_rbac_to_opa")
+
+        # Now create a NEW team in org1 after migration
+        new_team = Team.objects.create(name="Post Migration Team", organization=org1)
+
+        # Give the new team an inventory permission
+        inv_ct = DABContentType.objects.get_for_model(Inventory)
+        inv_rd, _ = RoleDefinition.objects.get_or_create(
+            name="Recompute Inv Viewer",
+            permissions=["view_inventory"],
+            defaults={"content_type": inv_ct},
+        )
+        inv_rd.give_permission(new_team, inv1)
+
+        # Create the team's OPA data (simulating what a team assignment API would do)
+        team_group, _ = OPAGroup.objects.get_or_create(
+            name=f"team:{new_team.name}",
+            defaults={"managed": True, "organization": org1},
+        )
+        team_role, _ = Role.objects.get_or_create(
+            name=f"rbac:Recompute Inv Viewer@inventory:{inv1.pk}",
+            defaults={"managed": True},
+        )
+        Policy.objects.get_or_create(
+            role=team_role,
+            resource="inventory",
+            action="read",
+            field_name="id",
+            operator="eq",
+            value_type="constant",
+            constant_value=str(inv1.pk),
+        )
+        GroupRoleAssignment.objects.get_or_create(group=team_group, role=team_role)
+
+        # u2 is NOT yet in the new team's OPA group
+        assert not team_group.users.filter(pk=u2.pk).exists()
+
+        # Recompute should add u2 to the new team group
+        recompute_team_memberships()
+
+        team_group.refresh_from_db()
+        assert team_group.users.filter(pk=u2.pk).exists(), \
+            "Recompute should add org admin to new team's OPA group"
+
+        # u2 should now have read access to inv1 through the team
+        opa_qs = local_filter_queryset(Inventory.objects.all(), u2, "read")
+        assert inv1.pk in set(opa_qs.values_list("pk", flat=True))
+
+    def test_recompute_idempotent(self, rbac_orgs, rbac_users, rbac_inventories):
+        """Running recompute twice should not duplicate memberships."""
+        from ansible_base.opa.rego.sync import recompute_team_memberships
+
+        org1, _ = rbac_orgs
+        _, u2 = rbac_users
+
+        RoleDefinition.objects.managed.org_admin.give_permission(u2, org1)
+
+        _clear_opa_data()
+        call_command("migrate_rbac_to_opa")
+
+        recompute_team_memberships()
+        recompute_team_memberships()
+
+        for group in OPAGroup.objects.filter(name__startswith="team:"):
+            user_count = group.users.filter(pk=u2.pk).count()
+            assert user_count <= 1, f"User appears {user_count} times in {group.name}"
+
+    def test_recompute_skips_non_team_changers(self, rbac_orgs, rbac_users, rbac_inventories):
+        """Users who can only read teams (not change) should NOT be added to team groups."""
+        from ansible_base.opa.rego.sync import recompute_team_memberships
+
         org1, _ = rbac_orgs
         u1, _ = rbac_users
         inv1, _ = rbac_inventories
@@ -400,11 +481,14 @@ class TestMigrationCommand:
         )
         inv_rd.give_permission(team, inv1)
 
-        # Make u1 org MEMBER (not admin) — org_member doesn't have member_team
+        # Make u1 org MEMBER (not admin) — org_member doesn't have change_team
         RoleDefinition.objects.managed.org_member.give_permission(u1, org1)
 
         _clear_opa_data()
         call_command("migrate_rbac_to_opa")
+
+        # Run recompute
+        recompute_team_memberships()
 
         # u1 should NOT be in the team's OPA group
         team_groups = OPAGroup.objects.filter(name=f"team:{team.name}")
