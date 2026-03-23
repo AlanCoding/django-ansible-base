@@ -475,7 +475,18 @@ python manage.py migrate_rbac_to_opa --verify
 
 ---
 
-## 11. Architecture summary
+## 11. Detailed examples
+
+For concrete examples of the OPA input/output for each user persona — including
+the pre-flattened policy data, OPA query payloads, responses, and how Django
+compiles clauses into queryset filters — see [EXAMPLES.md](EXAMPLES.md).
+
+That document also includes step-by-step instructions for producing this data
+for any arbitrary user in your system.
+
+---
+
+## 12. Architecture summary
 
 ```
                                    +-----------+
