@@ -156,12 +156,18 @@ def _write_data_json(user_policies):
 
 def _push_to_opa(user_policies):
     """Push policy data to OPA via the Data API."""
+    from ansible_base.opa.client import _log_opa_interaction
     from ansible_base.opa.registry import opa_registry
 
     url = f"{opa_registry.server_url}/v1/data/dab_opa/user_policies"
     try:
+        import time
+
+        t0 = time.monotonic()
         resp = requests.put(url, json=user_policies, timeout=10)
+        duration_ms = (time.monotonic() - t0) * 1000
         resp.raise_for_status()
         logger.info("Pushed policy data to OPA (%d users)", len(user_policies))
+        _log_opa_interaction("PUT", url, user_policies, None, duration_ms, resp.status_code)
     except requests.RequestException:
         logger.exception("Failed to push policy data to OPA at %s", url)

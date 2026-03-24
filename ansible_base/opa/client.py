@@ -1,11 +1,38 @@
+import json
 import logging
 import os
+import time
 
 import requests
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_OPA_URL = "http://localhost:8181"
+
+# File-based request/response logging for OPA interactions.
+# Set DAB_OPA_LOG_FILE to a path to enable. Each entry is a JSON object
+# with timestamp, method, url, request payload, response, and duration.
+_OPA_LOG_FILE = os.environ.get("DAB_OPA_LOG_FILE")
+
+
+def _log_opa_interaction(method, url, payload, response_data, duration_ms, status_code):
+    """Append an OPA request/response record to the log file."""
+    if not _OPA_LOG_FILE:
+        return
+    entry = {
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+        "method": method,
+        "url": url,
+        "request": payload,
+        "response": response_data,
+        "status_code": status_code,
+        "duration_ms": round(duration_ms, 2),
+    }
+    try:
+        with open(_OPA_LOG_FILE, "a") as f:
+            f.write(json.dumps(entry, indent=2, default=str) + "\n")
+    except OSError:
+        logger.debug("Failed to write OPA log entry to %s", _OPA_LOG_FILE)
 
 
 class OPAClient:
@@ -38,18 +65,20 @@ class OPAClient:
                 },
             }
         }
+        url = f"{self.base_url}/v1/data/dab_opa"
         try:
-            resp = requests.post(
-                f"{self.base_url}/v1/data/dab_opa",
-                json=payload,
-                timeout=5,
-            )
+            t0 = time.monotonic()
+            resp = requests.post(url, json=payload, timeout=5)
+            duration_ms = (time.monotonic() - t0) * 1000
             resp.raise_for_status()
-            result = resp.json().get("result", {})
-            return {
+            raw = resp.json()
+            result = raw.get("result", {})
+            out = {
                 "allow": result.get("allow", False),
                 "clauses": result.get("clauses", []),
             }
+            _log_opa_interaction("POST", url, payload, raw, duration_ms, resp.status_code)
+            return out
         except requests.RequestException:
             logger.exception("OPA query failed, failing closed (deny all)")
             return {"allow": False, "clauses": []}
@@ -84,18 +113,20 @@ class OPAClient:
         if related:
             payload["input"]["related"] = related
 
+        url = f"{self.base_url}/v1/data/dab_opa"
         try:
-            resp = requests.post(
-                f"{self.base_url}/v1/data/dab_opa",
-                json=payload,
-                timeout=5,
-            )
+            t0 = time.monotonic()
+            resp = requests.post(url, json=payload, timeout=5)
+            duration_ms = (time.monotonic() - t0) * 1000
             resp.raise_for_status()
-            result = resp.json().get("result", {})
-            return {
+            raw = resp.json()
+            result = raw.get("result", {})
+            out = {
                 "object_allowed": result.get("object_allowed", False),
                 "related_denied": set(result.get("related_denied", [])),
             }
+            _log_opa_interaction("POST", url, payload, raw, duration_ms, resp.status_code)
+            return out
         except requests.RequestException:
             logger.exception("OPA object check failed, failing closed (deny all)")
             return {"object_allowed": False, "related_denied": set()}
