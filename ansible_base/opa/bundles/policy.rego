@@ -36,3 +36,65 @@ _resolve_clause(p) := {"field_name": p.field_name, "operator": p.operator, "valu
 _resolve_clause(p) := {"field_name": p.field_name, "operator": p.operator, "value": p.value} if {
 	p.value_type == "constant"
 }
+
+# --- Tier 2: Object evaluation ---
+# When input.object is present, evaluate whether the specific object is allowed.
+# This is the authoritative answer (unlike clauses which are best-effort for querysets).
+
+default object_allowed := false
+
+# Superuser bypass
+object_allowed if {
+	input.principal.is_superuser == true
+}
+
+# Check if the object's attributes match any of the user's clauses
+object_allowed if {
+	user_id := format_int(input.principal.user_id, 10)
+	policies := data.dab_opa.user_policies[user_id][input.target.resource][input.target.action]
+	some p in policies
+	clause := _resolve_clause(p)
+	_clause_matches_object(clause)
+}
+
+# A clause matches the object if the object's field equals the clause value
+_clause_matches_object(clause) if {
+	clause.operator == "eq"
+	input.object[clause.field_name] == clause.value
+}
+
+# --- Related object checks ---
+# Returns a set of field names where the related check failed.
+
+related_denied contains field if {
+	some field, check in input.related
+	not _related_allowed(check)
+}
+
+# Superuser bypass for related checks
+_related_allowed(check) if {
+	input.principal.is_superuser == true
+}
+
+# Related object allowed if user has a policy matching the related object's ID
+_related_allowed(check) if {
+	user_id := format_int(input.principal.user_id, 10)
+	policies := data.dab_opa.user_policies[user_id][check.resource][check.action]
+	some p in policies
+	clause := _resolve_clause(p)
+	clause.operator == "eq"
+	clause.field_name == "id"
+	clause.value == check.id
+}
+
+# Related object allowed if user has org-scoped permission
+_related_allowed(check) if {
+	check.org_id
+	user_id := format_int(input.principal.user_id, 10)
+	policies := data.dab_opa.user_policies[user_id][check.resource][check.action]
+	some p in policies
+	clause := _resolve_clause(p)
+	clause.operator == "eq"
+	clause.field_name == "organization_id"
+	clause.value == check.org_id
+}

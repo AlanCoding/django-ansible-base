@@ -94,13 +94,93 @@ def local_filter_queryset(queryset, user, action):
 def local_user_can_access_obj(user, obj, action):
     """Check object access using the local evaluator (no OPA call).
 
-    Same interface as user_can_access_obj.
+    Uses tier 2 evaluation: checks user's clauses against the object's
+    actual attributes directly, rather than filtering a queryset.
     """
     if user.is_superuser:
         return True
 
     model_cls = type(obj)
     resource_name = opa_registry.get_resource_name_for_model(model_cls)
+    obj_attrs = _extract_obj_attrs(obj, resource_name)
     clauses = get_effective_policies(user, resource_name, action)
-    q = compile_clauses(clauses, resource_name)
-    return model_cls.objects.filter(q, pk=obj.pk).exists()
+    return _clauses_match_object(clauses, obj_attrs)
+
+
+def local_check_object(user, obj, action, related=None):
+    """Tier 2 local evaluation: object access + related object checks.
+
+    Args:
+        user: the requesting user
+        obj: the Django model instance
+        action: the OPA action string
+        related: optional dict of field_name -> {resource, action, id, org_id}
+
+    Returns:
+        Dict with 'object_allowed' (bool) and 'related_denied' (set of field names).
+    """
+    if user.is_superuser:
+        return {"object_allowed": True, "related_denied": set()}
+
+    model_cls = type(obj)
+    resource_name = opa_registry.get_resource_name_for_model(model_cls)
+    obj_attrs = _extract_obj_attrs(obj, resource_name)
+    clauses = get_effective_policies(user, resource_name, action)
+    object_allowed = _clauses_match_object(clauses, obj_attrs)
+
+    related_denied = set()
+    if related:
+        for field_name, check in related.items():
+            if not _check_related_allowed(user, check):
+                related_denied.add(field_name)
+
+    return {"object_allowed": object_allowed, "related_denied": related_denied}
+
+
+def _extract_obj_attrs(obj, resource_name):
+    """Extract the registered field values from a model instance."""
+    fields = opa_registry.get_fields(resource_name)
+    attrs = {}
+    for field_name, field_def in fields.items():
+        django_path = field_def["django_path"]
+        try:
+            attrs[field_name] = getattr(obj, django_path)
+        except AttributeError:
+            pass
+    return attrs
+
+
+def _clauses_match_object(clauses, obj_attrs):
+    """Check if any clause matches the object's attributes."""
+    for clause in clauses:
+        field_name = clause["field_name"]
+        operator = clause["operator"]
+        value = clause["value"]
+
+        if field_name not in obj_attrs:
+            continue
+
+        if operator == "eq" and obj_attrs[field_name] == value:
+            return True
+
+    return False
+
+
+def _check_related_allowed(user, check):
+    """Check if user has permission for a related object."""
+    resource = check["resource"]
+    action = check["action"]
+    related_id = check.get("id")
+    org_id = check.get("org_id")
+
+    clauses = get_effective_policies(user, resource, action)
+    for clause in clauses:
+        if clause["operator"] != "eq":
+            continue
+        # Direct ID match
+        if clause["field_name"] == "id" and related_id is not None and clause["value"] == related_id:
+            return True
+        # Org-scoped match
+        if clause["field_name"] == "organization_id" and org_id is not None and clause["value"] == org_id:
+            return True
+    return False

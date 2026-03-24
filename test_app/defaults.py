@@ -231,10 +231,26 @@ DAB_OPA = {
         "inventory": {
             "model": "test_app.Inventory",
             "actions": ["read", "change", "delete", "add"],
+            "fields": {
+                "credential_id": {
+                    "django_path": "credential_id",
+                    "type": "fk",
+                    "operators": ["eq"],
+                },
+            },
+            "action_dependencies": {
+                "change": ["read"],
+                "delete": ["read"],
+            },
+        },
+        "credential": {
+            "model": "test_app.Credential",
+            "actions": ["read", "change", "delete", "add", "use"],
             "fields": {},
             "action_dependencies": {
                 "change": ["read"],
                 "delete": ["read"],
+                "use": ["read"],
             },
         },
         "instancegroup": {
