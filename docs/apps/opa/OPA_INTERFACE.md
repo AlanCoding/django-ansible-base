@@ -346,8 +346,8 @@ not credential 2.
 | `has_permission()` (view-level, pre-object) | Tier 1 | "Does user have any add scope?" -- `clauses` non-empty |
 | `filter_queryset()` (list view) | Tier 1 | Compiles `clauses` into `Q()` filters |
 | `has_object_permission()` (detail view) | Tier 2 | `object_allowed` on the specific instance |
-| `OPARelatedAccessMixin.create()` | Local | Checks related FK permissions at serializer layer |
-| `OPARelatedAccessMixin.update()` | Local | Checks changed FK permissions at serializer layer |
+| `OPARelatedAccessMixin.create()` | Tier 2 | Full OPA check with `related` entries at serializer layer |
+| `OPARelatedAccessMixin.update()` | Tier 2 | Full OPA check with changed FK `related` entries at serializer layer |
 
 The permission class (`OPAPermission`) and the serializer mixin
 (`OPARelatedAccessMixin`) are separate layers. The permission class
@@ -355,6 +355,30 @@ handles coarse capability checks (DRF also calls it for OPTIONS/schema
 generation with mock requests that have no data). The serializer mixin
 handles fine-grained related object checks after the object is
 constructed.
+
+### PATCH/PUT flow and related object checks
+
+On a PATCH or PUT request, the authorization flow involves two OPA calls:
+
+1. **`OPAPermission.has_object_permission()`** sends a tier 2 OPA query
+   with `object_allowed` only -- it does NOT send `input.related`. This
+   checks whether the user can change the object itself (e.g., "do they
+   have change permission on this inventory?"). If `object_allowed` is
+   false, the request is denied (403 or 404).
+
+2. **`OPARelatedAccessMixin.update()`** runs at the serializer layer
+   **after** the object is saved (inside a transaction). It compares old
+   vs new FK values, builds the `related` dict for changed FKs, and
+   sends a **second tier 2 OPA query** with both the object and its
+   related entries. OPA evaluates `object_allowed` (again, redundantly)
+   and `related_denied` together. If `related_denied` comes back
+   non-empty, the transaction is rolled back and a 403 is returned with
+   the failing field names.
+
+This intentional double-check ensures the full authorization decision
+(object access + related object permissions) goes through OPA for
+compliance. The same pattern applies to POST/create via
+`OPARelatedAccessMixin.create()`.
 
 ## Request/response logging
 

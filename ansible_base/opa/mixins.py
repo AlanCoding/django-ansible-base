@@ -120,29 +120,33 @@ def _build_related_checks(model_cls, old_data, new_data):
     return related
 
 
-def opa_check_related_permissions(user, model_cls, old_data, new_data):
+def opa_check_related_permissions(user, instance, action, old_data, new_data):
     """Check related object permissions via OPA tier 2 evaluation.
+
+    Sends a full tier 2 OPA query with both the object and its related
+    entries. OPA evaluates object_allowed and related_denied together.
 
     Raises PermissionDenied if the user lacks permission on any changed FK field.
     """
-    from ansible_base.opa.evaluator import _check_related_allowed
+    from ansible_base.opa.queryset import check_object_access
 
     if user.is_superuser:
         return
 
+    model_cls = type(instance)
     related = _build_related_checks(model_cls, old_data, new_data)
     if not related:
         return
 
-    errors = {}
-    for field_name, check in related.items():
-        if not _check_related_allowed(user, check):
-            errors[field_name] = "You do not have permission to use this object."
+    resource_name = opa_registry.get_resource_name_for_model(model_cls)
+    result = check_object_access(user, resource_name, action, instance, related=related)
 
-    if errors:
+    denied_fields = result.get("related_denied", [])
+    if denied_fields:
+        errors = {field: "You do not have permission to use this object." for field in denied_fields}
         logger.warning(
             "User %s lacks %s related permissions: %s",
-            user.pk, model_cls._meta.model_name, list(errors.keys()),
+            user.pk, model_cls._meta.model_name, list(denied_fields),
         )
         raise PermissionDenied(errors)
 
@@ -163,7 +167,8 @@ class OPARelatedAccessMixin:
             instance = super().create(validated_data)
             opa_check_related_permissions(
                 view.request.user,
-                self.Meta.model,
+                instance,
+                "add",
                 {},
                 model_to_dict(instance),
             )
@@ -179,7 +184,8 @@ class OPARelatedAccessMixin:
             updated_instance = super().update(instance, validated_data)
             opa_check_related_permissions(
                 view.request.user,
-                self.Meta.model,
+                updated_instance,
+                "change",
                 old_data,
                 model_to_dict(updated_instance),
             )
