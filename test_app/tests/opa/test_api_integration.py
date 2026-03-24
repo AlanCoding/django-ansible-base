@@ -9,7 +9,6 @@ Tests require OPA to be running (make opa).
 import pytest
 
 from ansible_base.lib.utils.response import get_relative_url
-from ansible_base.opa.rego.sync import sync_to_opa
 
 
 @pytest.fixture(autouse=True)
@@ -61,7 +60,6 @@ class TestInventoryAPIAccess:
         assert opa_inventory2.pk in pks
 
     def test_unpermissioned_user_sees_no_inventories(self, opa_user_client, opa_inventory):
-        sync_to_opa(debounce_seconds=0)
         r = opa_user_client.get(get_relative_url("inventory-list"))
         assert r.status_code == 200
         assert r.data["count"] == 0
@@ -81,7 +79,6 @@ class TestInventoryAPIAccess:
                 },
             ],
         )
-        sync_to_opa(debounce_seconds=0)
 
         r = opa_user_client.get(get_relative_url("inventory-list"))
         assert r.status_code == 200
@@ -104,7 +101,6 @@ class TestInventoryAPIAccess:
                 },
             ],
         )
-        sync_to_opa(debounce_seconds=0)
 
         url = get_relative_url("inventory-detail", kwargs={"pk": opa_inventory.pk})
         r = opa_user_client.get(url)
@@ -114,7 +110,6 @@ class TestInventoryAPIAccess:
     def test_user_cannot_read_ungranted_inventory_detail(
         self, opa_user_client, opa_user, opa_inventory
     ):
-        sync_to_opa(debounce_seconds=0)
         url = get_relative_url("inventory-detail", kwargs={"pk": opa_inventory.pk})
         r = opa_user_client.get(url)
         assert r.status_code == 404
@@ -140,7 +135,6 @@ class TestInventoryAPIAccess:
                 },
             ],
         )
-        sync_to_opa(debounce_seconds=0)
 
         url = get_relative_url("inventory-detail", kwargs={"pk": opa_inventory.pk})
         r = opa_user_client.patch(url, {"name": "Updated Name"}, format="json")
@@ -163,7 +157,6 @@ class TestInventoryAPIAccess:
                 },
             ],
         )
-        sync_to_opa(debounce_seconds=0)
 
         url = get_relative_url("inventory-detail", kwargs={"pk": opa_inventory.pk})
         r = opa_user_client.patch(url, {"name": "Should Fail"}, format="json")
@@ -191,7 +184,6 @@ class TestInventoryAPIAccess:
                 },
             ],
         )
-        sync_to_opa(debounce_seconds=0)
 
         url = get_relative_url("inventory-detail", kwargs={"pk": opa_inventory.pk})
         r = opa_user_client.delete(url)
@@ -213,7 +205,6 @@ class TestInventoryAPIAccess:
                 },
             ],
         )
-        sync_to_opa(debounce_seconds=0)
 
         r = opa_user_client.get(get_relative_url("inventory-list"))
         assert r.status_code == 200
@@ -234,7 +225,6 @@ class TestOrganizationAPIAccess:
         assert opa_org2.pk in pks
 
     def test_unpermissioned_user_sees_no_orgs(self, opa_user_client, opa_org):
-        sync_to_opa(debounce_seconds=0)
         r = opa_user_client.get(get_relative_url("organization-list"))
         assert r.status_code == 200
         assert r.data["count"] == 0
@@ -252,7 +242,6 @@ class TestOrganizationAPIAccess:
                 },
             ],
         )
-        sync_to_opa(debounce_seconds=0)
 
         r = opa_user_client.get(get_relative_url("organization-list"))
         assert r.status_code == 200
@@ -315,7 +304,6 @@ class TestMultipleUsers:
                 },
             ],
         )
-        sync_to_opa(debounce_seconds=0)
 
         r1 = opa_user_client.get(get_relative_url("inventory-list"))
         r2 = opa_user2_client.get(get_relative_url("inventory-list"))

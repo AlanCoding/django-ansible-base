@@ -4,7 +4,6 @@ import pytest
 
 from ansible_base.opa.evaluator import local_filter_queryset, local_user_can_access_obj
 from ansible_base.opa.queryset import filter_queryset_for_user, user_can_access_obj
-from ansible_base.opa.rego.sync import sync_to_opa
 from test_app.models import Inventory, Organization
 
 
@@ -18,7 +17,6 @@ class TestEvaluatorParity:
         assert set(opa_qs.values_list("pk", flat=True)) == set(local_qs.values_list("pk", flat=True))
 
     def test_unpermissioned_parity(self, opa_user, opa_inventory):
-        sync_to_opa(debounce_seconds=0)
         opa_qs = filter_queryset_for_user(Inventory.objects.all(), opa_user, "read")
         local_qs = local_filter_queryset(Inventory.objects.all(), opa_user, "read")
         assert set(opa_qs.values_list("pk", flat=True)) == set(local_qs.values_list("pk", flat=True))
@@ -37,7 +35,6 @@ class TestEvaluatorParity:
                 },
             ],
         )
-        sync_to_opa(debounce_seconds=0)
 
         opa_pks = set(filter_queryset_for_user(Inventory.objects.all(), opa_user, "read").values_list("pk", flat=True))
         local_pks = set(local_filter_queryset(Inventory.objects.all(), opa_user, "read").values_list("pk", flat=True))
@@ -58,7 +55,6 @@ class TestEvaluatorParity:
                 },
             ],
         )
-        sync_to_opa(debounce_seconds=0)
 
         opa_pks = set(filter_queryset_for_user(Inventory.objects.all(), opa_user, "read").values_list("pk", flat=True))
         local_pks = set(local_filter_queryset(Inventory.objects.all(), opa_user, "read").values_list("pk", flat=True))
@@ -83,7 +79,6 @@ class TestEvaluatorParity:
                 },
             ],
         )
-        sync_to_opa(debounce_seconds=0)
 
         for action in ("read", "change", "delete"):
             opa_result = user_can_access_obj(opa_user, opa_inventory, action)
@@ -110,7 +105,6 @@ class TestEvaluatorParity:
                 },
             ],
         )
-        sync_to_opa(debounce_seconds=0)
 
         for action in ("read", "change", "delete", "add"):
             opa_pks = set(

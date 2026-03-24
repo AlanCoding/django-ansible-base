@@ -14,17 +14,15 @@ allow if {
 	count(clauses) > 0
 }
 
-# Resolve clauses for the given user/resource/action
+# Resolve clauses from input.policies (sent by Django per-request)
 clauses := resolved if {
-	user_id := format_int(input.principal.user_id, 10)
-	policies := data.dab_opa.user_policies[user_id][input.target.resource][input.target.action]
 	resolved := [clause |
-		some p in policies
+		some p in input.policies
 		clause := _resolve_clause(p)
 	]
 }
 
-# Default empty clauses when no policies match
+# Default empty clauses when no policies are provided
 default clauses := []
 
 # Substitute principal_user_id with actual user_id
@@ -48,11 +46,9 @@ object_allowed if {
 	input.principal.is_superuser == true
 }
 
-# Check if the object's attributes match any of the user's clauses
+# Check if the object's attributes match any of the user's policies
 object_allowed if {
-	user_id := format_int(input.principal.user_id, 10)
-	policies := data.dab_opa.user_policies[user_id][input.target.resource][input.target.action]
-	some p in policies
+	some p in input.policies
 	clause := _resolve_clause(p)
 	_clause_matches_object(clause)
 }
@@ -76,23 +72,19 @@ _related_allowed(check) if {
 	input.principal.is_superuser == true
 }
 
-# Related object allowed if user has a policy matching the related object's ID
+# Related object allowed if any of its policies match by ID
 _related_allowed(check) if {
-	user_id := format_int(input.principal.user_id, 10)
-	policies := data.dab_opa.user_policies[user_id][check.resource][check.action]
-	some p in policies
+	some p in check.policies
 	clause := _resolve_clause(p)
 	clause.operator == "eq"
 	clause.field_name == "id"
 	clause.value == check.id
 }
 
-# Related object allowed if user has org-scoped permission
+# Related object allowed if any of its policies match by org
 _related_allowed(check) if {
 	check.org_id
-	user_id := format_int(input.principal.user_id, 10)
-	policies := data.dab_opa.user_policies[user_id][check.resource][check.action]
-	some p in policies
+	some p in check.policies
 	clause := _resolve_clause(p)
 	clause.operator == "eq"
 	clause.field_name == "organization_id"

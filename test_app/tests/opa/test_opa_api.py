@@ -8,7 +8,6 @@ import pytest
 
 from ansible_base.lib.utils.response import get_relative_url
 from ansible_base.opa.models import GroupRoleAssignment, OPAGroup, Policy, Role
-from ansible_base.opa.rego.sync import sync_to_opa
 
 
 @pytest.mark.django_db

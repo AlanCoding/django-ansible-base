@@ -57,8 +57,8 @@ def compile_clauses(clauses, resource_name):
 def filter_queryset_for_user(queryset, user, action):
     """Filter a queryset to only include objects the user can access.
 
-    Uses OPA to resolve the user's effective clauses for the queryset's
-    model and the given action, then applies them as queryset filters.
+    Resolves the user's effective policies for the queryset's model and
+    the given action, then applies them as queryset filters.
 
     When DAB_OPA_TRANSITION_VALIDATION is enabled, also compares the
     result against RBAC and logs discrepancies.
@@ -88,8 +88,9 @@ def filter_queryset_for_user(queryset, user, action):
 def user_can_access_obj(user, obj, action, related=None):
     """Check if a user can perform an action on a specific object.
 
-    Uses tier 2 OPA evaluation: sends the object's attributes to OPA
-    for a concrete boolean answer. Optionally checks related objects.
+    Uses tier 2 OPA evaluation: sends the object's attributes and the
+    user's policies to OPA for a concrete boolean answer. Optionally
+    checks related objects.
 
     When DAB_OPA_TRANSITION_VALIDATION is enabled, also compares the
     result against RBAC and logs discrepancies.
@@ -119,6 +120,9 @@ def user_can_access_obj(user, obj, action, related=None):
 def check_object_access(user, resource, action, obj, related=None):
     """Tier 2: Check object access via OPA with the object's actual attributes.
 
+    Resolves the user's policies and sends them along with the object
+    attributes to OPA for evaluation.
+
     Args:
         user: the user
         resource: OPA resource name
@@ -130,9 +134,22 @@ def check_object_access(user, resource, action, obj, related=None):
         Dict with 'object_allowed' (bool) and 'related_denied' (set of field names).
     """
     from ansible_base.opa.client import OPAClient
-    from ansible_base.opa.evaluator import _extract_obj_attrs
+    from ansible_base.opa.evaluator import _extract_obj_attrs, get_unresolved_policies
 
     obj_attrs = _extract_obj_attrs(obj, resource)
+    policies = get_unresolved_policies(user, resource, action)
+
+    # Resolve policies for each related entry
+    opa_related = None
+    if related:
+        opa_related = {}
+        for field_name, check in related.items():
+            rel_policies = get_unresolved_policies(user, check["resource"], check["action"])
+            opa_related[field_name] = {
+                **check,
+                "policies": rel_policies,
+            }
+
     client = OPAClient(base_url=opa_registry.server_url)
     return client.check_object(
         user_id=user.pk,
@@ -140,12 +157,16 @@ def check_object_access(user, resource, action, obj, related=None):
         resource=resource,
         action=action,
         obj_attrs=obj_attrs,
-        related=related,
+        policies=policies,
+        related=opa_related,
     )
 
 
 def get_opa_scope(user, resource, action):
-    """Get the raw OPA response for a user/resource/action.
+    """Get the OPA scope (resolved clauses) for a user/resource/action.
+
+    Resolves the user's policies and sends them to OPA for clause resolution
+    (e.g., principal_user_id substitution).
 
     Args:
         user: the user (or any object with .pk and .is_superuser)
@@ -156,11 +177,14 @@ def get_opa_scope(user, resource, action):
         Dict with 'allow' (bool) and 'clauses' (list).
     """
     from ansible_base.opa.client import OPAClient
+    from ansible_base.opa.evaluator import get_unresolved_policies
 
+    policies = get_unresolved_policies(user, resource, action)
     client = OPAClient(base_url=opa_registry.server_url)
     return client.query(
         user_id=user.pk,
         is_superuser=user.is_superuser,
         resource=resource,
         action=action,
+        policies=policies,
     )

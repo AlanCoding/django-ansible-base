@@ -5,7 +5,6 @@ from django.core.management.base import BaseCommand
 from ansible_base.opa.evaluator import local_filter_queryset
 from ansible_base.opa.queryset import filter_queryset_for_user, get_opa_scope
 from ansible_base.opa.registry import opa_registry
-from ansible_base.opa.rego.sync import sync_to_opa
 
 
 class Command(BaseCommand):
@@ -14,17 +13,11 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("--user", type=str, help="Check a single username instead of all users.")
         parser.add_argument("--resource", type=str, help="Check a single resource instead of all resources.")
-        parser.add_argument("--no-sync", action="store_true", help="Skip the sync_opa step (assume OPA is already up to date).")
+        parser.add_argument("--no-sync", action="store_true", help="(Deprecated, no-op) Sync is no longer needed.")
         parser.add_argument("--verbose", action="store_true", help="Show OPA clauses for each check.")
 
     def handle(self, *args, **options):
         User = get_user_model()
-
-        if not options["no_sync"]:
-            self.stdout.write("Syncing to OPA...")
-            sync_to_opa(debounce_seconds=0)
-            self.stdout.write(self.style.SUCCESS("  Done."))
-            self.stdout.write("")
 
         # Determine users to check
         if options["user"]:

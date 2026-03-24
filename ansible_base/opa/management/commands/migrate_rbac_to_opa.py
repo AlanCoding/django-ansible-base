@@ -7,7 +7,6 @@ from django.core.management.base import BaseCommand
 
 from ansible_base.opa.models import GroupRoleAssignment, OPAGroup, Policy, Role
 from ansible_base.opa.registry import opa_registry
-from ansible_base.opa.rego.sync import sync_to_opa
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +24,7 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("--dry-run", action="store_true", help="Report what would be migrated without writing.")
-        parser.add_argument("--sync", action="store_true", help="Run sync_opa after migration.")
+        parser.add_argument("--sync", action="store_true", help="Recompute team memberships after migration.")
         parser.add_argument("--verify", action="store_true", help="After migration, compare RBAC vs OPA effective permissions for all users.")
 
     def handle(self, *args, **options):
@@ -40,9 +39,11 @@ class Command(BaseCommand):
 
         if options["sync"] and not self.dry_run:
             self.stdout.write("")
-            self.stdout.write("Syncing to OPA...")
-            sync_to_opa(debounce_seconds=0)
-            self.stdout.write(self.style.SUCCESS("OPA sync complete."))
+            self.stdout.write("Recomputing team memberships...")
+            from ansible_base.opa.rego.sync import recompute_team_memberships
+
+            recompute_team_memberships()
+            self.stdout.write(self.style.SUCCESS("Done."))
 
         if options["verify"] and not self.dry_run:
             self.stdout.write("")

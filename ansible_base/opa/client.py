@@ -47,8 +47,15 @@ class OPAClient:
         resp.raise_for_status()
         return True
 
-    def query(self, user_id, is_superuser, resource, action):
+    def query(self, user_id, is_superuser, resource, action, policies):
         """Query OPA for resolved clauses.
+
+        Args:
+            user_id: the user's PK
+            is_superuser: bool
+            resource: OPA resource name
+            action: OPA action string
+            policies: list of unresolved clause dicts (with value_type)
 
         Returns a dict with 'allow' (bool) and 'clauses' (list).
         On error, fails closed (deny all).
@@ -63,6 +70,7 @@ class OPAClient:
                     "resource": resource,
                     "action": action,
                 },
+                "policies": policies,
             }
         }
         url = f"{self.base_url}/v1/data/dab_opa"
@@ -83,7 +91,7 @@ class OPAClient:
             logger.exception("OPA query failed, failing closed (deny all)")
             return {"allow": False, "clauses": []}
 
-    def check_object(self, user_id, is_superuser, resource, action, obj_attrs, related=None):
+    def check_object(self, user_id, is_superuser, resource, action, obj_attrs, policies, related=None):
         """Tier 2: Check if a user can perform an action on a specific object.
 
         Args:
@@ -92,7 +100,8 @@ class OPAClient:
             resource: OPA resource name
             action: OPA action string
             obj_attrs: dict of the object's field values (registered fields)
-            related: optional dict of field_name -> {resource, action, id, org_id}
+            policies: list of unresolved clause dicts (with value_type)
+            related: optional dict of field_name -> {resource, action, id, org_id, policies}
 
         Returns:
             Dict with 'object_allowed' (bool) and 'related_denied' (set of field names).
@@ -108,6 +117,7 @@ class OPAClient:
                     "action": action,
                 },
                 "object": obj_attrs,
+                "policies": policies,
             }
         }
         if related:

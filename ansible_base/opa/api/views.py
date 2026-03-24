@@ -20,7 +20,6 @@ from ansible_base.opa.api.serializers import (
 from ansible_base.opa.evaluator import local_get_scope
 from ansible_base.opa.models import GroupRoleAssignment, OPAGroup, Policy, Role
 from ansible_base.opa.registry import opa_registry
-from ansible_base.opa.rego.sync import sync_to_opa
 
 logger = logging.getLogger(__name__)
 
@@ -68,15 +67,6 @@ class RoleViewSet(AnsibleBaseDjangoAppApiView, ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         super().perform_destroy(instance)
-        sync_to_opa(debounce_seconds=0)
-
-    def perform_create(self, serializer):
-        super().perform_create(serializer)
-        sync_to_opa(debounce_seconds=0)
-
-    def perform_update(self, serializer):
-        super().perform_update(serializer)
-        sync_to_opa(debounce_seconds=0)
 
 
 class PolicyViewSet(AnsibleBaseDjangoAppApiView, ModelViewSet):
@@ -91,18 +81,6 @@ class PolicyViewSet(AnsibleBaseDjangoAppApiView, ModelViewSet):
     serializer_class = PolicySerializer
     permission_classes = try_add_oauth2_scope_permission([IsSuperuser])
     filterset_fields = ["role", "resource", "action"]
-
-    def perform_create(self, serializer):
-        super().perform_create(serializer)
-        sync_to_opa(debounce_seconds=0)
-
-    def perform_update(self, serializer):
-        super().perform_update(serializer)
-        sync_to_opa(debounce_seconds=0)
-
-    def perform_destroy(self, instance):
-        super().perform_destroy(instance)
-        sync_to_opa(debounce_seconds=0)
 
 
 class OPAGroupViewSet(AnsibleBaseDjangoAppApiView, ModelViewSet):
@@ -123,7 +101,6 @@ class OPAGroupViewSet(AnsibleBaseDjangoAppApiView, ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         super().perform_destroy(instance)
-        sync_to_opa(debounce_seconds=0)
 
     @action(detail=True, methods=["post"], url_path="add_user")
     def add_user(self, request, pk=None):
@@ -140,7 +117,7 @@ class OPAGroupViewSet(AnsibleBaseDjangoAppApiView, ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
         group.users.add(user)
-        sync_to_opa(debounce_seconds=0)
+
         return Response({"detail": f"User {user.pk} added to group {group.name}."})
 
     @action(detail=True, methods=["post"], url_path="remove_user")
@@ -158,7 +135,7 @@ class OPAGroupViewSet(AnsibleBaseDjangoAppApiView, ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
         group.users.remove(user)
-        sync_to_opa(debounce_seconds=0)
+
         return Response({"detail": f"User {user.pk} removed from group {group.name}."})
 
 
@@ -175,14 +152,6 @@ class GroupRoleAssignmentViewSet(AnsibleBaseDjangoAppApiView, ModelViewSet):
     # Assignments are immutable once created
     http_method_names = ["get", "post", "head", "options", "delete"]
     filterset_fields = ["group", "role"]
-
-    def perform_create(self, serializer):
-        super().perform_create(serializer)
-        sync_to_opa(debounce_seconds=0)
-
-    def perform_destroy(self, instance):
-        super().perform_destroy(instance)
-        sync_to_opa(debounce_seconds=0)
 
 
 class UserEffectiveScopeView(AnsibleBaseDjangoAppApiView):

@@ -9,7 +9,6 @@ from django.utils.html import format_html
 
 from ansible_base.opa.models import GroupRoleAssignment, OPAGroup, Policy, Role
 from ansible_base.opa.registry import opa_registry
-from ansible_base.opa.rego.sync import sync_to_opa
 
 logger = logging.getLogger(__name__)
 
@@ -183,7 +182,6 @@ class RoleAdmin(admin.ModelAdmin):
     search_fields = ["name", "description"]
     readonly_fields = ["created", "modified", "policy_summary"]
     inlines = [PolicyInline, GroupRoleAssignmentByRoleInline]
-    actions = ["sync_to_opa_action"]
 
     fieldsets = [
         (None, {"fields": ["name", "description", "managed"]}),
@@ -222,11 +220,6 @@ class RoleAdmin(admin.ModelAdmin):
         return format_html(table)
 
     policy_summary.short_description = "Policy Summary"
-
-    @admin.action(description="Sync selected roles to OPA")
-    def sync_to_opa_action(self, request, queryset):
-        sync_to_opa(debounce_seconds=0)
-        self.message_user(request, "OPA sync triggered.", messages.SUCCESS)
 
 
 # ---------------------------------------------------------------------------
@@ -294,7 +287,6 @@ class OPAGroupAdmin(admin.ModelAdmin):
     filter_horizontal = ["users"]
     readonly_fields = ["created", "modified", "effective_permissions"]
     inlines = [GroupRoleAssignmentByGroupInline]
-    actions = ["sync_to_opa_action"]
 
     fieldsets = [
         (None, {"fields": ["name", "organization", "managed"]}),
@@ -340,11 +332,6 @@ class OPAGroupAdmin(admin.ModelAdmin):
 
     effective_permissions.short_description = "Effective Permissions"
 
-    @admin.action(description="Sync to OPA")
-    def sync_to_opa_action(self, request, queryset):
-        sync_to_opa(debounce_seconds=0)
-        self.message_user(request, "OPA sync triggered.", messages.SUCCESS)
-
 
 # ---------------------------------------------------------------------------
 # GroupRoleAssignment admin
@@ -357,7 +344,6 @@ class GroupRoleAssignmentAdmin(admin.ModelAdmin):
     list_filter = ["group", "role"]
     autocomplete_fields = ["group", "role"]
     readonly_fields = ["created", "modified"]
-    actions = ["sync_to_opa_action"]
 
     def group_link(self, obj):
         url = reverse("admin:dab_opa_opagroup_change", args=[obj.group_id])
@@ -372,11 +358,6 @@ class GroupRoleAssignmentAdmin(admin.ModelAdmin):
 
     role_link.short_description = "Role"
     role_link.admin_order_field = "role__name"
-
-    @admin.action(description="Sync to OPA")
-    def sync_to_opa_action(self, request, queryset):
-        sync_to_opa(debounce_seconds=0)
-        self.message_user(request, "OPA sync triggered.", messages.SUCCESS)
 
 
 # ---------------------------------------------------------------------------

@@ -480,42 +480,41 @@ This is the only runtime principal reference allowed in v1.
 For a user request involving `(resource, action)`:
 
 1. if `user.is_superuser`, bypass and allow all
-2. send OPA request with `(user_id, is_superuser, resource, action)`
-3. OPA evaluates pre-loaded generated Rego (which encodes all user/group/role/policy data)
-4. receive resolved clauses from OPA
-5. compile clauses into Django `Q(...)`
-6. apply to queryset
+2. resolve effective policies: traverse `User -> OPAGroups -> Roles -> Policies` for the target `(resource, action)`
+3. deduplicate the resulting clause list
+4. send OPA request with `(user_id, is_superuser, resource, action, policies)`
+5. OPA evaluates the policies against its Rego rules (resolving `value_type`, e.g. `principal_user_id`)
+6. receive resolved clauses from OPA
+7. compile clauses into Django `Q(...)`
+8. apply to queryset
 
-Note: Steps 2-4 replace the old pattern of resolving groups/roles/policies in Django per-request. That resolution now happens at Rego generation time (see section 10).
+Policy resolution happens in Django at request time. OPA is a stateless evaluator that receives the user's effective policies with each request.
 
 ---
 
 ## 10. OPA boundary
 
-## 10.1 Rego is dynamically generated
+## 10.1 Rego is static, policies are per-request
 
-The Rego policy loaded into OPA is **dynamically generated** by the `dab_opa` app from the Django data model. When roles, policies, or assignments change, the app regenerates the Rego and pushes it to OPA (via the OPA Bundle API or direct policy update).
+The Rego policy loaded into OPA is a **static set of rules** that defines how to evaluate policies. It does not encode any user/group/role data.
 
-The generated Rego encodes:
+OPA receives the user's effective policies with each request in `input.policies`. Django resolves these at request time by traversing `User -> OPAGroups -> Roles -> Policies` and deduplicating.
 
-* all effective policies for all users/groups
-* `is_superuser` bypass rules
-* `principal_user_id` substitution logic
-* OR combination of matching policies
+The Rego rules handle:
 
-OPA does not receive per-request policy payloads. Instead, OPA has the full policy set pre-loaded and the per-request input is lightweight — just the principal and target.
+* `is_superuser` bypass
+* `principal_user_id` substitution (resolving the value type at eval time)
+* OR combination of matching policies (iterating over `input.policies`)
+* object attribute matching (tier 2)
+* related object checks (tier 2)
 
-### Why generate Rego from data
-
-* OPA evaluates pre-compiled Rego far more efficiently than interpreting dynamic policy lists per request.
-* The generated Rego is deterministic and auditable — it can be logged, diffed, and version-controlled.
-* Django does not need to resolve effective policies on every request — only on policy changes.
+OPA is stateless — it stores no policy data between requests.
 
 ---
 
 ## 10.2 OPA request format
 
-Since Rego is pre-loaded with all policy data, the per-request input is minimal:
+Each request includes the user's effective policies:
 
 ```json
 {
@@ -527,12 +526,16 @@ Since Rego is pre-loaded with all policy data, the per-request input is minimal:
     "target": {
       "resource": "project",
       "action": "read"
-    }
+    },
+    "policies": [
+      {"field_name": "organization_id", "operator": "eq", "value_type": "constant", "value": 17},
+      {"field_name": "created_by_id", "operator": "eq", "value_type": "principal_user_id"}
+    ]
   }
 }
 ```
 
-OPA looks up the user's effective policies from the generated Rego data and returns the resolved scope.
+OPA evaluates the policies using its Rego rules and returns the resolved scope.
 
 ---
 
@@ -548,9 +551,10 @@ OPA should:
 
 OPA should not:
 
-* resolve groups or roles (this is baked into the generated Rego)
+* resolve groups or roles (Django does this before each request)
 * introspect Django models
 * make external calls
+* store policy data between requests
 
 ---
 
@@ -577,16 +581,14 @@ Suggested response — a flat list of resolved clauses:
 
 Django ORs these clauses into a `Q(...)` expression.
 
-## 10.5 Rego regeneration
+## 10.5 No sync required
 
-The app regenerates and pushes Rego to OPA when:
+Since policies are sent with each request, there is no sync step. Policy
+changes (creating/modifying roles, policies, or group memberships) take
+effect immediately on the next request.
 
-* a `Policy` is created, updated, or deleted
-* a `GroupRoleAssignment` is created or deleted
-* `OPAGroup` membership changes
-* a `Role` is modified
-
-This can be done via Django signals or an explicit `sync_opa()` call. The regeneration should be debounced or batched to avoid excessive updates during bulk operations.
+The Rego rules are static and loaded once at OPA startup from the
+bundled `policy.rego` file.
 
 ---
 
@@ -1008,9 +1010,9 @@ DAB OPA v1 is a constrained OPA integration for Django Ansible Base where:
 * groups get roles
 * roles contain atomic policies
 * policies are validated against real Django model fields
-* Rego is dynamically generated from the data model and pushed to OPA
-* per-request OPA input is just (user, resource, action)
-* OPA evaluates pre-loaded policy and returns resolved clause scopes
+* Rego rules are static and loaded once at OPA startup
+* per-request OPA input includes (user, resource, action, effective policies)
+* OPA evaluates the policies and returns resolved clause scopes
 * Django turns those scopes into queryset filters
 * all access is additive OR logic
 * `is_superuser` bypasses everything

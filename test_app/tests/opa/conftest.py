@@ -3,7 +3,6 @@ from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
 
 from ansible_base.opa.models import GroupRoleAssignment, OPAGroup, Policy, Role
-from ansible_base.opa.rego.sync import sync_to_opa
 from test_app.models import InstanceGroup, Inventory, Organization, Team
 
 User = get_user_model()
@@ -105,15 +104,5 @@ def _grant_opa_role(user, role_name, policies):
 
 @pytest.fixture
 def grant_opa_role():
-    """Fixture that returns a helper to grant OPA roles. Syncs to OPA after setup."""
+    """Fixture that returns a helper to grant OPA roles."""
     return _grant_opa_role
-
-
-@pytest.fixture
-def sync_opa_fixture():
-    """Fixture that syncs OPA data. Call after setting up roles/policies."""
-
-    def _sync():
-        sync_to_opa(debounce_seconds=0)
-
-    return _sync

@@ -11,7 +11,6 @@ import pytest
 
 from ansible_base.opa.permissions import OPAPermission, _get_action_for_request, _is_opa_resource
 from ansible_base.opa.queryset import filter_queryset_for_user, user_can_access_obj
-from ansible_base.opa.rego.sync import sync_to_opa
 from test_app.models import Inventory, Organization
 
 
@@ -25,7 +24,6 @@ class TestQuerysetFiltering:
         assert opa_inventory2 in qs
 
     def test_unpermissioned_user_sees_nothing(self, opa_user, opa_inventory):
-        sync_to_opa(debounce_seconds=0)
         qs = filter_queryset_for_user(Inventory.objects.all(), opa_user, "read")
         assert qs.count() == 0
 
@@ -42,7 +40,6 @@ class TestQuerysetFiltering:
                 },
             ],
         )
-        sync_to_opa(debounce_seconds=0)
 
         qs = filter_queryset_for_user(Inventory.objects.all(), opa_user, "read")
         assert opa_inventory in qs
@@ -61,7 +58,6 @@ class TestQuerysetFiltering:
                 },
             ],
         )
-        sync_to_opa(debounce_seconds=0)
 
         qs = filter_queryset_for_user(Inventory.objects.all(), opa_user, "read")
         assert opa_inventory in qs
@@ -80,7 +76,6 @@ class TestQuerysetFiltering:
                 },
             ],
         )
-        sync_to_opa(debounce_seconds=0)
 
         read_qs = filter_queryset_for_user(Inventory.objects.all(), opa_user, "read")
         change_qs = filter_queryset_for_user(Inventory.objects.all(), opa_user, "change")
@@ -98,7 +93,6 @@ class TestObjectAccess:
         assert user_can_access_obj(admin_user, opa_inventory, "delete")
 
     def test_unpermissioned_user_cannot_access(self, opa_user, opa_inventory):
-        sync_to_opa(debounce_seconds=0)
         assert not user_can_access_obj(opa_user, opa_inventory, "read")
         assert not user_can_access_obj(opa_user, opa_inventory, "change")
 
@@ -121,7 +115,6 @@ class TestObjectAccess:
                 },
             ],
         )
-        sync_to_opa(debounce_seconds=0)
 
         assert user_can_access_obj(opa_user, opa_inventory, "read")
         assert user_can_access_obj(opa_user, opa_inventory, "change")
