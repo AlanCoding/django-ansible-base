@@ -97,6 +97,42 @@ local evaluator for all authorization and reserve OPA for audit logging
 or advanced Rego rules (DENY policies, ABAC conditions) that can't be
 expressed as simple clause lookups.
 
+## How OPA resolves a user's policies
+
+When a query arrives with `user_id: 11`, OPA does not fetch policies from
+a database or call back to Django. The user's policies are already in
+memory — they were pushed during the last sync as
+`data.dab_opa.user_policies["11"]`.
+
+The Rego rule that connects the query to the synced data is a direct key
+lookup:
+
+```rego
+user_id := format_int(input.principal.user_id, 10)
+policies := data.dab_opa.user_policies[user_id][input.target.resource][input.target.action]
+```
+
+This indexes three levels deep: `user_policies["11"]["inventory"]["read"]`
+→ returns the list of clauses for that user/resource/action combination.
+If any level is missing (user has no policies, or no policies for that
+resource/action), `policies` is undefined and the rule doesn't fire —
+resulting in `allow: false`.
+
+Using the sync payload from the earlier example, a query for user 11
+reading inventories resolves to:
+
+```
+data.dab_opa.user_policies["11"]["inventory"]["read"]
+→ [{"field_name": "organization_id", "operator": "eq", "value_type": "constant", "value": 4}]
+```
+
+A query for user 11 deleting inventories resolves to:
+
+```
+data.dab_opa.user_policies["11"]["inventory"]["delete"]
+→ (undefined — no delete policies exist for this user)
+```
+
 ## Rego rules: what OPA does with queries
 
 The Rego policy is loaded from [`ansible_base/opa/bundles/policy.rego`](https://github.com/AlanCoding/django-ansible-base/blob/dab_opa/ansible_base/opa/bundles/policy.rego). It
