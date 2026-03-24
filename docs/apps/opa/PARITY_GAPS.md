@@ -56,9 +56,71 @@ group memberships).
 
 ## 2. Related object permission checks — Gap
 
-**What RBAC does:** Beyond filtering querysets ("show me what I can see"),
-RBAC also enforces permission checks against related objects during create and
-update operations. Examples:
+This gap is part of a broader architectural change: separating OPA
+evaluation into two tiers.
+
+### Two-tier evaluation architecture
+
+**Tier 1: Queryset filtering (list operations)**
+
+OPA returns *clauses* — field/operator/value tuples that Django compiles
+into `Q()` filters. This is "partial evaluation" and is a best-effort
+approach. It is optimized for performance: the goal is to filter a
+queryset down to a reasonable set, not to be the final authority.
+
+In the future, DENY policies may be excluded from clause generation to
+avoid blowing up querysets. This means tier 1 may over-include — some
+objects in the filtered queryset might not actually be accessible. This
+is acceptable because tier 2 is the authoritative check.
+
+Input (unchanged from today):
+```json
+{"input": {
+  "principal": {"user_id": 6, "is_superuser": false},
+  "target": {"resource": "inventory", "action": "read"}
+}}
+```
+Response: `{"allow": true, "clauses": [...]}`
+
+**Tier 2: Object evaluation (single object + action)**
+
+For a specific "can user X do action Y on object Z?", the object's actual
+attributes are sent to OPA, and OPA returns a concrete boolean. This is
+the *canonical* answer. It can evaluate DENY rules, check related objects,
+and be arbitrarily complex without worrying about queryset representation.
+
+Input (new):
+```json
+{"input": {
+  "principal": {"user_id": 6, "is_superuser": false},
+  "target": {"resource": "inventory", "action": "change"},
+  "object": {"id": 42, "organization_id": 1, "credential_id": 5},
+  "related": {
+    "organization": {"resource": "organization", "action": "add", "id": 2},
+    "credential": {"resource": "credential", "action": "use", "id": 5}
+  }
+}}
+```
+Response: `{"allow": true}` or `{"allow": false, "denied_fields": ["credential"]}`
+
+The `object` field contains the target object's attributes (the fields
+registered in the OPA registry). The Rego rules evaluate the user's
+clauses against these specific attribute values rather than returning
+clauses for queryset construction.
+
+The `related` field contains related objects being set or changed. Each
+entry specifies which resource and action to check, plus the related
+object's ID. OPA evaluates each related check against the user's policies
+for that resource/action.
+
+**Currently**, `user_can_access_obj()` fakes tier 2 by running tier 1
+(getting clauses) and checking if the object would match. This must change
+to use a real tier 2 OPA evaluation with the object's data in the input.
+
+### What RBAC does for related objects
+
+Beyond filtering querysets, RBAC enforces permission checks against related
+objects during create and update operations via `RelatedAccessMixin`:
 
 - **Creating an inventory in org X** requires `add_inventory` permission
   scoped to org X. This is a parent-object check — the inventory doesn't
@@ -68,43 +130,113 @@ update operations. Examples:
   permission on object A to use it in the context of object B.
 - **Adding a user to a team** requires appropriate permission on the team.
 
-These are all "can I do action A on object B in the context of object C?"
-questions.
+The action required for each FK field is determined by
+`required_related_permission()` in `ansible_base/rbac/api/related.py`:
+- **Parent FK** (e.g., `organization`): requires `add_{model_name}`
+- **Non-parent FK** (e.g., `credential`): requires the first matching
+  action from `ANSIBLE_BASE_CHECK_RELATED_PERMISSIONS` (default:
+  `['use', 'change', 'view']`)
 
-**What OPA does today:** OPA handles queryset filtering well — "show me all
-inventories I can read" works correctly. But the system has no mechanism for
-related-object checks. The `add` action is mapped in the migration, but the
-semantics don't align: `add` in RBAC is "can I create a child object under
-this parent", while in OPA it would need to be "does the user have a policy
-granting `add` for this resource scoped to the parent object?"
+### Impact
 
-**Impact:** High. Without this, users could create objects in orgs they
-shouldn't, or use credentials they don't have permission for. This is a
-fundamental authorization pattern in Ansible, not an edge case.
+High. Without this, users could create objects in orgs they shouldn't, or
+use credentials they don't have permission for. This is a fundamental
+authorization pattern in Ansible, not an edge case.
 
-**Fix approach:** This requires both data model and evaluation changes:
+### Implementation plan
 
-1. **Parent-object checks for create:** When creating an inventory, the view
-   needs to ask OPA "can user X `add` inventory scoped to organization Y?"
-   The policy data already supports this (a policy with
-   `resource=inventory, action=add, field_name=organization_id, value=Y`).
-   What's missing is the view-level integration that extracts the parent
-   object from the request and queries OPA with it.
+**1. Rego rules for tier 2 evaluation**
 
-2. **Cross-resource checks (use permissions):** These need a new pattern.
-   When a job template references credential Z, the view needs to check
-   "can user X `use` credential Z?" This is an object-level check on a
-   different resource than the one being created/modified. OPA can evaluate
-   this — it's just `resource=credential, action=use, target_id=Z` — but
-   the view integration and the `use` action need to be wired up.
+Add rules that evaluate `input.object` against user clauses directly:
 
-3. **View-level hooks:** `OPAPermission.has_permission()` (for create) and
-   `has_object_permission()` (for update with related objects) need to
-   extract related object references from the request payload and make
-   additional OPA queries.
+```rego
+# Tier 2: object evaluation — does a specific object match the user's clauses?
+object_allowed if {
+    input.principal.is_superuser == true
+}
 
-**This is the next implementation priority after the org admin inheritance
-fix.**
+object_allowed if {
+    user_id := format_int(input.principal.user_id, 10)
+    policies := data.dab_opa.user_policies[user_id][input.target.resource][input.target.action]
+    some p in policies
+    clause := _resolve_clause(p)
+    input.object[clause.field_name] == clause.value
+}
+
+# Related object checks
+related_denied[field] := reason if {
+    some field, check in input.related
+    not _related_allowed(check)
+    reason := concat("", ["No ", check.action, " permission on ", check.resource])
+}
+
+_related_allowed(check) if {
+    input.principal.is_superuser == true
+}
+
+_related_allowed(check) if {
+    user_id := format_int(input.principal.user_id, 10)
+    policies := data.dab_opa.user_policies[user_id][check.resource][check.action]
+    some p in policies
+    clause := _resolve_clause(p)
+    clause.field_name == "id"
+    clause.value == check.id
+}
+
+# Also allow org-scoped related checks (e.g., add_inventory scoped to org)
+_related_allowed(check) if {
+    user_id := format_int(input.principal.user_id, 10)
+    policies := data.dab_opa.user_policies[user_id][check.resource][check.action]
+    some p in policies
+    clause := _resolve_clause(p)
+    clause.field_name == "organization_id"
+    clause.value == check.org_id
+}
+```
+
+The existing `allow` / `clauses` rules remain for tier 1. A new
+`object_allowed` rule handles tier 2 when `input.object` is present.
+
+**2. OPA client**
+
+Extend `OPAClient` with a `check_object()` method that sends
+`input.object` and `input.related` and returns a boolean + denied fields.
+
+**3. Local evaluator**
+
+Extend the local evaluator with equivalent logic: evaluate clauses
+against the object's attributes, check related objects against user
+policies.
+
+**4. View integration (`OPARelatedAccessMixin`)**
+
+A serializer mixin (replacing RBAC's `RelatedAccessMixin`) that:
+- On `create()`: builds `input.object` from the created instance's
+  attributes, builds `input.related` from FK fields using
+  `required_related_permission()` logic, calls tier 2 OPA evaluation.
+- On `update()`: compares old vs new FK values (only changed FKs go
+  into `related`), calls tier 2 OPA evaluation.
+
+**5. `user_can_access_obj()`**
+
+Change from "filter queryset, check membership" to a real tier 2 OPA
+call. The object's registered fields are extracted and sent as
+`input.object`.
+
+**6. Tests**
+
+The gap tests in `test_related_permissions.py` should start failing
+(related checks now enforced). New tests for tier 2 evaluation directly.
+
+### Implementation order
+
+1. Rego rules (tier 2 evaluation + related checks)
+2. OPA client + local evaluator extensions
+3. `user_can_access_obj()` refactored to use tier 2
+4. `OPARelatedAccessMixin` for serializers
+5. Wire up in test_app, tests
+
+**This is the next implementation priority.**
 
 ---
 
@@ -346,6 +478,8 @@ discrepancies during the switchover period.
    **Done.** `recompute_team_memberships()` runs before every sync,
    finding users with `team/change` policies and adding them to team
    groups. Verified with 3 tests.
-3. **Related object permission checks** (Gap #2) — view-level integration
-   for create/update with parent and cross-resource checks. This is
-   structural and requires careful design. **This is the next priority.**
+3. **Two-tier evaluation + related object checks** (Gap #2) — Separate
+   OPA evaluation into queryset filtering (tier 1, clauses, best effort)
+   and object evaluation (tier 2, boolean, authoritative). Tier 2 includes
+   related object checks for create/update. Requires Rego rules, client
+   extensions, view integration. **This is the next priority.**
