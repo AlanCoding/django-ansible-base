@@ -99,7 +99,7 @@ expressed as simple clause lookups.
 
 ## Rego rules: what OPA does with queries
 
-The Rego policy is loaded from `ansible_base/opa/bundles/policy.rego`. It
+The Rego policy is loaded from [`ansible_base/opa/bundles/policy.rego`](https://github.com/AlanCoding/django-ansible-base/blob/dab_opa/ansible_base/opa/bundles/policy.rego). It
 defines rules that OPA evaluates against `input` (from the query) and
 `data` (from the sync). The full Rego is short — here are the key rules:
 
