@@ -6,54 +6,85 @@ and the OPA sidecar.
 ## Architecture overview
 
 OPA runs as a sidecar container on each node (port 8181). DAB communicates
-with it over a single interface:
+with it over two interfaces:
 
-**Query API** (`POST /v1/data/dab_opa`) -- DAB sends authorization
-questions with the user's effective policies included in each request.
-OPA evaluates them against the Rego rules and returns the result.
+1. **Data API** (`PUT /v1/data/dab_opa/policies`) -- DAB pushes policy
+   definitions to OPA when policies are created, modified, or deleted.
+   These are cached in OPA's in-memory store.
+
+2. **Query API** (`POST /v1/data/dab_opa`) -- DAB sends authorization
+   questions with the user's effective policy IDs. OPA looks up the
+   referenced policies from its cached data and evaluates them.
 
 ```
-+--------------+    POST /v1/data/dab_opa     +--------------+
-|              |  <-------------------------> |              |
-|   Django     |   (policies in each request) |     OPA      |
-|   (DAB)      |                              |  (sidecar)   |
-|              |                              |              |
-+--------------+                              +--------------+
++--------------+    PUT /v1/data/dab_opa/policies   +--------------+
+|              |  ------------------------------>   |              |
+|   Django     |    (policy definitions, on change) |     OPA      |
+|   (DAB)      |                                    |  (sidecar)   |
+|              |    POST /v1/data/dab_opa           |              |
+|              |  <------------------------------->  |              |
+|              |    (policy_ids per request)         |              |
++--------------+                                    +--------------+
 ```
 
-OPA is stateless -- it stores no policy data. DAB resolves the user's
-effective policies at request time and sends them as `input.policies`.
+## Policy sync: what DAB pushes
 
-## Policy resolution: what DAB sends
+When a Policy model is created, modified, or deleted, a `post_save`/`post_delete`
+signal triggers `sync_policies_to_opa()`. This pushes all policy definitions
+to OPA via `PUT /v1/data/dab_opa/policies`, keyed by policy PK.
 
-Before each OPA query, DAB resolves the user's effective policies by
-traversing `User -> OPAGroup -> GroupRoleAssignment -> Role -> Policy`.
-The result is a deduplicated list of clause dicts for the specific
-resource/action being checked.
-
-Each clause is an atomic condition with a field name, operator, value type,
-and (for constants) a value:
+Each policy definition is a clause dict:
 
 ```json
-[
-  {"field_name": "organization_id", "operator": "eq", "value_type": "constant", "value": 4},
-  {"field_name": "created_by_id", "operator": "eq", "value_type": "principal_user_id"}
-]
+{
+  "42": {
+    "resource": "inventory",
+    "action": "read",
+    "field_name": "organization_id",
+    "operator": "eq",
+    "value_type": "constant",
+    "value": 4
+  },
+  "43": {
+    "resource": "inventory",
+    "action": "read",
+    "field_name": "created_by_id",
+    "operator": "eq",
+    "value_type": "principal_user_id"
+  }
+}
 ```
 
-The `value_type` tells OPA how to resolve the value:
-- `constant` -- use `value` as-is
-- `principal_user_id` -- substitute the requesting user's ID at eval time
+Note: `constant` policies include a `value` field; `principal_user_id`
+policies do not (the value is resolved at eval time from `input.principal.user_id`).
+
+## Per-request policy resolution
+
+Before each OPA query, DAB resolves the user's effective policy IDs by
+traversing `User -> OPAGroup -> GroupRoleAssignment -> Role -> Policy`.
+The result is a deduplicated list of policy PKs (integers).
+
+This list is sent as `input.policy_ids` in every query. OPA uses these
+IDs to look up the matching policy definitions from its cached data.
 
 ## Rego rules: what OPA does with queries
 
 The Rego policy is loaded from [`ansible_base/opa/bundles/policy.rego`](https://github.com/AlanCoding/django-ansible-base/blob/dab_opa/ansible_base/opa/bundles/policy.rego).
-It defines rules that OPA evaluates against `input` (from the query).
-The full Rego is short -- here are the key rules:
+
+### Policy lookup
+
+OPA looks up each referenced policy by PK from `data.dab_opa.policies`:
+
+```rego
+some pid in input.policy_ids
+p := data.dab_opa.policies[format_int(pid, 10)]
+p.resource == input.target.resource
+p.action == input.target.action
+```
 
 ### Clause resolution
 
-Every clause has a `value_type`. The Rego resolves it:
+Every policy has a `value_type`. The Rego resolves it:
 
 ```rego
 # Constant values pass through as-is
@@ -72,7 +103,10 @@ _resolve_clause(p) := {"field_name": p.field_name, "operator": p.operator, "valu
 ```rego
 clauses := resolved if {
     resolved := [clause |
-        some p in input.policies
+        some pid in input.policy_ids
+        p := data.dab_opa.policies[format_int(pid, 10)]
+        p.resource == input.target.resource
+        p.action == input.target.action
         clause := _resolve_clause(p)
     ]
 }
@@ -80,14 +114,18 @@ clauses := resolved if {
 allow if { count(clauses) > 0 }
 ```
 
-This iterates over the policies sent in the request and returns them as
-resolved clauses. DAB compiles these into Django `Q()` filters.
+This iterates over the user's policy IDs, looks up each policy, filters
+by resource/action, and returns resolved clauses. DAB compiles these into
+Django `Q()` filters.
 
 ### Tier 2 rules (object evaluation)
 
 ```rego
 object_allowed if {
-    some p in input.policies
+    some pid in input.policy_ids
+    p := data.dab_opa.policies[format_int(pid, 10)]
+    p.resource == input.target.resource
+    p.action == input.target.action
     clause := _resolve_clause(p)
     _clause_matches_object(clause)
 }
@@ -99,7 +137,7 @@ _clause_matches_object(clause) if {
 ```
 
 When `input.object` is present, OPA checks whether the object's actual
-field values match any of the user's clauses. This returns a concrete
+field values match any of the user's policies. This returns a concrete
 boolean rather than filter clauses.
 
 ### Related object rules
@@ -111,15 +149,18 @@ related_denied contains field if {
 }
 
 _related_allowed(check) if {
-    some p in check.policies
+    some pid in input.policy_ids
+    p := data.dab_opa.policies[format_int(pid, 10)]
+    p.resource == check.resource
+    p.action == check.action
     clause := _resolve_clause(p)
     # ... matches by ID or org-scoped
 }
 ```
 
 When `input.related` is present, OPA checks whether the user has
-permission on each related object. Each related entry includes its own
-`policies` list (resolved by DAB for that related resource/action).
+permission on each related object. The same `input.policy_ids` are used --
+OPA filters by each related entry's resource/action from the cached data.
 Returns the set of field names where the check failed.
 
 ## Query types
@@ -132,9 +173,9 @@ same Rego rules evaluate. The difference is what fields are present in
 
 **Purpose:** "What objects of this type can this user access?"
 
-DAB sends the principal, target, and the user's policies for that
-resource/action. OPA resolves value_types and returns clauses that DAB
-compiles into Django ORM filters.
+DAB sends the principal, target, and the user's policy IDs. OPA looks up
+the referenced policies, filters by resource/action, resolves value_types,
+and returns clauses that DAB compiles into Django ORM filters.
 
 **Request:**
 ```json
@@ -142,9 +183,7 @@ compiles into Django ORM filters.
   "input": {
     "principal": {"user_id": 11, "is_superuser": false},
     "target": {"resource": "inventory", "action": "read"},
-    "policies": [
-      {"field_name": "organization_id", "operator": "eq", "value_type": "constant", "value": 4}
-    ]
+    "policy_ids": [42, 43, 55]
   }
 }
 ```
@@ -164,7 +203,7 @@ compiles into Django ORM filters.
 **What DAB does with this:** Compiles `clauses` into
 `Q(organization_id=4)` and filters `Inventory.objects.filter(Q(...))`.
 
-**When no permission exists** (empty policies list):
+**When no permission exists** (empty policy_ids or no matching policies):
 ```json
 {
   "result": {
@@ -181,8 +220,8 @@ DAB compiles empty clauses into `Q(pk__in=[])` -- matching nothing.
 **Purpose:** "Can this user perform this action on this specific object?"
 
 DAB sends the object's registered field values in `input.object` along
-with the user's policies. OPA evaluates the clauses against the concrete
-values and returns a boolean.
+with the user's policy IDs. OPA looks up and evaluates the policies
+against the concrete values and returns a boolean.
 
 **Request** (user can change inventory 5 -- it's in org 4):
 ```json
@@ -191,9 +230,7 @@ values and returns a boolean.
     "principal": {"user_id": 11, "is_superuser": false},
     "target": {"resource": "inventory", "action": "change"},
     "object": {"id": 5, "organization_id": 4, "credential_id": 1, "created_by_id": null},
-    "policies": [
-      {"field_name": "organization_id", "operator": "eq", "value_type": "constant", "value": 4}
-    ]
+    "policy_ids": [42, 43]
   }
 }
 ```
@@ -215,9 +252,7 @@ values and returns a boolean.
     "principal": {"user_id": 11, "is_superuser": false},
     "target": {"resource": "inventory", "action": "change"},
     "object": {"id": 6, "organization_id": 5, "credential_id": null, "created_by_id": null},
-    "policies": [
-      {"field_name": "organization_id", "operator": "eq", "value_type": "constant", "value": 4}
-    ]
+    "policy_ids": [42, 43]
   }
 }
 ```
@@ -237,8 +272,8 @@ on the related objects being set?"
 
 DAB sends `input.related` alongside `input.object`. Each entry in
 `related` specifies a resource, action, the related object's ID, and
-the user's policies for that related resource/action. OPA checks each
-related entry independently.
+optionally its org_id. OPA checks each related entry independently
+using the same `input.policy_ids`.
 
 **Request** (user has `use` on credential 1 -- allowed):
 ```json
@@ -247,17 +282,13 @@ related entry independently.
     "principal": {"user_id": 11, "is_superuser": false},
     "target": {"resource": "inventory", "action": "change"},
     "object": {"id": 5, "organization_id": 4, "credential_id": 1, "created_by_id": null},
-    "policies": [
-      {"field_name": "organization_id", "operator": "eq", "value_type": "constant", "value": 4}
-    ],
+    "policy_ids": [42, 43, 67],
     "related": {
       "credential": {
         "resource": "credential",
         "action": "use",
         "id": 1,
-        "policies": [
-          {"field_name": "id", "operator": "eq", "value_type": "constant", "value": 1}
-        ]
+        "org_id": 4
       }
     }
   }
@@ -281,17 +312,13 @@ related entry independently.
     "principal": {"user_id": 11, "is_superuser": false},
     "target": {"resource": "inventory", "action": "change"},
     "object": {"id": 5, "organization_id": 4, "credential_id": 2, "created_by_id": null},
-    "policies": [
-      {"field_name": "organization_id", "operator": "eq", "value_type": "constant", "value": 4}
-    ],
+    "policy_ids": [42, 43, 67],
     "related": {
       "credential": {
         "resource": "credential",
         "action": "use",
         "id": 2,
-        "policies": [
-          {"field_name": "id", "operator": "eq", "value_type": "constant", "value": 1}
-        ]
+        "org_id": 4
       }
     }
   }
@@ -328,20 +355,6 @@ handles coarse capability checks (DRF also calls it for OPTIONS/schema
 generation with mock requests that have no data). The serializer mixin
 handles fine-grained related object checks after the object is
 constructed.
-
-## Could we avoid per-request OPA calls?
-
-Yes -- and the system is designed to make this possible. Because the
-policies are simple clause dicts, DAB includes a **local evaluator**
-(`ansible_base.opa.evaluator`) that performs identical evaluation purely
-in Django, without any OPA HTTP call. It traverses the same
-`User -> Group -> Role -> Policy` chain and applies the same clause logic.
-
-The local evaluator exists today and all tier 1/tier 2 tests run against
-both the OPA path and the local path. A future deployment could use the
-local evaluator for all authorization and reserve OPA for audit logging
-or advanced Rego rules (DENY policies, ABAC conditions) that can't be
-expressed as simple clause lookups.
 
 ## Request/response logging
 

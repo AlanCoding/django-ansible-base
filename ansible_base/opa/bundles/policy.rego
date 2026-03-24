@@ -14,15 +14,21 @@ allow if {
 	count(clauses) > 0
 }
 
-# Resolve clauses from input.policies (sent by Django per-request)
+# Resolve clauses by looking up referenced policies from stored data.
+# input.policy_ids contains the user's effective policy PKs (resolved by Django).
+# data.dab_opa.policies contains all policy definitions (synced from Django).
+# Filter to policies matching the target resource/action.
 clauses := resolved if {
 	resolved := [clause |
-		some p in input.policies
+		some pid in input.policy_ids
+		p := data.dab_opa.policies[format_int(pid, 10)]
+		p.resource == input.target.resource
+		p.action == input.target.action
 		clause := _resolve_clause(p)
 	]
 }
 
-# Default empty clauses when no policies are provided
+# Default empty clauses when no policies match
 default clauses := []
 
 # Substitute principal_user_id with actual user_id
@@ -48,7 +54,10 @@ object_allowed if {
 
 # Check if the object's attributes match any of the user's policies
 object_allowed if {
-	some p in input.policies
+	some pid in input.policy_ids
+	p := data.dab_opa.policies[format_int(pid, 10)]
+	p.resource == input.target.resource
+	p.action == input.target.action
 	clause := _resolve_clause(p)
 	_clause_matches_object(clause)
 }
@@ -61,6 +70,7 @@ _clause_matches_object(clause) if {
 
 # --- Related object checks ---
 # Returns a set of field names where the related check failed.
+# Uses the same input.policy_ids — Rego filters by each related entry's resource/action.
 
 related_denied contains field if {
 	some field, check in input.related
@@ -72,19 +82,25 @@ _related_allowed(check) if {
 	input.principal.is_superuser == true
 }
 
-# Related object allowed if any of its policies match by ID
+# Related object allowed if user has a policy matching the related object's ID
 _related_allowed(check) if {
-	some p in check.policies
+	some pid in input.policy_ids
+	p := data.dab_opa.policies[format_int(pid, 10)]
+	p.resource == check.resource
+	p.action == check.action
 	clause := _resolve_clause(p)
 	clause.operator == "eq"
 	clause.field_name == "id"
 	clause.value == check.id
 }
 
-# Related object allowed if any of its policies match by org
+# Related object allowed if user has org-scoped permission
 _related_allowed(check) if {
 	check.org_id
-	some p in check.policies
+	some pid in input.policy_ids
+	p := data.dab_opa.policies[format_int(pid, 10)]
+	p.resource == check.resource
+	p.action == check.action
 	clause := _resolve_clause(p)
 	clause.operator == "eq"
 	clause.field_name == "organization_id"

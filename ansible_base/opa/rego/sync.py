@@ -1,6 +1,48 @@
 import logging
+import time
+
+import requests
 
 logger = logging.getLogger(__name__)
+
+
+def sync_policies_to_opa():
+    """Push all policy definitions to OPA.
+
+    Builds a dict of {policy_pk: clause_dict} and pushes it to OPA via
+    PUT /v1/data/dab_opa/policies. OPA stores this as in-memory data
+    that Rego rules index into using policy IDs from each request's input.
+    """
+    from ansible_base.opa.client import _log_opa_interaction
+    from ansible_base.opa.models import Policy
+    from ansible_base.opa.registry import opa_registry
+
+    policies_data = {}
+    for p in Policy.objects.all():
+        clause = {
+            "resource": p.resource,
+            "action": p.action,
+            "field_name": p.field_name,
+            "operator": p.operator,
+            "value_type": p.value_type,
+        }
+        if p.value_type == "constant":
+            try:
+                clause["value"] = int(p.constant_value)
+            except (ValueError, TypeError):
+                clause["value"] = p.constant_value
+        policies_data[str(p.pk)] = clause
+
+    url = f"{opa_registry.server_url}/v1/data/dab_opa/policies"
+    try:
+        t0 = time.monotonic()
+        resp = requests.put(url, json=policies_data, timeout=10)
+        duration_ms = (time.monotonic() - t0) * 1000
+        resp.raise_for_status()
+        logger.info("Pushed %d policy definitions to OPA", len(policies_data))
+        _log_opa_interaction("PUT", url, policies_data, None, duration_ms, resp.status_code)
+    except requests.RequestException:
+        logger.exception("Failed to push policy definitions to OPA at %s", url)
 
 
 def recompute_team_memberships():

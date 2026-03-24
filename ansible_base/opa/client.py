@@ -47,7 +47,7 @@ class OPAClient:
         resp.raise_for_status()
         return True
 
-    def query(self, user_id, is_superuser, resource, action, policies):
+    def query(self, user_id, is_superuser, resource, action, policy_ids):
         """Query OPA for resolved clauses.
 
         Args:
@@ -55,7 +55,7 @@ class OPAClient:
             is_superuser: bool
             resource: OPA resource name
             action: OPA action string
-            policies: list of unresolved clause dicts (with value_type)
+            policy_ids: list of policy PKs that apply to this user
 
         Returns a dict with 'allow' (bool) and 'clauses' (list).
         On error, fails closed (deny all).
@@ -70,7 +70,7 @@ class OPAClient:
                     "resource": resource,
                     "action": action,
                 },
-                "policies": policies,
+                "policy_ids": policy_ids,
             }
         }
         url = f"{self.base_url}/v1/data/dab_opa"
@@ -91,7 +91,7 @@ class OPAClient:
             logger.exception("OPA query failed, failing closed (deny all)")
             return {"allow": False, "clauses": []}
 
-    def check_object(self, user_id, is_superuser, resource, action, obj_attrs, policies, related=None):
+    def check_object(self, user_id, is_superuser, resource, action, obj_attrs, policy_ids, related=None):
         """Tier 2: Check if a user can perform an action on a specific object.
 
         Args:
@@ -100,8 +100,8 @@ class OPAClient:
             resource: OPA resource name
             action: OPA action string
             obj_attrs: dict of the object's field values (registered fields)
-            policies: list of unresolved clause dicts (with value_type)
-            related: optional dict of field_name -> {resource, action, id, org_id, policies}
+            policy_ids: list of policy PKs that apply to this user
+            related: optional dict of field_name -> {resource, action, id, org_id}
 
         Returns:
             Dict with 'object_allowed' (bool) and 'related_denied' (set of field names).
@@ -117,7 +117,7 @@ class OPAClient:
                     "action": action,
                 },
                 "object": obj_attrs,
-                "policies": policies,
+                "policy_ids": policy_ids,
             }
         }
         if related:

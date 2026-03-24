@@ -9,7 +9,8 @@ class DABOPAConfig(AppConfig):
 
     def ready(self):
         from ansible_base.opa.registry import opa_registry
-        from ansible_base.opa.signals import connect_user_signal
+        from ansible_base.opa.signals import connect_policy_sync_signals, connect_user_signal
 
         opa_registry.validate(self.apps)
         connect_user_signal()
+        connect_policy_sync_signals()

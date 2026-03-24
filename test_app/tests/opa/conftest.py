@@ -106,3 +106,15 @@ def _grant_opa_role(user, role_name, policies):
 def grant_opa_role():
     """Fixture that returns a helper to grant OPA roles."""
     return _grant_opa_role
+
+
+@pytest.fixture
+def sync_policies():
+    """Fixture that syncs policy definitions to OPA. Call after creating policies."""
+
+    def _sync():
+        from ansible_base.opa.rego.sync import sync_policies_to_opa
+
+        sync_policies_to_opa()
+
+    return _sync

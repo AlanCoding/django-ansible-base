@@ -24,7 +24,7 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("--dry-run", action="store_true", help="Report what would be migrated without writing.")
-        parser.add_argument("--sync", action="store_true", help="Recompute team memberships after migration.")
+        parser.add_argument("--sync", action="store_true", help="Sync policy definitions to OPA after migration.")
         parser.add_argument("--verify", action="store_true", help="After migration, compare RBAC vs OPA effective permissions for all users.")
 
     def handle(self, *args, **options):
@@ -39,9 +39,10 @@ class Command(BaseCommand):
 
         if options["sync"] and not self.dry_run:
             self.stdout.write("")
-            self.stdout.write("Recomputing team memberships...")
-            from ansible_base.opa.rego.sync import recompute_team_memberships
+            self.stdout.write("Syncing policy definitions to OPA...")
+            from ansible_base.opa.rego.sync import recompute_team_memberships, sync_policies_to_opa
 
+            sync_policies_to_opa()
             recompute_team_memberships()
             self.stdout.write(self.style.SUCCESS("Done."))
 

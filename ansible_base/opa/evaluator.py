@@ -40,49 +40,19 @@ def get_effective_policies(user, resource, action):
     return clauses
 
 
-def get_unresolved_policies(user, resource, action):
-    """Get a user's effective policies as unresolved clause dicts for OPA input.
+def get_user_policy_ids(user):
+    """Get all policy PKs that apply to a user across all resources/actions.
 
-    Like get_effective_policies but preserves value_type so OPA's Rego can
-    perform the resolution (e.g., substituting principal_user_id at eval time).
-
-    Returns a list of clause dicts:
-        [{"field_name": "...", "operator": "...", "value_type": "...", "value": ...}, ...]
+    Resolves: user -> dab_opa_groups -> role_assignments -> roles -> policies
+    Returns a deduplicated list of policy PKs.
     """
     from ansible_base.opa.models import Policy
 
-    policies = Policy.objects.filter(
-        role__group_assignments__group__users=user,
-        resource=resource,
-        action=action,
-    ).distinct()
-
-    seen = set()
-    clauses = []
-    for p in policies:
-        clause = _unresolved_clause(p)
-        key = (clause["field_name"], clause["operator"], clause["value_type"], str(clause.get("value", "")))
-        if key in seen:
-            continue
-        seen.add(key)
-        clauses.append(clause)
-
-    return clauses
-
-
-def _unresolved_clause(policy):
-    """Convert a Policy to an unresolved clause dict (preserves value_type)."""
-    clause = {
-        "field_name": policy.field_name,
-        "operator": policy.operator,
-        "value_type": policy.value_type,
-    }
-    if policy.value_type == "constant":
-        try:
-            clause["value"] = int(policy.constant_value)
-        except (ValueError, TypeError):
-            clause["value"] = policy.constant_value
-    return clause
+    return list(
+        Policy.objects.filter(
+            role__group_assignments__group__users=user,
+        ).distinct().values_list("pk", flat=True)
+    )
 
 
 def _resolve_policy(policy, user):
