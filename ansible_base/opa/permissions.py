@@ -41,7 +41,29 @@ class OPAPermission(BasePermission):
     """DRF permission class that delegates to OPA for authorization.
 
     Drop-in replacement for AnsibleBaseObjectPermissions.
-    Uses OPA queryset filtering for list views and object-level checks for detail views.
+
+    Authorization is split across two layers, matching DAB RBAC's pattern:
+
+    1. **Permission class (this class)** — consulted by DRF before request
+       data is available. Answers coarse-grained questions: "is this user
+       authenticated?", "do they have any add scope at all?", "can they
+       access this specific object?" This layer uses tier 1 (queryset
+       filtering) for capability checks and tier 2 (object evaluation) for
+       object-level checks.
+
+    2. **Serializer mixin (OPARelatedAccessMixin)** — runs inside
+       create()/update() after the object is saved in a transaction.
+       Answers fine-grained questions: "can they create in THIS org?",
+       "can they use THIS credential?" This layer performs the actual
+       related object permission checks and rolls back on denial.
+
+    This separation exists because DRF's permission class is also called
+    by schema generators (e.g., DRF Spectacular) and OPTIONS requests with
+    mock requests that have no request body. The permission class cannot
+    inspect which org or credential the user intends to use — that data
+    only exists at serializer time. So has_permission() answers "does the
+    user have the capability?" and the serializer enforces "do they have
+    permission for these specific related objects?"
     """
 
     def has_permission(self, request, view):
@@ -58,11 +80,30 @@ class OPAPermission(BasePermission):
         return True
 
     def _has_create_permission(self, request, view):
-        """Check if user can create objects of this type.
+        """Check if user has the *capability* to create objects of this type.
 
-        For models with a parent (organization), checks if the user has 'add'
-        permission on at least one parent object. For root-level models,
-        only superusers can create.
+        This intentionally uses tier 1 queryset filtering + .exists(), NOT
+        tier 2 object evaluation. The distinction matters:
+
+        - Tier 2 requires a concrete object with specific attributes (which
+          org? which credential?). At has_permission() time, the object
+          doesn't exist yet and request data may not be available (schema
+          generators and OPTIONS requests use mock requests with no body).
+
+        - Tier 1 queryset filtering answers the coarser question: "does this
+          user have ANY add scope for this resource?" If the user has an
+          add policy scoped to organization_id=5, the filtered queryset
+          will include objects in org 5, and .exists() returns True —
+          confirming the user has add capability somewhere.
+
+        The actual authorization of "can they create in THIS specific org
+        with THIS specific credential?" is deferred to the serializer layer
+        (OPARelatedAccessMixin), which runs inside create() after the object
+        is constructed and can inspect the concrete FK values.
+
+        This matches DAB RBAC's architecture where:
+        - AnsibleBaseObjectPermissions.has_permission() checks broad capability
+        - RelatedAccessMixin.create() checks specific related objects
         """
         queryset = view.get_queryset()
         model_cls = queryset.model
@@ -75,10 +116,10 @@ class OPAPermission(BasePermission):
         if "add" not in actions:
             return True
 
-        # Check if user has any 'add' clauses for this resource
+        # Use tier 1 (queryset filtering) to check if user has any add scope.
+        # This is a capability check, not an authorization decision — the
+        # authoritative related-object check happens at the serializer layer.
         qs = filter_queryset_for_user(model_cls.objects.all(), request.user, "add")
-        # For add permission, we check if the user has any scope at all
-        # (the queryset will be non-empty if they have add permission somewhere)
         return qs.exists()
 
     def has_object_permission(self, request, view, obj):

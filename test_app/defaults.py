@@ -231,6 +231,7 @@ DAB_OPA = {
         "inventory": {
             "model": "test_app.Inventory",
             "actions": ["read", "change", "delete", "add"],
+            "parent_field_name": "organization",
             "fields": {
                 "credential_id": {
                     "django_path": "credential_id",

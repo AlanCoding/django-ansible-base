@@ -54,7 +54,7 @@ group memberships).
 
 ---
 
-## 2. Related object permission checks — Gap
+## 2. Related object permission checks — Fixed
 
 This gap is part of a broader architectural change: separating OPA
 evaluation into two tiers.
@@ -113,9 +113,10 @@ entry specifies which resource and action to check, plus the related
 object's ID. OPA evaluates each related check against the user's policies
 for that resource/action.
 
-**Currently**, `user_can_access_obj()` fakes tier 2 by running tier 1
-(getting clauses) and checking if the object would match. This must change
-to use a real tier 2 OPA evaluation with the object's data in the input.
+**Implemented:** `user_can_access_obj()` now uses real tier 2 OPA evaluation,
+sending the object's attributes as `input.object` and getting a concrete
+boolean back. The local evaluator (`local_user_can_access_obj()`) does
+equivalent attribute matching without an OPA HTTP call.
 
 ### What RBAC does for related objects
 
@@ -228,15 +229,41 @@ call. The object's registered fields are extracted and sent as
 The gap tests in `test_related_permissions.py` should start failing
 (related checks now enforced). New tests for tier 2 evaluation directly.
 
-### Implementation order
+### Implementation — Complete
 
-1. Rego rules (tier 2 evaluation + related checks)
-2. OPA client + local evaluator extensions
-3. `user_can_access_obj()` refactored to use tier 2
-4. `OPARelatedAccessMixin` for serializers
-5. Wire up in test_app, tests
+All steps have been implemented:
 
-**This is the next implementation priority.**
+1. **Rego rules** (`policy.rego`): `object_allowed` evaluates `input.object`
+   against user clauses. `related_denied` checks `input.related` entries.
+   `_related_allowed` supports both ID-match and org-scoped checks.
+
+2. **OPA client** (`client.py`): `check_object()` sends `input.object` and
+   `input.related`, returns `{object_allowed, related_denied}`.
+
+3. **Local evaluator** (`evaluator.py`): `local_check_object()` does the
+   same without OPA HTTP. `_extract_obj_attrs()` pulls registered field
+   values from a model instance. `_clauses_match_object()` evaluates
+   clauses against attributes. `local_user_can_access_obj()` refactored
+   to use attribute matching instead of queryset filtering.
+
+4. **`user_can_access_obj()`** (`queryset.py`): Refactored to call
+   `check_object_access()` which uses tier 2 OPA evaluation.
+
+5. **`OPARelatedAccessMixin`** (`mixins.py`): Serializer mixin that
+   automatically builds `related` checks from FK fields on create/update.
+   Uses `parent_field_name` from the OPA resource config to distinguish
+   parent FKs (`add` action) from non-parent FKs (first matching action
+   from `ANSIBLE_BASE_CHECK_RELATED_PERMISSIONS`). Unchanged FKs are
+   skipped. Nullable non-parent FKs can be cleared without permission.
+
+6. **Tests** (`test_related_permissions.py`): 23 tests across 3 classes:
+   - `TestTier2ObjectEvaluation` (5 tests) — attribute matching
+   - `TestTier2RelatedObjectChecks` (9 tests) — related checks via
+     `local_check_object()`
+   - `TestOPARelatedAccessMixinAPI` (9 tests) — full DRF API integration
+     (create with/without org permission, update credential with/without
+     use permission, move inventory between orgs, unchanged FK skip,
+     superuser bypass, null credential clearing)
 
 ---
 
@@ -469,17 +496,21 @@ discrepancies during the switchover period.
 
 ---
 
-## Priority order for remaining work
+## Completion status
+
+All identified gaps have been resolved:
 
 1. ~~**Org admin team inheritance** (Gap #1)~~ — **Done.** Migration adds
    org admin users to team OPA groups. Verified with 3 tests including
    RBAC parity comparison.
-2. ~~**Org admin team membership maintenance** (Design problem #3)~~ —
-   **Done.** `recompute_team_memberships()` runs before every sync,
-   finding users with `team/change` policies and adding them to team
-   groups. Verified with 3 tests.
-3. **Two-tier evaluation + related object checks** (Gap #2) — Separate
-   OPA evaluation into queryset filtering (tier 1, clauses, best effort)
-   and object evaluation (tier 2, boolean, authoritative). Tier 2 includes
-   related object checks for create/update. Requires Rego rules, client
-   extensions, view integration. **This is the next priority.**
+2. ~~**Org admin team membership maintenance** (Gap #3)~~ — **Done.**
+   `recompute_team_memberships()` runs before every sync, finding users
+   with `team/change` policies and adding them to team groups. Verified
+   with 3 tests.
+3. ~~**Two-tier evaluation + related object checks** (Gap #2)~~ — **Done.**
+   Tier 1 (clauses for querysets) and tier 2 (object evaluation with
+   related checks) fully implemented. `OPARelatedAccessMixin` provides
+   view-layer integration. Verified with 23 tests including DRF API
+   integration.
+
+No remaining parity gaps. Items #4-7 are classified as non-issues.
