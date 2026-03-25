@@ -3,6 +3,7 @@ import logging
 from django.contrib.auth import get_user_model
 from rest_framework import permissions, status
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 
@@ -17,94 +18,123 @@ from ansible_base.opa.api.serializers import (
     RoleSerializer,
     UserEffectiveScopeSerializer,
 )
+from ansible_base.opa.delegation import (
+    validate_user_can_delegate_policy,
+    validate_user_can_delegate_role,
+)
 from ansible_base.opa.evaluator import local_get_scope
 from ansible_base.opa.models import GroupRoleAssignment, OPAGroup, Policy, Role
+from ansible_base.opa.permissions import OPAPermission
+from ansible_base.opa.queryset import filter_queryset_for_user, user_can_access_obj
 from ansible_base.opa.registry import opa_registry
 
 logger = logging.getLogger(__name__)
 
 
-class IsSuperuser(permissions.BasePermission):
-    """Temporary permission class: only superusers can manage OPA resources.
+class OPAGroupPermission(OPAPermission):
+    """OPA permission class for OPAGroup viewset.
 
-    TODO: Replace with OPA-based self-management once the bootstrapping
-    design is finalized. See DEVELOPMENT_PLAN.md Phase 7 notes.
+    Uses OPA-based authorization so that group management is gated by
+    opagroup.change policies (team admin, org admin).
     """
 
-    def has_permission(self, request, view):
-        if not request.user or not request.user.is_authenticated:
-            return False
-        if request.method in permissions.SAFE_METHODS:
-            return True
-        return request.user.is_superuser
-
-    def has_object_permission(self, request, view, obj):
-        if request.method in permissions.SAFE_METHODS:
-            return True
-        return request.user.is_superuser
+    pass
 
 
 class RoleViewSet(AnsibleBaseDjangoAppApiView, ModelViewSet):
     """Manage OPA roles.
 
     Roles contain policies that define what resources and actions are granted.
-    System-managed roles cannot be renamed or deleted.
+    Any authenticated user can create a role. Only the creator (or superuser)
+    can update or delete non-managed roles.
     """
 
     queryset = Role.objects.prefetch_related("policies").all()
     serializer_class = RoleSerializer
-    permission_classes = try_add_oauth2_scope_permission([IsSuperuser])
+    permission_classes = try_add_oauth2_scope_permission([permissions.IsAuthenticated])
 
     def get_serializer_class(self):
         if self.action in ("update", "partial_update"):
             return RoleDetailSerializer
         return RoleSerializer
 
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+    def perform_update(self, serializer):
+        instance = self.get_object()
+        if instance.managed and not self.request.user.is_superuser:
+            raise PermissionDenied("Cannot modify a managed role.")
+        if not self.request.user.is_superuser and instance.created_by != self.request.user:
+            raise PermissionDenied("Only the role creator or a superuser can modify this role.")
+        serializer.save()
+
     def perform_destroy(self, instance):
-        if instance.managed:
-            return Response(
-                {"detail": "Cannot delete a managed role."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        if instance.managed and not self.request.user.is_superuser:
+            raise PermissionDenied("Cannot delete a managed role.")
+        if not self.request.user.is_superuser and instance.created_by != self.request.user:
+            raise PermissionDenied("Only the role creator or a superuser can delete this role.")
         super().perform_destroy(instance)
 
 
 class PolicyViewSet(AnsibleBaseDjangoAppApiView, ModelViewSet):
     """Manage OPA policies.
 
-    Policies define access rules: a resource, action, field, operator,
-    and value that together form a queryset filter clause.
-    Policies are validated against the OPA registry on create/update.
+    Policies are immutable — create and delete only, no updates.
+    Creating a policy requires `change` access covering the policy's scope.
     """
 
     queryset = Policy.objects.select_related("role").all()
     serializer_class = PolicySerializer
-    permission_classes = try_add_oauth2_scope_permission([IsSuperuser])
+    permission_classes = try_add_oauth2_scope_permission([permissions.IsAuthenticated])
     filterset_fields = ["role", "resource", "action"]
+    http_method_names = ["get", "post", "head", "options", "delete"]
+
+    def perform_create(self, serializer):
+        policy = Policy(**serializer.validated_data)
+        allowed, reason = validate_user_can_delegate_policy(self.request.user, policy)
+        if not allowed:
+            raise PermissionDenied(reason)
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        allowed, reason = validate_user_can_delegate_policy(self.request.user, instance)
+        if not allowed:
+            raise PermissionDenied(reason)
+        super().perform_destroy(instance)
 
 
 class OPAGroupViewSet(AnsibleBaseDjangoAppApiView, ModelViewSet):
     """Manage OPA groups.
 
     Groups contain users and can have roles assigned to them.
-    System-managed groups (e.g. per-user groups) cannot be deleted.
+    Access is controlled by OPA policies on the `opagroup` resource.
     """
 
     queryset = OPAGroup.objects.prefetch_related("users").all()
     serializer_class = OPAGroupSerializer
-    permission_classes = try_add_oauth2_scope_permission([IsSuperuser])
+    permission_classes = try_add_oauth2_scope_permission([permissions.IsAuthenticated, OPAGroupPermission])
+
+    def filter_queryset(self, qs):
+        """Filter groups to those the user can read."""
+        user = self.request.user
+        if not user.is_superuser:
+            try:
+                opa_registry.get_resource_name_for_model(OPAGroup)
+                qs = filter_queryset_for_user(qs, user, "read")
+            except ValueError:
+                pass
+        return super().filter_queryset(qs)
 
     def perform_destroy(self, instance):
         if instance.managed:
-            return Response(
-                {"detail": "Cannot delete a managed group."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            raise PermissionDenied("Cannot delete a managed group.")
         super().perform_destroy(instance)
 
     @action(detail=True, methods=["post"], url_path="add_user")
     def add_user(self, request, pk=None):
         """Add a user to this group."""
+        self.opa_action = "change"
         group = self.get_object()
         serializer = OPAGroupMembershipSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -123,6 +153,7 @@ class OPAGroupViewSet(AnsibleBaseDjangoAppApiView, ModelViewSet):
     @action(detail=True, methods=["post"], url_path="remove_user")
     def remove_user(self, request, pk=None):
         """Remove a user from this group."""
+        self.opa_action = "change"
         group = self.get_object()
         serializer = OPAGroupMembershipSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -142,16 +173,38 @@ class OPAGroupViewSet(AnsibleBaseDjangoAppApiView, ModelViewSet):
 class GroupRoleAssignmentViewSet(AnsibleBaseDjangoAppApiView, ModelViewSet):
     """Manage group-to-role assignments.
 
-    Assigning a role to a group grants all users in that group
-    the permissions defined by the role's policies.
+    Assigning a role to a group requires:
+    1. `change` on the group (you can manage it)
+    2. `change` covering all policies in the role (you can delegate them)
     """
 
     queryset = GroupRoleAssignment.objects.select_related("group", "role").all()
     serializer_class = GroupRoleAssignmentSerializer
-    permission_classes = try_add_oauth2_scope_permission([IsSuperuser])
-    # Assignments are immutable once created
+    permission_classes = try_add_oauth2_scope_permission([permissions.IsAuthenticated])
     http_method_names = ["get", "post", "head", "options", "delete"]
     filterset_fields = ["group", "role"]
+
+    def perform_create(self, serializer):
+        group = serializer.validated_data["group"]
+        role = serializer.validated_data["role"]
+        user = self.request.user
+
+        # Gate 1: user must have change on the group
+        if not user.is_superuser and not user_can_access_obj(user, group, "change"):
+            raise PermissionDenied("You do not have change access to this group.")
+
+        # Gate 2: user must be able to delegate all policies in the role
+        allowed, reason = validate_user_can_delegate_role(user, role)
+        if not allowed:
+            raise PermissionDenied(reason)
+
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        user = self.request.user
+        if not user.is_superuser and not user_can_access_obj(user, instance.group, "change"):
+            raise PermissionDenied("You do not have change access to this group.")
+        super().perform_destroy(instance)
 
 
 class UserEffectiveScopeView(AnsibleBaseDjangoAppApiView):
@@ -163,7 +216,7 @@ class UserEffectiveScopeView(AnsibleBaseDjangoAppApiView):
     Useful for debugging and understanding what a user can access.
     """
 
-    permission_classes = try_add_oauth2_scope_permission([IsSuperuser])
+    permission_classes = try_add_oauth2_scope_permission([permissions.IsAuthenticated])
     serializer_class = UserEffectiveScopeSerializer
 
     def get(self, request):

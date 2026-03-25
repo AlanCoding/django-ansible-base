@@ -263,6 +263,16 @@ DAB_OPA = {
                 "delete": ["read"],
             },
         },
+        "opagroup": {
+            "model": "dab_opa.OPAGroup",
+            "actions": ["read", "change", "delete", "add"],
+            "parent_field_name": "organization",
+            "fields": {},
+            "action_dependencies": {
+                "change": ["read"],
+                "delete": ["read"],
+            },
+        },
     },
 }
 ALLOW_SHARED_RESOURCE_CUSTOM_ROLES = True  # Allow making custom roles with org change permission, for example

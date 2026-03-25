@@ -61,11 +61,12 @@ class RoleSerializer(serializers.ModelSerializer):
             "name",
             "description",
             "managed",
+            "created_by",
             "policies",
             "created",
             "modified",
         ]
-        read_only_fields = ["id", "created", "modified"]
+        read_only_fields = ["id", "created_by", "created", "modified"]
 
     def validate_managed(self, value):
         if self.instance and self.instance.managed and not value:

@@ -3,7 +3,7 @@ import logging
 from django.http import Http404
 from rest_framework.permissions import SAFE_METHODS, BasePermission
 
-from ansible_base.opa.queryset import filter_queryset_for_user, user_can_access_obj
+from ansible_base.opa.queryset import user_can_access_obj
 from ansible_base.opa.registry import opa_registry
 
 logger = logging.getLogger(__name__)
@@ -116,11 +116,14 @@ class OPAPermission(BasePermission):
         if "add" not in actions:
             return True
 
-        # Use tier 1 (queryset filtering) to check if user has any add scope.
-        # This is a capability check, not an authorization decision — the
-        # authoritative related-object check happens at the serializer layer.
-        qs = filter_queryset_for_user(model_cls.objects.all(), request.user, "add")
-        return qs.exists()
+        # Check if the user has any add clauses for this resource.
+        # This is a capability check — does the user have ANY add scope?
+        # We check for clauses directly rather than filtering existing objects,
+        # because there may be no existing objects yet (e.g., first group in an org).
+        from ansible_base.opa.evaluator import get_effective_policies
+
+        clauses = get_effective_policies(request.user, resource_name, "add")
+        return len(clauses) > 0
 
     def has_object_permission(self, request, view, obj):
         if not request.user or not request.user.is_authenticated:

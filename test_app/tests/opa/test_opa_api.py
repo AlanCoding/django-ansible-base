@@ -61,13 +61,13 @@ class TestRoleAPI:
         assert r.status_code == 204
         assert not Role.objects.filter(pk=role.pk).exists()
 
-    def test_regular_user_cannot_create_role(self, user_api_client):
+    def test_regular_user_can_create_role(self, user_api_client):
         r = user_api_client.post(
             get_relative_url("oparole-list"),
-            {"name": "unauthorized-role"},
+            {"name": "user-created-role"},
             format="json",
         )
-        assert r.status_code == 403
+        assert r.status_code == 201
 
     def test_regular_user_can_list_roles(self, user_api_client):
         Role.objects.create(name="viewable-role")
