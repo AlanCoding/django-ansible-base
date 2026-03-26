@@ -24,9 +24,11 @@ class LoggedOAuth2Authentication(OAuth2Authentication):
     def authenticate(self, request):
         # sha256 the bearer token. We store the hash in the database
         # and this gives us a place to hash the incoming token for comparison
+        # (AAP-68669) Accommodate the ansible-galaxy CLI, which sends OAuth tokens
+        # prefixed with `Token ` instead of `Bearer ` (deviates from RFC 6750).
         did_hash_token = False
         bearer_token = request.META.get('HTTP_AUTHORIZATION')
-        if bearer_token and bearer_token.lower().startswith('bearer '):
+        if bearer_token and bearer_token.lower().startswith(("bearer ", "token ")):
             token_component = bearer_token.split(' ', 1)[1]
             hashed = hash_string(token_component, hasher=hashlib.sha256, algo="sha256")
             did_hash_token = True
