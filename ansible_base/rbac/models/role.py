@@ -689,10 +689,10 @@ class ObjectRole(ObjectRoleFields):
 
     def needed_cache_updates(self, types_prefetch=None):
         existing_partials = {}
-        for permission_partial in self.permission_partials.all():
-            existing_partials[permission_partial.obj_perm_id()] = permission_partial
-        for permission_partial in self.permission_partials_uuid.all():
-            existing_partials[permission_partial.obj_perm_id()] = permission_partial
+        for eval_id, codename, content_type_id, object_id in self.permission_partials.values_list('id', 'codename', 'content_type_id', 'object_id'):
+            existing_partials[(codename, content_type_id, object_id)] = eval_id
+        for eval_id, codename, content_type_id, object_id in self.permission_partials_uuid.values_list('id', 'codename', 'content_type_id', 'object_id'):
+            existing_partials[(codename, content_type_id, object_id)] = eval_id
 
         expected_evaluations = self.expected_direct_permissions(types_prefetch)
 
@@ -703,8 +703,8 @@ class ObjectRole(ObjectRoleFields):
         existing_set = set(existing_partials.keys())
 
         to_delete = set()
-        for identifier in existing_set - expected_evaluations:
-            to_delete.add((existing_partials[identifier].id, type(identifier[-1])))
+        for codename, content_type_id, object_id in existing_set - expected_evaluations:
+            to_delete.add((existing_partials[(codename, content_type_id, object_id)], type(object_id)))
 
         to_add = []
         for codename, ct_id, obj_pk in expected_evaluations - existing_set:
