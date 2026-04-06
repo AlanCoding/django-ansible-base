@@ -976,3 +976,38 @@ def test_audit_log_m2m_preposition(user, operation, method_name, expected_prepos
         call_args = mock_log.call_args[0][0]
         assert expected_preposition in call_args
         assert operation in call_args
+
+
+# =============================================================================
+# Tests for NonCascadingGenericRelation
+# =============================================================================
+
+
+@pytest.mark.django_db
+def test_non_cascading_generic_relation_prevents_cascade_delete():
+    """
+    NonCascadingGenericRelation overrides bulk_related_objects to return an
+    empty queryset, preventing Django's deletion collector from cascade-deleting
+    activity stream entries when a parent object is deleted.
+
+    This verifies that audit trail data survives object deletion.
+    """
+    animal = Animal.objects.create(name='CascadeTest')
+    entry_qs = Entry.objects.filter(
+        content_type__app_label='test_app',
+        content_type__model='animal',
+        object_id=str(animal.pk),
+    )
+    # The create signal should have produced an entry
+    assert entry_qs.count() >= 1, "Expected at least a 'create' entry for the animal"
+    entry_pks = list(entry_qs.values_list('pk', flat=True))
+
+    # Delete the animal
+    animal.delete()
+
+    # Activity stream entries must survive the parent deletion
+    surviving = Entry.objects.filter(pk__in=entry_pks)
+    assert surviving.count() == len(entry_pks), (
+        "Activity stream entries were cascade-deleted when the parent object was deleted. "
+        "NonCascadingGenericRelation.bulk_related_objects should prevent this."
+    )
