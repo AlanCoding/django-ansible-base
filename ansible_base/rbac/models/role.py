@@ -755,10 +755,6 @@ class RoleEvaluationFields(models.Model):
     # this can be relaxed as we have comparative performance testing to confirm doing so does not affect permissions
     content_type_id = models.PositiveIntegerField(null=False, help_text=_("The related content type id."))
 
-    def obj_perm_id(self):
-        "Used for in-memory hashing of the type of object permission this represents"
-        return (self.codename, self.content_type_id, self.object_id)
-
     @classmethod
     def accessible_ids(cls, model_cls, actor, codename: str, content_types: Optional[Iterable[int]] = None, cast_field=None) -> QuerySet:
         """
