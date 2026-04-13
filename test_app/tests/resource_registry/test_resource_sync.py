@@ -17,7 +17,6 @@ from ansible_base.resource_registry.tasks.sync import (
     ResourceSyncHTTPError,
     SyncExecutor,
     _attempt_create_resource,
-    _attempt_update_resource,
     get_remote_assignments,
 )
 
