@@ -34,8 +34,10 @@ jobs:
           ansible-playbook
           tools/ansible/release.yml
           -i localhost
-          -e github_token=${{ secrets.GITHUB_TOKEN }}
+          -e github_token="$GITHUB_TOKEN"
           -t build
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Store the distribution packages
         uses: actions/upload-artifact@v4
@@ -70,7 +72,7 @@ jobs:
           name: python-package-distributions
           path: dist/
       - name: Publish dists to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # release/v1 (v1.14.0)
 
   post-release-repo-update:
     name: Make a GitHub Release
@@ -113,5 +115,7 @@ jobs:
           ansible-playbook
           tools/ansible/release.yml
           -i localhost
-          -e github_token=${{ secrets.GITHUB_TOKEN }}
+          -e github_token="$GITHUB_TOKEN"
           -t github
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
