@@ -4,6 +4,13 @@ from typing import List, Optional
 from django.contrib.auth import authenticate
 from django.utils.translation import gettext_lazy as _
 
+from ansible_base.resource_registry.constants import (
+    SHARED_AAP_FLAG_RESOURCE_TYPE,
+    SHARED_ORGANIZATION_RESOURCE_TYPE,
+    SHARED_ROLE_DEFINITION_RESOURCE_TYPE,
+    SHARED_TEAM_RESOURCE_TYPE,
+    SHARED_USER_RESOURCE_TYPE,
+)
 from ansible_base.resource_registry.utils.resource_type_processor import ResourceTypeProcessor, RoleDefinitionProcessor
 
 ParentResource = namedtuple("ParentResource", ["model", "field_name"])
@@ -24,11 +31,11 @@ class ServiceAPIConfig:
     """
 
     _default_resource_processors = {
-        "shared.team": ResourceTypeProcessor,
-        "shared.organization": ResourceTypeProcessor,
-        "shared.user": ResourceTypeProcessor,
-        "shared.roledefinition": RoleDefinitionProcessor,
-        "shared.aapflag": ResourceTypeProcessor,
+        SHARED_TEAM_RESOURCE_TYPE: ResourceTypeProcessor,
+        SHARED_ORGANIZATION_RESOURCE_TYPE: ResourceTypeProcessor,
+        SHARED_USER_RESOURCE_TYPE: ResourceTypeProcessor,
+        SHARED_ROLE_DEFINITION_RESOURCE_TYPE: RoleDefinitionProcessor,
+        SHARED_AAP_FLAG_RESOURCE_TYPE: ResourceTypeProcessor,
     }
 
     custom_resource_processors = {}
