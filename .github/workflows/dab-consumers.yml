@@ -21,6 +21,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           show-progress: false
+          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Log in to Quay
         run: |
@@ -92,6 +93,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           show-progress: false
+          ref: ${{ github.event.pull_request.head.sha }}
 
       - uses: actions/checkout@v4
         with:
