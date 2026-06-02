@@ -42,13 +42,3 @@
   labels:
     - eda
     - controller
-- name: FEATURE_CASE_INSENSITIVE_AUTH_MAPS_ENABLED
-  ui_name: Case Insensitive Authentication Maps
-  visibility: False
-  condition: boolean
-  value: 'True'
-  support_level: DEVELOPER_PREVIEW
-  description: Enable case-insensitive comparison for authentication mapping attributes and group names.
-  support_url: ''
-  labels:
-    - platform
