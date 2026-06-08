@@ -729,20 +729,14 @@ class ObjectRole(ObjectRoleFields):
             # to the single target object.
             partial_filter = {'object_id': object_pk, 'content_type_id': object_ct_id}
             source = self.permission_partials_uuid if isinstance(object_pk, UUID) else self.permission_partials
-            for eval_id, codename, content_type_id, object_id in source.filter(**partial_filter).values_list(
-                'id', 'codename', 'content_type_id', 'object_id'
-            ):
+            for eval_id, codename, content_type_id, object_id in source.filter(**partial_filter).values_list('id', 'codename', 'content_type_id', 'object_id'):
                 existing_partials[(codename, content_type_id, object_id)] = eval_id
             self._log_partials_count(len(existing_partials), f'existing evaluation (object_pk={object_pk})', self.pk)
         else:
             # Full recompute: load all cached entries from both tables.
-            for eval_id, codename, content_type_id, object_id in self.permission_partials.values_list(
-                'id', 'codename', 'content_type_id', 'object_id'
-            ):
+            for eval_id, codename, content_type_id, object_id in self.permission_partials.values_list('id', 'codename', 'content_type_id', 'object_id'):
                 existing_partials[(codename, content_type_id, object_id)] = eval_id
-            for eval_id, codename, content_type_id, object_id in self.permission_partials_uuid.values_list(
-                'id', 'codename', 'content_type_id', 'object_id'
-            ):
+            for eval_id, codename, content_type_id, object_id in self.permission_partials_uuid.values_list('id', 'codename', 'content_type_id', 'object_id'):
                 existing_partials[(codename, content_type_id, object_id)] = eval_id
             self._log_partials_count(len(existing_partials), 'existing evaluation (full)', self.pk)
 
