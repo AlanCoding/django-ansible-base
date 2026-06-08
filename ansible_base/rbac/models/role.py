@@ -697,11 +697,9 @@ class ObjectRole(ObjectRoleFields):
                 expected_evaluations.add((permission.codename, eval_ct, id))
         return expected_evaluations
 
-    _PARTIALS_LOG_MSG = '%s: %d cached evaluation entries for object-role pk=%s'
-
     @staticmethod
     def _log_partials_count(count, label, role_pk):
-        msg = ObjectRole._PARTIALS_LOG_MSG
+        msg = '%s: %d cached evaluation entries for object-role pk=%s'
         if count >= 500_000:
             logger.warning(msg + ', expected during global recalculations', label, count, role_pk)
         elif count >= 50_000:
@@ -726,33 +724,27 @@ class ObjectRole(ObjectRoleFields):
         """
         existing_partials = {}
 
-        # When object_pk and object_ct_id are given, we can filter the
-        # permission_partials queries to only the relevant object, avoiding
-        # loading tens of thousands of unrelated cached entries.
-        # Only query the table whose pk type matches object_pk — an int pk
-        # cannot exist in the UUID table and vice versa.
-        partial_filter = {}
-        query_int = True
-        query_uuid = True
         if object_pk is not None and object_ct_id is not None:
+            # Look-ahead: query only the table matching the pk type, filtered
+            # to the single target object.
             partial_filter = {'object_id': object_pk, 'content_type_id': object_ct_id}
-            query_int = isinstance(object_pk, int)
-            query_uuid = isinstance(object_pk, UUID)
-
-        if query_int:
-            for eval_id, codename, content_type_id, object_id in self.permission_partials.filter(**partial_filter).values_list(
+            source = self.permission_partials_uuid if isinstance(object_pk, UUID) else self.permission_partials
+            for eval_id, codename, content_type_id, object_id in source.filter(**partial_filter).values_list(
                 'id', 'codename', 'content_type_id', 'object_id'
             ):
                 existing_partials[(codename, content_type_id, object_id)] = eval_id
-        self._log_partials_count(len(existing_partials), 'int evaluation', self.pk)
-
-        uuid_start = len(existing_partials)
-        if query_uuid:
-            for eval_id, codename, content_type_id, object_id in self.permission_partials_uuid.filter(**partial_filter).values_list(
+            self._log_partials_count(len(existing_partials), f'existing evaluation (object_pk={object_pk})', self.pk)
+        else:
+            # Full recompute: load all cached entries from both tables.
+            for eval_id, codename, content_type_id, object_id in self.permission_partials.values_list(
                 'id', 'codename', 'content_type_id', 'object_id'
             ):
                 existing_partials[(codename, content_type_id, object_id)] = eval_id
-        self._log_partials_count(len(existing_partials) - uuid_start, 'uuid evaluation', self.pk)
+            for eval_id, codename, content_type_id, object_id in self.permission_partials_uuid.values_list(
+                'id', 'codename', 'content_type_id', 'object_id'
+            ):
+                existing_partials[(codename, content_type_id, object_id)] = eval_id
+            self._log_partials_count(len(existing_partials), 'existing evaluation (full)', self.pk)
 
         expected_evaluations = self.expected_direct_permissions(types_prefetch, object_pk=object_pk, object_ct_id=object_ct_id)
 

@@ -70,8 +70,9 @@ def test_filtered_evaluation_count_is_small(rando, organization, org_inv_rd):
     with patch.object(ObjectRole, '_log_partials_count', side_effect=lambda count, label, *a: logged.update({label: count})):
         org_role.needed_cache_updates(object_pk=new_inv.pk, object_ct_id=_inv_ct_id())
 
-    # The int evaluation count should be 0 since we deleted them
-    assert logged['int evaluation'] == 0
+    # The existing evaluation count should be 0 since we deleted them
+    existing_label = f'existing evaluation (object_pk={new_inv.pk})'
+    assert logged[existing_label] == 0
     # Expected evaluations should be scoped to just the one inventory's permissions
     # org_inv_rd grants change_inventory + view_inventory, so we expect a small number
     assert logged['expected evaluation'] < total_evals
@@ -130,6 +131,7 @@ def test_filtered_evaluations_fewer_than_unfiltered(rando, organization, org_inv
     with patch.object(ObjectRole, '_log_partials_count', side_effect=lambda count, label, *a: filtered.update({label: count})):
         org_role.needed_cache_updates(object_pk=target_inv.pk, object_ct_id=inv_ct_id)
 
-    # Filtered should load far fewer evaluation entries across all categories
-    assert filtered['int evaluation'] < unfiltered['int evaluation']
+    # Filtered should load far fewer existing evaluation entries
+    existing_filtered_label = f'existing evaluation (object_pk={target_inv.pk})'
+    assert filtered[existing_filtered_label] < unfiltered['existing evaluation (full)']
     assert filtered['expected evaluation'] < unfiltered['expected evaluation']
