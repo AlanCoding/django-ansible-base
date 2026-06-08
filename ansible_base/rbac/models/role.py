@@ -635,6 +635,8 @@ class ObjectRole(ObjectRoleFields):
         content types that don't match are skipped entirely and matching id
         lists are narrowed to the single pk, avoiding large querysets.
         """
+        if (object_pk is None) != (object_ct_id is None):
+            raise ValueError('object_pk and object_ct_id must both be provided or both be None')
         expected_evaluations = set()
         cached_id_lists = {}
         if not types_prefetch:
@@ -722,6 +724,8 @@ class ObjectRole(ObjectRoleFields):
         Without object_pk/object_ct_id, a full recompute is performed for all
         objects this role grants permissions to.
         """
+        if (object_pk is None) != (object_ct_id is None):
+            raise ValueError('object_pk and object_ct_id must both be provided or both be None')
         existing_partials = {}
 
         if object_pk is not None and object_ct_id is not None:
