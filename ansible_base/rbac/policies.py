@@ -81,34 +81,48 @@ def can_change_user(request_user: Optional[AbstractBaseUser], target_user: Optio
     return not target_user_orgs.exclude(pk__in=org_cls.access_ids_qs(request_user, 'change_organization')).exists()
 
 
+def _model_has_permission_action(cls, action):
+    """Check if a model has a permission for the given action (default or custom)"""
+    if action in cls._meta.default_permissions:
+        return True
+    codename = f'{action}_{cls._meta.model_name}'
+    return any(code == codename for code, _ in cls._meta.permissions)
+
+
+def _check_all_obj_permissions(request_user, obj):
+    """Require user to have all object-level permissions"""
+    cls = type(obj)
+    for codename in permissions_allowed_for_role(cls)[cls]:
+        if not request_user.has_obj_perm(obj, codename):
+            raise PermissionDenied({'detail': _('You do not have {codename} permission the object').format(codename=codename)})
+
+
 def check_content_obj_permission(request_user, obj) -> None:
     """Permission policy rules for giving or removing obj permission
 
-    Right now we are not supporting a separate permission to manage permission
-    on objects, so we firstly look to a simple matter of having change permission
-    If that is not available, then we check all object-level permissions.
+    Controlled by ANSIBLE_BASE_MANAGE_PERMISSION_ACTION setting:
+    - If set to an action (default 'change'), users need that permission to manage role assignments
+    - If falsy (None or ''), users must have ALL object-level permissions
+    If the model does not have the configured action, falls back to requiring all permissions.
     """
+    manage_action = get_setting('ANSIBLE_BASE_MANAGE_PERMISSION_ACTION', 'change')
+
     if isinstance(obj, RemoteObject):
         if not get_setting('ANSIBLE_BASE_ENFORCE_REMOTE_OBJECT_PERMISSIONS', True):
             return
-        permissions = DABPermission.objects.filter(content_type=obj.content_type)
-        for permission in permissions:
-            if permission.codename.startswith('change'):
-                if not request_user.has_obj_perm(obj, 'change'):
-                    raise PermissionDenied
-                return
-        for permission in permissions:
-            if not request_user.has_obj_perm(obj, permission.codename):
-                raise PermissionDenied
-    elif 'change' in obj._meta.default_permissions:
-        # Model has no change permission, so user must have all permissions for the applicable model
-        if not request_user.has_obj_perm(obj, 'change'):
+        if manage_action:
+            permissions = DABPermission.objects.filter(content_type=obj.content_type)
+            for permission in permissions:
+                if permission.codename.startswith(manage_action):
+                    if not request_user.has_obj_perm(obj, manage_action):
+                        raise PermissionDenied
+                    return
+        _check_all_obj_permissions(request_user, obj)
+    elif manage_action and _model_has_permission_action(type(obj), manage_action):
+        if not request_user.has_obj_perm(obj, manage_action):
             raise PermissionDenied
     else:
-        cls = type(obj)
-        for codename in permissions_allowed_for_role(cls)[cls]:
-            if not request_user.has_obj_perm(obj, codename):
-                raise PermissionDenied({'detail': _('You do not have {codename} permission the object').format(codename=codename)})
+        _check_all_obj_permissions(request_user, obj)
 
 
 def check_can_remove_assignment(request_user: Model, assignment: Model):

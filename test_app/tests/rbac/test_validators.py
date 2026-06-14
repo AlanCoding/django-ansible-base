@@ -10,11 +10,11 @@ from ansible_base.rbac.models import DABPermission, RoleDefinition
 from ansible_base.rbac.permission_registry import permission_registry
 from ansible_base.rbac.remote import RemoteObject
 from ansible_base.rbac.validators import LocalValidators, permissions_allowed_for_role
-from test_app.models import Credential, Inventory, Organization
+from test_app.models import Credential, Inventory, Organization, ResourceWithAdminPerm
 
 
 @pytest.mark.django_db
-@override_settings(ANSIBLE_BASE_ALLOW_CUSTOM_ROLES=False)
+@override_settings(ANSIBLE_BASE_ALLOW_CUSTOM_ROLES=False, ANSIBLE_BASE_MANAGE_PERMISSION_ACTION=None)
 def test_custom_role_rules_do_not_apply_to_managed_roles():
     RoleDefinition.objects.create_from_permissions(
         permissions=[
@@ -130,6 +130,7 @@ def test_no_delete_permission_without_change(enabled):
 
 @pytest.mark.django_db
 @pytest.mark.parametrize('enabled', [True, False])
+@override_settings(ANSIBLE_BASE_MANAGE_PERMISSION_ACTION=None)
 def test_no_change_permission_without_view(enabled):
     with override_settings(ANSIBLE_BASE_ROLES_REQUIRE_VIEW=enabled):
         catching_context = pytest.raises(ValidationError) if enabled else contextlib.nullcontext()
@@ -141,6 +142,90 @@ def test_no_change_permission_without_view(enabled):
             )
     if enabled:
         assert 'needs to include view, got:' in str(exc)
+
+
+@pytest.mark.django_db
+class TestManagePermissionCompleteness:
+    """Roles containing the manage-permission action must include all other permissions for that model"""
+
+    def test_change_requires_all_permissions_default(self):
+        """With default setting ('change'), a role with change_inventory must include all inventory permissions"""
+        with pytest.raises(ValidationError) as exc:
+            RoleDefinition.objects.create_from_permissions(
+                name='partial-change',
+                permissions=['change_inventory', 'view_inventory'],
+                content_type=permission_registry.content_type_model.objects.get_for_model(Inventory),
+            )
+        assert 'requires all other permissions' in str(exc)
+        assert 'change_inventory' in str(exc)
+
+    def test_change_with_all_permissions_succeeds(self):
+        """A role with change and all other permissions passes validation"""
+        RoleDefinition.objects.create_from_permissions(
+            name='full-admin',
+            permissions=['change_inventory', 'delete_inventory', 'view_inventory', 'update_inventory'],
+            content_type=permission_registry.content_type_model.objects.get_for_model(Inventory),
+        )
+
+    def test_role_without_manage_action_is_fine(self):
+        """A role without the manage action can have any subset of permissions"""
+        RoleDefinition.objects.create_from_permissions(
+            name='viewer',
+            permissions=['view_inventory'],
+            content_type=permission_registry.content_type_model.objects.get_for_model(Inventory),
+        )
+
+    @override_settings(ANSIBLE_BASE_MANAGE_PERMISSION_ACTION=None)
+    def test_no_constraint_when_setting_is_none(self):
+        """With setting=None, any permission combination is allowed"""
+        RoleDefinition.objects.create_from_permissions(
+            name='partial-change-allowed',
+            permissions=['change_inventory', 'view_inventory'],
+            content_type=permission_registry.content_type_model.objects.get_for_model(Inventory),
+        )
+
+    @override_settings(ANSIBLE_BASE_MANAGE_PERMISSION_ACTION='administrate')
+    def test_administrate_action_allows_partial_change(self):
+        """With setting='administrate', change without all perms is fine (it's not the manage action)"""
+        RoleDefinition.objects.create_from_permissions(
+            name='partial-change-ok',
+            permissions=['change_inventory', 'view_inventory'],
+            content_type=permission_registry.content_type_model.objects.get_for_model(Inventory),
+        )
+
+    @override_settings(ANSIBLE_BASE_MANAGE_PERMISSION_ACTION='administrate')
+    def test_administrate_action_requires_all_permissions(self):
+        """With setting='administrate', a role with administrate must include all other permissions"""
+        with pytest.raises(ValidationError) as exc:
+            RoleDefinition.objects.create_from_permissions(
+                name='partial-admin',
+                permissions=['administrate_resourcewithadminperm', 'view_resourcewithadminperm'],
+                content_type=permission_registry.content_type_model.objects.get_for_model(ResourceWithAdminPerm),
+            )
+        assert 'requires all other permissions' in str(exc)
+        assert 'administrate_resourcewithadminperm' in str(exc)
+
+    @override_settings(ANSIBLE_BASE_MANAGE_PERMISSION_ACTION='administrate')
+    def test_administrate_with_all_permissions_succeeds(self):
+        """A role with administrate and all other permissions passes validation"""
+        RoleDefinition.objects.create_from_permissions(
+            name='full-admin-resource',
+            permissions=[
+                'administrate_resourcewithadminperm',
+                'change_resourcewithadminperm',
+                'delete_resourcewithadminperm',
+                'view_resourcewithadminperm',
+            ],
+            content_type=permission_registry.content_type_model.objects.get_for_model(ResourceWithAdminPerm),
+        )
+
+    def test_global_roles_skip_manage_check(self):
+        """System-wide roles are not subject to the manage permission completeness check"""
+        RoleDefinition.objects.create_from_permissions(
+            name='global-partial-change',
+            permissions=['change_inventory', 'view_inventory'],
+            content_type=None,
+        )
 
 
 @pytest.mark.django_db

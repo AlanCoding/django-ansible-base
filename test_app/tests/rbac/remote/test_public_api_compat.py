@@ -23,7 +23,7 @@ def test_role_definition_list_remote_and_local(admin_api_client, inv_rd, foo_rd)
     assert inv_rd.name in rd_by_name
     assert foo_rd.name in rd_by_name
     # Assertion coppied from API test test_get_role_definition
-    assert set(rd_by_name[inv_rd.name]['permissions']) == set(['aap.change_inventory', 'aap.view_inventory'])
+    assert set(rd_by_name[inv_rd.name]['permissions']) == set(['aap.change_inventory', 'aap.delete_inventory', 'aap.update_inventory', 'aap.view_inventory'])
     assert rd_by_name[foo_rd.name]['permissions'] == ['foo.foo_foo']
 
 

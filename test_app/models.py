@@ -262,6 +262,18 @@ class ImmutableTask(models.Model):
         permissions = [('cancel_immutabletask', 'Stop this task from running')]
 
 
+class ResourceWithAdminPerm(models.Model):
+    "Model with a dedicated administrate permission for testing delegation control"
+
+    name = models.CharField(max_length=512)
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='admin_perm_resources')
+
+    class Meta:
+        app_label = 'test_app'
+        ordering = ['id']
+        permissions = [('administrate_resourcewithadminperm', 'Can manage role assignments on this resource')]
+
+
 class ParentName(models.Model):
     "Tests that system works with a parent field name different from parent model name"
 
@@ -342,7 +354,7 @@ class PublicData(NamedCommonModel):
 # - Credential
 # - ImmutableTask, parent_field_name=None
 
-permission_registry.register(Organization, Namespace, Team, Cow, UUIDModel, PositionModel, WeirdPerm, PublicData)
+permission_registry.register(Organization, Namespace, Team, Cow, UUIDModel, PositionModel, WeirdPerm, PublicData, ResourceWithAdminPerm)
 permission_registry.register(ParentName, parent_field_name='my_organization')
 permission_registry.register(Authenticator, parent_field_name=None)
 permission_registry.register(CollectionImport, parent_field_name='namespace')
