@@ -155,6 +155,36 @@ def check_has_change_with_delete(codename_set: set[str], permissions_by_model: d
                 )
 
 
+def check_manage_permission_completeness(codename_set: set[str], permissions_by_model: dict[Union[Type[Model], Type[RemoteObject]], list[str]]):
+    """If a role includes the manage-permission action, it must include all other permissions for that model.
+
+    Having the manage permission is effectively admin-equivalent (it lets you assign any role),
+    so the role must contain all other permissions for consistency.
+    Controlled by ANSIBLE_BASE_MANAGE_PERMISSION_ACTION setting; skipped if falsy.
+    """
+    manage_action = getattr(settings, 'ANSIBLE_BASE_MANAGE_PERMISSION_ACTION', 'change')
+    if not manage_action:
+        return
+
+    for cls, valid_model_permissions in permissions_by_model.items():
+        manage_codename = f'{manage_action}_{cls._meta.model_name}'
+        if manage_codename not in valid_model_permissions:
+            continue
+        model_permissions = set(valid_model_permissions) & codename_set
+        local_codenames = {codename for codename in model_permissions if not is_add_perm(codename)}
+        if manage_codename in local_codenames:
+            all_non_add = {codename for codename in valid_model_permissions if not is_add_perm(codename)}
+            missing = all_non_add - local_codenames
+            if missing:
+                model_label = getattr(cls._meta, 'verbose_name', cls._meta.model_name)
+                raise ValidationError(
+                    {
+                        'permissions': f'The {manage_codename} permission for {model_label} is used to manage role assignments '
+                        f'and requires all other permissions, missing: {prnt_codenames(missing)}'
+                    }
+                )
+
+
 def validate_permissions_for_model(permissions, content_type: Optional[Model], managed: bool = False) -> None:
     """Validation for creating a RoleDefinition, called by serializer for public API
 
@@ -186,6 +216,9 @@ def validate_permissions_for_model(permissions, content_type: Optional[Model], m
     # Check requires change and role_model is a system-wide role (None means it is), skip this validation.
     if settings.ANSIBLE_BASE_DELETE_REQUIRE_CHANGE and role_model is not None:
         check_has_change_with_delete(codename_set, permissions_by_model)
+
+    if role_model is not None and not managed:
+        check_manage_permission_completeness(codename_set, permissions_by_model)
 
     if (not managed) and (not settings.ALLOW_SHARED_RESOURCE_CUSTOM_ROLES):
         for perm in permissions:

@@ -129,7 +129,7 @@ def test_delete_signals_object(organization, inventory, rando, inv_rd, what_to_d
     assignment = inv_rd.give_permission(rando, inventory)
 
     assert RoleEvaluation.objects.filter(**org_gfk).count() == 0
-    assert RoleEvaluation.objects.filter(**inv_gfk).count() == 2
+    assert RoleEvaluation.objects.filter(**inv_gfk).count() == 4
 
     if what_to_delete == 'user':
         rando.delete()
@@ -145,6 +145,7 @@ def test_delete_signals_object(organization, inventory, rando, inv_rd, what_to_d
 
 
 @pytest.mark.django_db
+@override_settings(ANSIBLE_BASE_MANAGE_PERMISSION_ACTION=None)
 @pytest.mark.parametrize('what_to_delete', ['user', 'org', 'object'])
 @pytest.mark.parametrize('cache_org', [True, False])
 def test_delete_signals_organization(organization, inventory, rando, org_inv_change_rd, what_to_delete, cache_org):

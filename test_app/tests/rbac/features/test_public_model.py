@@ -43,6 +43,7 @@ def test_org_level_validator_without_view():
 
 
 @pytest.mark.django_db
+@override_settings(ANSIBLE_BASE_MANAGE_PERMISSION_ACTION=None)
 def test_custom_role_for_public_model(admin_api_client, rando, public_item):
     url = get_relative_url('roledefinition-list')
     data = {'name': 'Public data editor', 'permissions': ['aap.change_publicdata'], 'content_type': 'aap.publicdata'}

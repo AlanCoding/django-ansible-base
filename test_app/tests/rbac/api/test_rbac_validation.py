@@ -43,7 +43,7 @@ class TestSharedAssignmentsDisabled:
     @pytest.mark.parametrize('allowed', [True, False])
     def test_custom_roles_for_shared_stuff_not_allowed(self, admin_api_client, allowed):
         url = get_relative_url('roledefinition-list')
-        with override_settings(ALLOW_SHARED_RESOURCE_CUSTOM_ROLES=allowed):
+        with override_settings(ALLOW_SHARED_RESOURCE_CUSTOM_ROLES=allowed, ANSIBLE_BASE_MANAGE_PERMISSION_ACTION=None):
             response = admin_api_client.post(
                 url,
                 data={
@@ -70,6 +70,7 @@ class TestSharedAssignmentsDisabled:
         response = admin_api_client.post(url, data={'object_id': organization.id, 'role_definition': org_inv_rd.id, 'user': rando.id})
         assert response.status_code == 201, response.data
 
+    @override_settings(ANSIBLE_BASE_MANAGE_PERMISSION_ACTION=None)
     def test_org_resource_roles_creatable(self, admin_api_client):
         url = get_relative_url('roledefinition-list')
         # This only contains shared view_organization, which is necessary to create custom org-level roles for child resources
