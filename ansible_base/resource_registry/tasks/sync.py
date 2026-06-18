@@ -8,7 +8,6 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from enum import Enum
 from io import StringIO, TextIOBase
-from typing import Any
 
 from asgiref.sync import sync_to_async
 from django.conf import settings
@@ -19,6 +18,14 @@ from django.db.utils import Error, IntegrityError
 from requests import HTTPError
 
 from ansible_base.lib.utils.apps import is_rbac_installed
+from ansible_base.rbac.role_sync_utils import (  # noqa: F401 — re-exported for backward compatibility
+    AssignmentTuple,
+    create_local_assignment,
+    delete_local_assignment,
+    get_ansible_id_or_pk,
+    get_content_object,
+    get_local_assignments,
+)
 from ansible_base.resource_registry.constants import SHARED_USER_RESOURCE_TYPE
 from ansible_base.resource_registry.models import Resource, ResourceType
 from ansible_base.resource_registry.models.service_identifier import service_id
@@ -78,101 +85,6 @@ class SyncResult:
     def __iter__(self):
         """Allows unpacking  status, item = SyncResult(...)"""
         return iter((self.status, self.item))
-
-
-@dataclass
-class AssignmentTuple:
-    """Represents an assignment as a 3-tuple for comparison"""
-
-    actor_ansible_id: str  # user_ansible_id or team_ansible_id
-    ansible_id_or_pk: str | None  # object_id or object_ansible_id (None for global)
-    role_definition_name: str
-    assignment_type: str  # 'user' or 'team'
-
-    def __hash__(self):
-        return hash((self.actor_ansible_id, self.ansible_id_or_pk, self.role_definition_name, self.assignment_type))
-
-    def __eq__(self, other):
-        if not isinstance(other, AssignmentTuple):
-            return False
-        return (
-            self.actor_ansible_id == other.actor_ansible_id
-            and self.ansible_id_or_pk == other.ansible_id_or_pk
-            and self.role_definition_name == other.role_definition_name
-            and self.assignment_type == other.assignment_type
-        )
-
-
-def create_api_client() -> ResourceAPIClient:
-    """Factory for pre-configured ResourceAPIClient."""
-    params = {"raise_if_bad_request": False}
-
-    if jwt_user_id := getattr(settings, "RESOURCE_JWT_USER_ID", None):
-        params["jwt_user_id"] = jwt_user_id
-
-    service_path = getattr(settings, "RESOURCE_SERVICE_PATH", None)
-    if not service_path:
-        raise ValueError("RESOURCE_SERVICE_PATH is not set.")
-    params["service_path"] = service_path
-    params["jwt_expiration"] = getattr(settings, "RESOURCE_SYNC_JWT_EXPIRATION", DEFAULT_SYNC_JWT_EXPIRATION)
-
-    client = get_resource_server_client(**params)
-    return client
-
-
-def fetch_manifest(
-    resource_type_name: str,
-    api_client: ResourceAPIClient | None = None,
-) -> list[ManifestItem]:
-    """Fetch RESOURCE_SERVER manifest, parses the CSV and returns a list."""
-    api_client = api_client or create_api_client()
-    api_client.raise_if_bad_request = False  # Status check is needed
-
-    resp_metadata = api_client.get_service_metadata()
-    resp_metadata.raise_for_status()
-
-    manifest_stream = api_client.get_resource_type_manifest(resource_type_name, filters={"service_id": service_id()})
-    if manifest_stream.status_code == 404:
-        msg = f"manifest for {resource_type_name} NOT FOUND."
-        raise ManifestNotFound(msg)
-
-    try:
-        manifest_stream.raise_for_status()
-    except HTTPError as exc:
-        raise ResourceSyncHTTPError() from exc
-
-    csv_reader = csv.DictReader(StringIO(manifest_stream.text))
-    return [ManifestItem(**row) for row in csv_reader]
-
-
-def get_ansible_id_or_pk(assignment) -> str:
-    if not is_rbac_installed():
-        raise RuntimeError("get_ansible_id_or_pk requires ansible_base.rbac to be installed")
-    # For object-scoped assignments, try to get the object's ansible_id
-    if assignment.content_type.model in ('organization', 'team'):
-        object_resource = Resource.objects.filter(object_id=assignment.object_id, content_type__model=assignment.content_type.model).first()
-        if object_resource:
-            ansible_id_or_pk = object_resource.ansible_id
-        else:
-            raise RuntimeError(f"Error: {assignment.content_type.model} {assignment.object_id} was found without an associated Resource.")
-    else:
-        ansible_id_or_pk = assignment.object_id
-
-    return str(ansible_id_or_pk)
-
-
-def get_content_object(role_definition, assignment_tuple: AssignmentTuple) -> Any:
-    if not is_rbac_installed():
-        raise RuntimeError("get_content_object requires ansible_base.rbac to be installed")
-    content_object = None
-    if role_definition.content_type.model in ('organization', 'team'):
-        object_resource = Resource.objects.get(ansible_id=assignment_tuple.ansible_id_or_pk)
-        content_object = object_resource.content_object
-    else:
-        model = role_definition.content_type.model_class()
-        content_object = model.objects.get(pk=assignment_tuple.ansible_id_or_pk)
-
-    return content_object
 
 
 @dataclass
@@ -267,124 +179,46 @@ def get_remote_assignments(api_client: ResourceAPIClient, page_size: int | None 
     return RemoteAssignmentFetcher(api_client, page_size=page_size).fetch()
 
 
-def get_local_assignments() -> set[AssignmentTuple]:
-    """Get local assignments and convert to tuples."""
-    if not is_rbac_installed():
-        raise RuntimeError("get_local_assignments requires ansible_base.rbac to be installed")
-    from ansible_base.rbac.models.role import RoleTeamAssignment, RoleUserAssignment
+def create_api_client() -> ResourceAPIClient:
+    """Factory for pre-configured ResourceAPIClient."""
+    params = {"raise_if_bad_request": False}
 
-    assignments = set()
+    if jwt_user_id := getattr(settings, "RESOURCE_JWT_USER_ID", None):
+        params["jwt_user_id"] = jwt_user_id
 
-    # Get user assignments
-    for assignment in RoleUserAssignment.objects.select_related('user', 'role_definition').all():
-        try:
-            user_resource = Resource.get_resource_for_object(assignment.user)
-        except Resource.DoesNotExist:
-            # Skip assignments where the user doesn't have a resource
-            continue
+    service_path = getattr(settings, "RESOURCE_SERVICE_PATH", None)
+    if not service_path:
+        raise ValueError("RESOURCE_SERVICE_PATH is not set.")
+    params["service_path"] = service_path
+    params["jwt_expiration"] = getattr(settings, "RESOURCE_SYNC_JWT_EXPIRATION", DEFAULT_SYNC_JWT_EXPIRATION)
 
-        user_ansible_id = user_resource.ansible_id
-        # Handle both object-scoped and global assignments
-        object_id = assignment.object_id
-        ansible_id_or_pk = None
-        if object_id and assignment.content_type:
-            ansible_id_or_pk = get_ansible_id_or_pk(assignment)
-
-        assignments.add(
-            AssignmentTuple(
-                actor_ansible_id=str(user_ansible_id),
-                ansible_id_or_pk=ansible_id_or_pk if ansible_id_or_pk else None,
-                role_definition_name=assignment.role_definition.name,
-                assignment_type='user',
-            )
-        )
-
-    # Get team assignments
-    for assignment in RoleTeamAssignment.objects.select_related('team', 'role_definition').all():
-        try:
-            team_resource = Resource.get_resource_for_object(assignment.team)
-        except Resource.DoesNotExist:
-            # Skip assignments where the user doesn't have a resource
-            continue
-        team_ansible_id = team_resource.ansible_id
-
-        # Handle both object-scoped and global assignments
-        object_id = assignment.object_id
-        ansible_id_or_pk = None
-        if object_id and assignment.content_type:
-            # For object-scoped assignments, try to get the object's ansible_id
-            ansible_id_or_pk = get_ansible_id_or_pk(assignment)
-
-        assignments.add(
-            AssignmentTuple(
-                actor_ansible_id=str(team_ansible_id),
-                ansible_id_or_pk=ansible_id_or_pk if ansible_id_or_pk else None,
-                role_definition_name=assignment.role_definition.name,
-                assignment_type='team',
-            )
-        )
-
-    return assignments
+    client = get_resource_server_client(**params)
+    return client
 
 
-def delete_local_assignment(assignment_tuple: AssignmentTuple) -> bool:
-    """Delete a local assignment based on the tuple."""
-    if not is_rbac_installed():
-        raise RuntimeError("delete_local_assignment requires ansible_base.rbac to be installed")
-    from ansible_base.rbac.models.role import RoleDefinition
+def fetch_manifest(
+    resource_type_name: str,
+    api_client: ResourceAPIClient | None = None,
+) -> list[ManifestItem]:
+    """Fetch RESOURCE_SERVER manifest, parses the CSV and returns a list."""
+    api_client = api_client or create_api_client()
+    api_client.raise_if_bad_request = False  # Status check is needed
+
+    resp_metadata = api_client.get_service_metadata()
+    resp_metadata.raise_for_status()
+
+    manifest_stream = api_client.get_resource_type_manifest(resource_type_name, filters={"service_id": service_id()})
+    if manifest_stream.status_code == 404:
+        msg = f"manifest for {resource_type_name} NOT FOUND."
+        raise ManifestNotFound(msg)
 
     try:
-        role_definition = RoleDefinition.objects.get(name=assignment_tuple.role_definition_name)
+        manifest_stream.raise_for_status()
+    except HTTPError as exc:
+        raise ResourceSyncHTTPError() from exc
 
-        # Get the actor (user or team)
-        resource = Resource.objects.get(ansible_id=assignment_tuple.actor_ansible_id)
-        actor = resource.content_object
-
-        # Get the object if it's not a global assignment
-        content_object = None
-        if assignment_tuple.ansible_id_or_pk:
-            content_object = get_content_object(role_definition, assignment_tuple)
-        # Use the role definition's remove methods
-        if content_object:
-            role_definition.remove_permission(actor, content_object)
-        else:
-            role_definition.remove_global_permission(actor)
-
-        return True
-
-    except Exception:
-        logger.exception(f"Failed to delete assignment {assignment_tuple}")
-        return False
-
-
-def create_local_assignment(assignment_tuple: AssignmentTuple) -> bool:
-    """Create a local assignment based on the tuple."""
-    if not is_rbac_installed():
-        raise RuntimeError("create_local_assignment requires ansible_base.rbac to be installed")
-    from ansible_base.rbac.models.role import RoleDefinition
-
-    try:
-        role_definition = RoleDefinition.objects.get(name=assignment_tuple.role_definition_name)
-
-        # Get the actor (user or team)
-        resource = Resource.objects.get(ansible_id=assignment_tuple.actor_ansible_id)
-        actor = resource.content_object
-
-        # Get the object if it's not a global assignment
-        content_object = None
-        if assignment_tuple.ansible_id_or_pk:
-            content_object = get_content_object(role_definition, assignment_tuple)
-        # Use the role definition's give methods
-        if content_object:
-            role_definition.give_permission(actor, content_object)
-        else:
-            role_definition.give_global_permission(actor)
-
-        return True
-
-    except Exception:
-        logger.exception(f"Failed to create assignment {assignment_tuple}")
-        return False
+    csv_reader = csv.DictReader(StringIO(manifest_stream.text))
+    return [ManifestItem(**row) for row in csv_reader]
 
 
 def get_orphan_resources(
