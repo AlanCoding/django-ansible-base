@@ -8,7 +8,7 @@ on:
       - "stable-*"
 jobs:
   tox:
-    name: "${{ matrix.tests.canary && 'Canary (unpinned deps, may fail)' || 'django-ansible-base' }} - ${{ matrix.tests.env }}"
+    name: django-ansible-base - ${{ matrix.tests.env }}
     runs-on: ubuntu-latest
     permissions:
       packages: write
@@ -49,47 +49,23 @@ jobs:
             python-version: "3.12"
             sonar: false
             junit-xml-upload: false
-          - env: py311-in-files
-            python-version: "3.11"
-            sonar: false
-            junit-xml-upload: false
-            canary: true
-          - env: py312-in-files
-            python-version: "3.12"
-            sonar: false
-            junit-xml-upload: false
-            canary: true
     steps:
-      - name: Check canary eligibility
-        id: check
-        if: >-
-          !matrix.tests.canary
-          || (github.repository == 'ansible/django-ansible-base'
-              && ((github.event_name == 'push' && github.ref_name == 'devel')
-                  || (github.event_name == 'pull_request' && github.base_ref == 'devel')))
-        run: echo "should_run=true" >> $GITHUB_OUTPUT
-
       - uses: actions/checkout@v4
-        if: steps.check.outputs.should_run
         with:
           show-progress: false
 
       - name: Install build requirements
-        if: steps.check.outputs.should_run
         run: sudo apt-get update && sudo apt-get install -y libsasl2-dev libldap2-dev libssl-dev libxmlsec1-dev
 
       - name: Install python ${{ matrix.tests.python-version }}
-        if: steps.check.outputs.should_run
         uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.tests.python-version }}
 
       - name: Install tox
-        if: steps.check.outputs.should_run
         run: pip${{ matrix.tests.python-version }} install tox tox-docker
 
       - name: Run tox
-        if: steps.check.outputs.should_run
         env:
           TOX_DOCKER_GATEWAY: "127.0.0.1"
         run: |
@@ -97,19 +73,19 @@ jobs:
           tox --colored yes -e ${{ matrix.tests.env }}
 
       - name: Inject PR number into coverage.xml
-        if: steps.check.outputs.should_run && !matrix.tests.canary && matrix.tests.env != 'check' && hashFiles('coverage.xml') != ''
+        if: matrix.tests.env != 'check' && hashFiles('coverage.xml') != ''
         run: sed -i '2i <!-- PR ${{ github.event.number }} -->' coverage.xml
 
       - name: Upload coverage as artifact
         uses: actions/upload-artifact@v4
-        if: steps.check.outputs.should_run && !matrix.tests.canary && matrix.tests.env != 'check' && hashFiles('coverage.xml') != ''
+        if: matrix.tests.env != 'check' && hashFiles('coverage.xml') != ''
         with:
           name: coverage-${{ matrix.tests.env }}
           path: coverage.xml
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@cddd853df119a48c5be31a973f8cd97e12e35e16  # v6.0.1
-        if: steps.check.outputs.should_run && !matrix.tests.canary && matrix.tests.env != 'check' && hashFiles('coverage.xml') != ''
+        if: matrix.tests.env != 'check' && hashFiles('coverage.xml') != ''
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage.xml
@@ -117,7 +93,7 @@ jobs:
           fail_ci_if_error: false
 
       - name: Upload jUnit XML test results
-        if: steps.check.outputs.should_run && matrix.tests.junit-xml-upload && github.event_name == 'push' && github.repository == 'ansible/django-ansible-base' && github.ref_name == 'devel'
+        if: matrix.tests.junit-xml-upload && github.event_name == 'push' && github.repository == 'ansible/django-ansible-base' && github.ref_name == 'devel'
         continue-on-error: true
         run: >-
           curl --silent --show-error --user "$PDE_UPLOAD_USER:$PDE_UPLOAD_PASSWORD"
@@ -129,3 +105,46 @@ jobs:
         env:
           PDE_UPLOAD_USER: ${{ vars.PDE_ORG_RESULTS_AGGREGATOR_UPLOAD_USER }}
           PDE_UPLOAD_PASSWORD: ${{ secrets.PDE_ORG_RESULTS_UPLOAD_PASSWORD }}
+
+  canary-deps:
+    name: "Canary (unpinned deps, may fail) - ${{ matrix.tests.env }}"
+    if: >-
+      github.repository == 'ansible/django-ansible-base'
+      && (
+        (github.event_name == 'push' && github.ref_name == 'devel')
+        || (github.event_name == 'pull_request' && github.base_ref == 'devel')
+      )
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        tests:
+          - env: py311-in-files
+            python-version: "3.11"
+          - env: py312-in-files
+            python-version: "3.12"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          show-progress: false
+
+      - name: Install build requirements
+        run: sudo apt-get update && sudo apt-get install -y libsasl2-dev libldap2-dev libssl-dev libxmlsec1-dev
+
+      - name: Install python ${{ matrix.tests.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.tests.python-version }}
+
+      - name: Install tox
+        run: pip${{ matrix.tests.python-version }} install tox tox-docker
+
+      - name: Run tox
+        env:
+          TOX_DOCKER_GATEWAY: "127.0.0.1"
+        run: |
+          echo "::remove-matcher owner=python::"
+          tox --colored yes -e ${{ matrix.tests.env }}
