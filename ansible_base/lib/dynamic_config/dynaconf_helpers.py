@@ -21,13 +21,13 @@ from ansible_base.lib.dynamic_config.settings_logic import get_mergeable_dab_set
 
 def _dynaconf_post_hooks(settings):
     # dynaconf 3.3.0 moved _post_hooks to __core__.config.post_hooks
-    if hasattr(settings, '__core__'):
+    if hasattr(settings, '__core__'):  # pragma: no cover
         return settings.__core__.config.post_hooks
     return settings._post_hooks
 
 
 def _dynaconf_loaded_files(settings):
-    if hasattr(settings, '__core__'):
+    if hasattr(settings, '__core__'):  # pragma: no cover
         return settings.__core__.config.loaded_files
     return settings._loaded_files
 
