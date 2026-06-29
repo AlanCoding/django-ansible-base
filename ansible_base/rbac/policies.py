@@ -101,9 +101,7 @@ def _check_role_permissions(request_user, obj, role_definition):
     """Verify user has every permission contained in the role being assigned"""
     for permission in role_definition.permissions.all():
         if not request_user.has_obj_perm(obj, permission.codename):
-            raise PermissionDenied(
-                {'detail': _('You do not have {codename} permission and cannot assign it to others').format(codename=permission.codename)}
-            )
+            raise PermissionDenied({'detail': _('You do not have {codename} permission and cannot assign it to others').format(codename=permission.codename)})
 
 
 def check_content_obj_permission(request_user, obj, role_definition=None) -> None:

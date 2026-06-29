@@ -273,8 +273,24 @@ list in `settings.ANSIBLE_BASE_CREATOR_DEFAULTS`. Not all entries in this will a
 all models.
 
 ```
-ANSIBLE_BASE_CREATOR_DEFAULTS = ['change', 'execute', 'delete', 'view']
+ANSIBLE_BASE_CREATOR_DEFAULTS = ['add', 'change', 'delete', 'view']
 ```
+
+**Interaction with role assignment delegation:** These two settings together
+define what a creator can do with objects they create:
+
+- `ANSIBLE_BASE_CREATOR_DEFAULTS` determines which permissions the creator
+  automatically receives on the new object.
+- `ANSIBLE_BASE_MANAGE_PERMISSION_ACTION` (see below) determines the gate
+  permission for managing role assignments, and the escalation check ensures
+  users can only assign permissions they themselves hold.
+
+If a model has custom action permissions (like `execute` or `adhoc`) that are
+**not** in `ANSIBLE_BASE_CREATOR_DEFAULTS`, then the object creator will not
+receive those permissions, and therefore cannot delegate them to others. This
+is the intended design for separating "provisioner" users (who create and
+manage data) from "operator" users (who take actions on it). An administrator
+with the action permissions must explicitly grant them.
 
 ### Managing Role Assignments
 
@@ -309,9 +325,15 @@ ANSIBLE_BASE_MANAGE_PERMISSION_ACTION = None  # require ALL permissions
 cannot assign a role containing `adhoc_inventory` because they don't have that
 permission themselves.
 
-Note that `ANSIBLE_BASE_CREATOR_DEFAULTS` (see above) controls which permissions
-creators automatically receive. By default this is `['add', 'change', 'delete', 'view']`,
-so action-specific permissions like `execute` or `adhoc` are not auto-granted.
+Together with `ANSIBLE_BASE_CREATOR_DEFAULTS` (see above), these settings
+control the full delegation chain: the creator defaults define which permissions
+a creator starts with, and the manage permission action plus escalation check
+constrain which permissions they can delegate onward. To allow creators to
+delegate all permissions on their objects, ensure `ANSIBLE_BASE_CREATOR_DEFAULTS`
+includes every action the model supports. To restrict delegation of
+action-specific permissions like `execute` or `adhoc`, keep them out of the
+creator defaults — the creator will have CRUD access but cannot grant action
+permissions they were never given.
 
 **Removing assignments:** A user can remove a role assignment if they can manage
 the actor (user or team) receiving the role, OR if they have the gate permission
