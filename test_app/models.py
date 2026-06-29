@@ -271,7 +271,11 @@ class ResourceWithAdminPerm(models.Model):
     class Meta:
         app_label = 'test_app'
         ordering = ['id']
-        permissions = [('administrate_resourcewithadminperm', 'Can manage role assignments on this resource')]
+        permissions = [
+            ('administrate_resourcewithadminperm', 'Can manage role assignments on this resource'),
+            ('bop_resourcewithadminperm', 'Can bop this resource'),
+            ('twist_resourcewithadminperm', 'Can twist this resource'),
+        ]
 
 
 class ParentName(models.Model):

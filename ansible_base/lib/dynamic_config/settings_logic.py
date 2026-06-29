@@ -203,7 +203,7 @@ def get_mergeable_dab_settings(settings: dict) -> dict:  # NOSONAR
         # The settings-based specification of managed roles from DAB RBAC vendored ones
         'ANSIBLE_BASE_MANAGED_ROLE_REGISTRY': {},
         # Permissions a user will get when creating a new item
-        'ANSIBLE_BASE_CREATOR_DEFAULTS': ['add', 'change', 'delete', 'view'],
+        'ANSIBLE_BASE_CREATOR_DEFAULTS': ['add', 'change', 'delete', 'use', 'view'],
         # Permissions API will check for related items, think PATCH/PUT
         # This is a precedence order, so first action related model has will be used
         'ANSIBLE_BASE_CHECK_RELATED_PERMISSIONS': ['use', 'change', 'view'],
