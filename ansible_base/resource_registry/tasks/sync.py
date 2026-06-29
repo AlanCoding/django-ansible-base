@@ -8,6 +8,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from enum import Enum
 from io import StringIO, TextIOBase
+from urllib.parse import parse_qs, urlparse
 
 from asgiref.sync import sync_to_async
 from django.conf import settings
@@ -108,10 +109,11 @@ class RemoteAssignmentFetcher:
     incomplete so the caller can skip deletions safely.
     """
 
-    def __init__(self, api_client: ResourceAPIClient, page_size: int | None = None):
+    def __init__(self, api_client: ResourceAPIClient, page_size: int | None = None, service_filter: str | None = None):
         self.api_client = api_client
         self.assignments: set[AssignmentTuple] = set()
         self.page_size = page_size if page_size is not None else getattr(settings, 'RESOURCE_SYNC_PAGE_SIZE', DEFAULT_SYNC_PAGE_SIZE)
+        self.service_filter = service_filter
 
     def fetch(self) -> RemoteAssignmentResult:
         """Paginate user then team assignments and return the result.
@@ -168,15 +170,47 @@ class RemoteAssignmentFetcher:
             logger.exception(f"Failed to fetch remote {assignment_type} assignments")
             return False
 
+    def _build_filters(self, **extra):
+        filters = {'page_size': self.page_size}
+        if self.service_filter:
+            filters['content_type__service'] = self.service_filter
+        filters.update(extra)
+        return filters
 
-def get_remote_assignments(api_client: ResourceAPIClient, page_size: int | None = None) -> RemoteAssignmentResult:
+    def _fetch_page(self, list_fn, next_url):
+        if next_url is None:
+            return list_fn(filters=self._build_filters())
+        cursor = parse_qs(urlparse(next_url).query).get('cursor', [None])[0]
+        if cursor is None:
+            logger.warning(f"Pagination URL missing cursor parameter: {next_url}")
+            return None
+        return list_fn(filters=self._build_filters(cursor=cursor))
+
+    def _process_assignments(self, assignments_data, actor_id_key, assignment_type):
+        for assignment in assignments_data:
+            role_name = assignment['role_definition']
+            if role_name not in self.local_role_names:
+                logger.debug(f"Skipping remote {assignment_type} assignment with unknown local role: {role_name}")
+                continue
+            ansible_id_or_pk = assignment.get('object_ansible_id') or assignment.get('object_id')
+            self.assignments.add(
+                AssignmentTuple(
+                    actor_ansible_id=assignment[actor_id_key],
+                    ansible_id_or_pk=ansible_id_or_pk,
+                    role_definition_name=role_name,
+                    assignment_type=assignment_type,
+                )
+            )
+
+
+def get_remote_assignments(api_client: ResourceAPIClient, page_size: int | None = None, service_filter: str | None = None) -> RemoteAssignmentResult:
     """Fetch remote assignments from the resource server and convert to tuples.
 
     Returns a ``RemoteAssignmentResult`` so the caller can distinguish a
     complete fetch from a partial one (e.g. due to HTTP errors or
     timeouts mid-pagination).
     """
-    return RemoteAssignmentFetcher(api_client, page_size=page_size).fetch()
+    return RemoteAssignmentFetcher(api_client, page_size=page_size, service_filter=service_filter).fetch()
 
 
 def create_api_client() -> ResourceAPIClient:
@@ -459,6 +493,7 @@ class SyncExecutor:
     results: dict = field(default_factory=lambda: defaultdict(list))
     sync_assignments: bool = True
     page_size: int | None = None
+    service_filter: str | None = None
 
     def write(self, text: str = ""):
         """Write to assigned IO or simply ignores the text."""
@@ -605,8 +640,8 @@ class SyncExecutor:
         self.write(">>> Syncing role assignments")
 
         try:
-            remote_result = get_remote_assignments(self.api_client, page_size=self.page_size)
-            local_assignments = get_local_assignments()
+            remote_result = get_remote_assignments(self.api_client, page_size=self.page_size, service_filter=self.service_filter)
+            local_assignments = get_local_assignments(service=self.service_filter)
 
             # Deletions are only safe when the remote fetch was complete.
             # A partial fetch would cause us to delete assignments that
