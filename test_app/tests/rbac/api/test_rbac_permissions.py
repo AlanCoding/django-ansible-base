@@ -166,7 +166,6 @@ def test_remove_organization(user_api_client, user, inv_rd, inventory):
 
 
 @pytest.mark.django_db
-@override_settings(ANSIBLE_BASE_MANAGE_PERMISSION_ACTION=None)
 def test_custom_action(user_api_client, user, organization):
     rd = RoleDefinition.objects.create_from_permissions(
         name='change-cow', permissions=['change_cow', 'view_cow', 'delete_cow'], content_type=DABContentType.objects.get_for_model(Cow)

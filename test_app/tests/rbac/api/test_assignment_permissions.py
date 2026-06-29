@@ -240,3 +240,78 @@ class TestManagePermissionAction:
         url = get_relative_url('roleuserassignment-list')
         response = user_api_client.post(url, data={'user': rando.pk, 'role_definition': view_rd.pk, 'object_id': inv.pk})
         assert response.status_code == 403, response.data
+
+    def test_cannot_assign_role_with_permissions_user_lacks(self, user_api_client, user, rando, org_admin_rd, organization):
+        """User with change+view cannot assign a role containing update, which they lack"""
+        org_admin_rd.give_permission(user, organization)
+        other_org = Organization.objects.create(name='other-org')
+        inv = Inventory.objects.create(name='target-inv', organization=other_org)
+
+        change_view_rd = RoleDefinition.objects.create_from_permissions(
+            name='change-view-inv',
+            permissions=['change_inventory', 'view_inventory'],
+            content_type=permission_registry.content_type_model.objects.get_for_model(Inventory),
+        )
+        update_rd = RoleDefinition.objects.create_from_permissions(
+            name='update-inv',
+            permissions=['update_inventory', 'view_inventory'],
+            content_type=permission_registry.content_type_model.objects.get_for_model(Inventory),
+        )
+
+        change_view_rd.give_permission(user, inv)
+        url = get_relative_url('roleuserassignment-list')
+        response = user_api_client.post(url, data={'user': rando.pk, 'role_definition': update_rd.pk, 'object_id': inv.pk})
+        assert response.status_code == 403, response.data
+        assert 'update_inventory' in str(response.data)
+
+    def test_can_assign_role_with_subset_of_permissions(self, user_api_client, user, rando, org_admin_rd, organization):
+        """User with change+view+update can assign a role containing only view"""
+        org_admin_rd.give_permission(user, organization)
+        other_org = Organization.objects.create(name='other-org')
+        inv = Inventory.objects.create(name='target-inv', organization=other_org)
+
+        all_rd = RoleDefinition.objects.create_from_permissions(
+            name='all-inv',
+            permissions=['change_inventory', 'view_inventory', 'update_inventory'],
+            content_type=permission_registry.content_type_model.objects.get_for_model(Inventory),
+        )
+        view_rd = RoleDefinition.objects.create_from_permissions(
+            name='view-inv',
+            permissions=['view_inventory'],
+            content_type=permission_registry.content_type_model.objects.get_for_model(Inventory),
+        )
+
+        all_rd.give_permission(user, inv)
+        url = get_relative_url('roleuserassignment-list')
+        response = user_api_client.post(url, data={'user': rando.pk, 'role_definition': view_rd.pk, 'object_id': inv.pk})
+        assert response.status_code == 201, response.data
+
+    def test_escalation_blocked_even_with_manage_permission(self, user_api_client, user, rando, org_admin_rd, organization):
+        """User with change (the gate) but not update cannot assign a role with update — escalation blocked"""
+        org_admin_rd.give_permission(user, organization)
+        other_org = Organization.objects.create(name='other-org')
+        inv = Inventory.objects.create(name='target-inv', organization=other_org)
+
+        change_view_rd = RoleDefinition.objects.create_from_permissions(
+            name='change-view-inv',
+            permissions=['change_inventory', 'view_inventory'],
+            content_type=permission_registry.content_type_model.objects.get_for_model(Inventory),
+        )
+        escalation_rd = RoleDefinition.objects.create_from_permissions(
+            name='change-update-inv',
+            permissions=['change_inventory', 'update_inventory', 'view_inventory'],
+            content_type=permission_registry.content_type_model.objects.get_for_model(Inventory),
+        )
+
+        # User has the gate (change) but not update
+        change_view_rd.give_permission(user, inv)
+        url = get_relative_url('roleuserassignment-list')
+
+        # Can assign the role they have (change+view) — no escalation
+        response = user_api_client.post(url, data={'user': rando.pk, 'role_definition': change_view_rd.pk, 'object_id': inv.pk})
+        assert response.status_code == 201, response.data
+
+        # Cannot assign the role with extra permissions they lack
+        response = user_api_client.post(url, data={'user': rando.pk, 'role_definition': escalation_rd.pk, 'object_id': inv.pk})
+        assert response.status_code == 403, response.data
+        assert 'update_inventory' in str(response.data)

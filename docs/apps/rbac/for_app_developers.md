@@ -276,6 +276,47 @@ all models.
 ANSIBLE_BASE_CREATOR_DEFAULTS = ['change', 'execute', 'delete', 'view']
 ```
 
+### Managing Role Assignments
+
+When a user assigns a role to another user or team on an object, DAB RBAC
+enforces two checks to prevent privilege escalation:
+
+1. **Gate permission** — the user must have a specific permission on the object
+   that authorizes them to manage role assignments.
+2. **Escalation prevention** — the user must have every permission that the role
+   being assigned contains. This prevents a user from granting permissions they
+   do not themselves hold.
+
+The gate permission is controlled by `ANSIBLE_BASE_MANAGE_PERMISSION_ACTION`
+(default `'change'`).
+
+```
+ANSIBLE_BASE_MANAGE_PERMISSION_ACTION = 'change'   # default
+ANSIBLE_BASE_MANAGE_PERMISSION_ACTION = 'administrate'  # dedicated permission
+ANSIBLE_BASE_MANAGE_PERMISSION_ACTION = None  # require ALL permissions
+```
+
+- When set to an action name (like `'change'` or `'administrate'`), the user
+  needs that permission on the object **and** must have all permissions listed in
+  the role being assigned.
+- When set to `None` or `''`, the user must have **all** permissions known for
+  the object type (the escalation check is effectively redundant in this case).
+- If a model does not have the configured action permission, the system falls
+  back to requiring all permissions.
+
+**Example:** A user with `change_inventory` and `view_inventory` can assign a
+"viewer" role (containing only `view_inventory`) to another user. But they
+cannot assign a role containing `adhoc_inventory` because they don't have that
+permission themselves.
+
+Note that `ANSIBLE_BASE_CREATOR_DEFAULTS` (see above) controls which permissions
+creators automatically receive. By default this is `['add', 'change', 'delete', 'view']`,
+so action-specific permissions like `execute` or `adhoc` are not auto-granted.
+
+**Removing assignments:** A user can remove a role assignment if they can manage
+the actor (user or team) receiving the role, OR if they have the gate permission
+on the content object. The escalation check does not apply to removal.
+
 ### Django Settings for Swappable Models
 
 You can specify which model you want to use for Organization / User / Team / Permission models.

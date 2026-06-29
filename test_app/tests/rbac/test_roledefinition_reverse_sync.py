@@ -23,7 +23,7 @@ def test_roledefinition_create_with_permissions_reverse_sync(admin_api_client, e
 
     # Enable reverse-sync and mock the resource server client's _make_request method
     with enable_reverse_sync():
-        with override_settings(RESOURCE_SERVER={'URL': 'http://example.invalid', 'SECRET_KEY': 'test-secret-key'}, ANSIBLE_BASE_MANAGE_PERMISSION_ACTION=None):
+        with override_settings(RESOURCE_SERVER={'URL': 'http://example.invalid', 'SECRET_KEY': 'test-secret-key'}):
             with mock.patch('ansible_base.resource_registry.rest_client.ResourceAPIClient._make_request') as mock_make_request:
                 # Mock successful response from resource server
                 mock_response = mock.Mock()

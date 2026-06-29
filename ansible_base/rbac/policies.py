@@ -97,11 +97,21 @@ def _check_all_obj_permissions(request_user, obj):
             raise PermissionDenied({'detail': _('You do not have {codename} permission the object').format(codename=codename)})
 
 
-def check_content_obj_permission(request_user, obj) -> None:
+def _check_role_permissions(request_user, obj, role_definition):
+    """Verify user has every permission contained in the role being assigned"""
+    for permission in role_definition.permissions.all():
+        if not request_user.has_obj_perm(obj, permission.codename):
+            raise PermissionDenied(
+                {'detail': _('You do not have {codename} permission and cannot assign it to others').format(codename=permission.codename)}
+            )
+
+
+def check_content_obj_permission(request_user, obj, role_definition=None) -> None:
     """Permission policy rules for giving or removing obj permission
 
     Controlled by ANSIBLE_BASE_MANAGE_PERMISSION_ACTION setting:
     - If set to an action (default 'change'), users need that permission to manage role assignments
+      AND must have every permission contained in the role being assigned (escalation prevention)
     - If falsy (None or ''), users must have ALL object-level permissions
     If the model does not have the configured action, falls back to requiring all permissions.
     """
@@ -116,11 +126,15 @@ def check_content_obj_permission(request_user, obj) -> None:
                 if permission.codename.startswith(manage_action):
                     if not request_user.has_obj_perm(obj, manage_action):
                         raise PermissionDenied
+                    if role_definition:
+                        _check_role_permissions(request_user, obj, role_definition)
                     return
         _check_all_obj_permissions(request_user, obj)
     elif manage_action and _model_has_permission_action(type(obj), manage_action):
         if not request_user.has_obj_perm(obj, manage_action):
             raise PermissionDenied
+        if role_definition:
+            _check_role_permissions(request_user, obj, role_definition)
     else:
         _check_all_obj_permissions(request_user, obj)
 

@@ -8,7 +8,6 @@ from test_app.models import Inventory, Organization
 
 
 @pytest.mark.django_db
-@override_settings(ANSIBLE_BASE_MANAGE_PERMISSION_ACTION=None)
 def test_org_inv_permissions_user(rando, inventory, org_inv_change_rd):
     assert not rando.has_obj_perm(inventory, 'view_inventory')
     assert not rando.has_obj_perm(inventory, 'change_inventory')
@@ -30,7 +29,6 @@ def test_org_inv_permissions_user(rando, inventory, org_inv_change_rd):
 
 
 @pytest.mark.django_db
-@override_settings(ANSIBLE_BASE_MANAGE_PERMISSION_ACTION=None)
 def test_org_inv_permissions_team(team, inventory, org_inv_change_rd):
     "We support using team as actor in model methods like MyModel.access_qs(team) but do not attach has_obj_perm"
     assert list(Inventory.access_qs(team)) == []
@@ -71,7 +69,6 @@ def test_resource_add_permission(rando, inventory):
 
 
 @pytest.mark.django_db
-@override_settings(ANSIBLE_BASE_MANAGE_PERMISSION_ACTION=None)
 def test_visible_items():
     org1 = Organization.objects.create(name='org1')
     org2 = Organization.objects.create(name='org2')

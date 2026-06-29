@@ -2,7 +2,6 @@ from unittest import mock
 
 import pytest
 from django.db.utils import IntegrityError
-from django.test.utils import override_settings
 from rest_framework.exceptions import ValidationError
 
 from ansible_base.rbac import permission_registry
@@ -69,17 +68,18 @@ def test_change_role_definition_permission(organization, team, inventory, member
     org_inv_rd.give_permission(org_user, organization)
     member_rd.give_permission(team_user, team)
 
-    # org_inv_rd includes update_inventory, so users already have it
+    # sanity
+    assert [u.has_obj_perm(inventory, 'update') for u in (team_user, org_user)] == [False, False]
+
+    new_perm = permission_registry.permission_qs.get(codename='update_inventory')
+    org_inv_rd.permissions.add(new_perm)
+
+    # Users get new permission
     assert [u.has_obj_perm(inventory, 'update') for u in (team_user, org_user)] == [True, True]
 
     # Removing takes away the permission
-    update_perm = permission_registry.permission_qs.get(codename='update_inventory')
-    org_inv_rd.permissions.remove(update_perm)
+    org_inv_rd.permissions.remove(new_perm)
     assert [u.has_obj_perm(inventory, 'update') for u in (team_user, org_user)] == [False, False]
-
-    # Adding it back restores the permission
-    org_inv_rd.permissions.add(update_perm)
-    assert [u.has_obj_perm(inventory, 'update') for u in (team_user, org_user)] == [True, True]
 
 
 @pytest.mark.django_db
@@ -162,7 +162,6 @@ def test_get_or_create_reuses_existing_role_by_name():
 
 
 @pytest.mark.django_db
-@override_settings(ANSIBLE_BASE_MANAGE_PERMISSION_ACTION=None)
 def test_get_or_create_with_defaults():
     """Test that get_or_create properly merges defaults into create kwargs."""
     permissions = ['view_inventory', 'change_inventory']
@@ -211,7 +210,6 @@ def test_get_or_create_reraises_integrity_error_after_max_retries():
 
 
 @pytest.mark.django_db
-@override_settings(ANSIBLE_BASE_MANAGE_PERMISSION_ACTION=None)
 def test_create_from_permissions_with_content_type_id():
     """
     Test that create_from_permissions correctly handles content_type_id parameter.

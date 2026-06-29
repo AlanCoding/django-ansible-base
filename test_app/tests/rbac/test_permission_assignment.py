@@ -1,6 +1,5 @@
 import pytest
 from crum import impersonate
-from django.test.utils import override_settings
 from rest_framework.exceptions import ValidationError
 
 from ansible_base.rbac.models import RoleDefinition, RoleEvaluation, RoleUserAssignment
@@ -16,7 +15,6 @@ def test_invalid_actor(inventory, org_inv_rd):
 
 
 @pytest.mark.django_db
-@override_settings(ANSIBLE_BASE_MANAGE_PERMISSION_ACTION=None)
 def test_child_object_permission(rando, organization, inventory, org_inv_change_rd, admin_user):
     assert inventory.organization == organization
 
@@ -61,7 +59,6 @@ def test_organization_permission_change(org_inv_rd):
 
 
 @pytest.mark.django_db
-@override_settings(ANSIBLE_BASE_MANAGE_PERMISSION_ACTION=None)
 @pytest.mark.parametrize('order', ['role_first', 'obj_first'])
 def test_later_created_child_object_permission(rando, organization, order, org_inv_change_rd):
     assert set(RoleEvaluation.accessible_objects(Organization, rando, 'change')) == set()

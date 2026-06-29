@@ -10,11 +10,10 @@ def test_get_role_definition(admin_api_client, inv_rd):
     url = get_relative_url('roledefinition-detail', kwargs={'pk': inv_rd.pk})
     response = admin_api_client.get(url)
     assert response.status_code == 200
-    assert set(response.data['permissions']) == set(['aap.change_inventory', 'aap.delete_inventory', 'aap.update_inventory', 'aap.view_inventory'])
+    assert set(response.data['permissions']) == set(['aap.change_inventory', 'aap.view_inventory'])
 
 
 @pytest.mark.django_db
-@override_settings(ANSIBLE_BASE_MANAGE_PERMISSION_ACTION=None)
 def test_create_role_definition(admin_api_client):
     """
     Test creation of a custom role definition.

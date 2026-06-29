@@ -90,7 +90,7 @@ def test_intermediary_role_display(admin_api_client, inventory, organization, me
     team = Team.objects.create(name='has_org_roles', organization=inventory.organization)
 
     org_admin_inv_rd = RoleDefinition.objects.create_from_permissions(
-        permissions=['view_organization', 'add_inventory', 'change_inventory', 'delete_inventory', 'update_inventory', 'view_inventory'],
+        permissions=['view_organization', 'add_inventory', 'change_inventory', 'delete_inventory', 'view_inventory'],
         name='org-inv-admin-rd',
         content_type=permission_registry.content_type_model.objects.get_for_model(organization),
     )
