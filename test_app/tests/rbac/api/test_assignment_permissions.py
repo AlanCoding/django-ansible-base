@@ -338,7 +338,9 @@ class TestEscalationWithCustomActions:
 
     def _make_rd(self, name, permissions, resource_ct):
         return RoleDefinition.objects.create_from_permissions(
-            name=name, permissions=permissions, content_type=resource_ct,
+            name=name,
+            permissions=permissions,
+            content_type=resource_ct,
         )
 
     def test_has_bop_can_assign_bop_not_twist(self, user_api_client, user, rando, resource_ct, setup_user_with_org_visibility):
@@ -403,9 +405,7 @@ class TestEscalationWithCustomActions:
         other_org = setup_user_with_org_visibility
         resource = ResourceWithAdminPerm.objects.create(name='r1', organization=other_org)
 
-        user_rd = self._make_rd(
-            'user-perms', ['change_resourcewithadminperm', 'delete_resourcewithadminperm', 'view_resourcewithadminperm'], resource_ct
-        )
+        user_rd = self._make_rd('user-perms', ['change_resourcewithadminperm', 'delete_resourcewithadminperm', 'view_resourcewithadminperm'], resource_ct)
         crud_rd = self._make_rd('crud-role', ['change_resourcewithadminperm', 'delete_resourcewithadminperm', 'view_resourcewithadminperm'], resource_ct)
 
         user_rd.give_permission(user, resource)
