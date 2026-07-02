@@ -8,7 +8,6 @@ from rest_framework.viewsets import GenericViewSet, mixins
 from ansible_base.lib.utils.schema import extend_schema_if_available
 from ansible_base.lib.utils.views.django_app_api import AnsibleBaseDjangoAppApiView
 from ansible_base.lib.utils.views.permissions import try_add_oauth2_scope_permission
-from ansible_base.rbac.api.service_cursor_paginator import ServiceCursorPagination
 from ansible_base.resource_registry.models import Resource
 from ansible_base.resource_registry.views import HasResourceRegistryPermissions
 from ansible_base.rest_filters.rest_framework import ansible_id_backend
@@ -59,7 +58,6 @@ class BaseSerivceRoleAssignmentViewSet(
             HasResourceRegistryPermissions,
         ]
     )
-    pagination_class = ServiceCursorPagination
 
     def remote_secondary_sync_assignment(self, assignment, from_service=None):
         """To allow service-specific sync when getting assignment from /service-index/ endpoint
