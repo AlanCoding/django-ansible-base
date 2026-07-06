@@ -201,6 +201,7 @@ class RemoteAssignmentFetcher:
                 )
             )
 
+
 def get_remote_assignments(api_client: ResourceAPIClient, page_size: int | None = None, service_filter: str | None = None) -> RemoteAssignmentResult:
     """Fetch remote assignments from the resource server and convert to tuples.
 
