@@ -1296,8 +1296,6 @@ class TestDeferredActivityStreamErrorHandling:
                 with pytest.raises(RuntimeError, match="deliberate"):
                     _create_and_raise()
         else:
-            with mock.patch(
-                'ansible_base.activitystream.signals._flush_deferred_activity_stream', side_effect=RuntimeError("flush error")
-            ):
+            with mock.patch('ansible_base.activitystream.signals._flush_deferred_activity_stream', side_effect=RuntimeError("flush error")):
                 with pytest.raises(RuntimeError, match="deliberate"):
                     _create_and_raise()

@@ -5,9 +5,9 @@ from django.apps import apps
 from django.test.utils import override_settings
 from rest_framework.exceptions import ValidationError
 
+from ansible_base.rbac.caching import compute_team_member_roles
 from ansible_base.rbac.models import ObjectRole, RoleDefinition, RoleEvaluation, RoleTeamAssignment, RoleUserAssignment
 from ansible_base.rbac.permission_registry import permission_registry
-from ansible_base.rbac.caching import compute_team_member_roles
 from ansible_base.rbac.triggers import dab_post_migrate, defer_rbac_computations, post_migration_rbac_setup
 from test_app.models import Inventory, Organization, User
 

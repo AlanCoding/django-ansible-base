@@ -127,8 +127,6 @@ def test_defer_resource_cleanup_error_handling(system_user, scenario):
             with pytest.raises(RuntimeError, match="deliberate"):
                 _delete_and_raise()
     else:
-        with mock.patch(
-            'ansible_base.resource_registry.signals.handlers._flush_pending_resources', side_effect=RuntimeError("flush error")
-        ):
+        with mock.patch('ansible_base.resource_registry.signals.handlers._flush_pending_resources', side_effect=RuntimeError("flush error")):
             with pytest.raises(RuntimeError, match="deliberate"):
                 _delete_and_raise()
