@@ -101,3 +101,34 @@ def test_defer_resource_cleanup_cannot_nest():
     """Nesting defer_resource_cleanup should raise RuntimeError."""
     with pytest.raises(RuntimeError, match="cannot be nested"):
         _nested_resource_cleanup()
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "scenario",
+    [
+        pytest.param("rollback", id="skips_flush_on_rollback"),
+        pytest.param("flush_error", id="suppresses_flush_exception"),
+    ],
+)
+def test_defer_resource_cleanup_error_handling(system_user, scenario):
+    """Rollback and flush-error paths in defer_resource_cleanup's exception handler."""
+    org = Organization.objects.create(name=f'cleanup-{scenario}-org')
+
+    def _delete_and_raise():
+        with defer_resource_cleanup():
+            org.delete()
+            raise RuntimeError("deliberate")
+
+    if scenario == "rollback":
+        with mock.patch('ansible_base.resource_registry.signals.handlers.connection') as mock_conn:
+            mock_conn.in_atomic_block = True
+            mock_conn.needs_rollback = True
+            with pytest.raises(RuntimeError, match="deliberate"):
+                _delete_and_raise()
+    else:
+        with mock.patch(
+            'ansible_base.resource_registry.signals.handlers._flush_pending_resources', side_effect=RuntimeError("flush error")
+        ):
+            with pytest.raises(RuntimeError, match="deliberate"):
+                _delete_and_raise()

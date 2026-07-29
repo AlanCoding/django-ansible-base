@@ -1255,3 +1255,49 @@ class TestDeferredActivityStream:
             f"diff() is likely lazy-loading FK fields via getattr(obj, field) "
             f"instead of getattr(obj, field_obj.attname)."
         )
+
+
+class TestDeferredActivityStreamErrorHandling:
+    """Tests for error-handling paths in deferred_activity_stream's except handler."""
+
+    @pytest.mark.django_db
+    def test_exception_without_data_skips_flush(self):
+        """Exception raised before any data is accumulated skips the flush entirely."""
+        from ansible_base.activitystream.signals import deferred_activity_stream
+
+        def _raise_immediately():
+            with deferred_activity_stream():
+                raise RuntimeError("before data")
+
+        with pytest.raises(RuntimeError, match="before data"):
+            _raise_immediately()
+
+    @pytest.mark.django_db
+    @pytest.mark.parametrize(
+        "scenario",
+        [
+            pytest.param("rollback", id="skips_flush_on_rollback"),
+            pytest.param("flush_error", id="suppresses_flush_exception"),
+        ],
+    )
+    def test_exception_error_handling(self, system_user, scenario):
+        """Rollback and flush-error paths in the exception handler."""
+        from ansible_base.activitystream.signals import deferred_activity_stream
+
+        def _create_and_raise():
+            with deferred_activity_stream():
+                Animal.objects.create(name=f'{scenario}-animal')
+                raise RuntimeError("deliberate")
+
+        if scenario == "rollback":
+            with mock.patch('ansible_base.activitystream.signals.connection') as mock_conn:
+                mock_conn.in_atomic_block = True
+                mock_conn.needs_rollback = True
+                with pytest.raises(RuntimeError, match="deliberate"):
+                    _create_and_raise()
+        else:
+            with mock.patch(
+                'ansible_base.activitystream.signals._flush_deferred_activity_stream', side_effect=RuntimeError("flush error")
+            ):
+                with pytest.raises(RuntimeError, match="deliberate"):
+                    _create_and_raise()

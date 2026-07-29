@@ -7,6 +7,7 @@ from rest_framework.exceptions import ValidationError
 
 from ansible_base.rbac.models import ObjectRole, RoleDefinition, RoleEvaluation, RoleTeamAssignment, RoleUserAssignment
 from ansible_base.rbac.permission_registry import permission_registry
+from ansible_base.rbac.caching import compute_team_member_roles
 from ansible_base.rbac.triggers import dab_post_migrate, defer_rbac_computations, post_migration_rbac_setup
 from test_app.models import Inventory, Organization, User
 
@@ -419,6 +420,50 @@ def test_defer_rbac_computations_delete_org_cleans_team_role(rando):
     assert not ObjectRole.objects.filter(id=assignment.object_role_id).exists()
     assert not RoleEvaluation.objects.filter(codename='view_team', object_id=team.pk, content_type_id=team_ct.pk).exists()
     assert not RoleEvaluation.objects.filter(codename='view_organization', object_id=org.pk, content_type_id=org_ct.pk).exists()
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "scenario",
+    [
+        pytest.param("rollback", id="skips_flush_on_rollback"),
+        pytest.param("flush_error", id="suppresses_flush_exception"),
+    ],
+)
+def test_defer_rbac_error_handling_paths(organization, rando, org_inv_rd, scenario):
+    """Rollback and flush-error paths in defer_rbac_computations exception handler."""
+    org_inv_rd.give_permission(rando, organization)
+
+    def _create_and_raise():
+        with defer_rbac_computations():
+            Inventory.objects.create(name=f'{scenario}-inv', organization=organization)
+            raise RuntimeError("deliberate")
+
+    if scenario == "rollback":
+        with patch('ansible_base.rbac.triggers.connection') as mock_conn:
+            mock_conn.in_atomic_block = True
+            mock_conn.needs_rollback = True
+            with pytest.raises(RuntimeError, match="deliberate"):
+                _create_and_raise()
+    else:
+        with patch('ansible_base.rbac.triggers._flush_rbac', side_effect=RuntimeError("flush error")):
+            with pytest.raises(RuntimeError, match="deliberate"):
+                _create_and_raise()
+
+
+@pytest.mark.django_db
+def test_defer_rbac_computations_team_creation():
+    """Creating a Team inside defer_rbac_computations processes team IDs in the flush."""
+    from test_app.models import Team
+
+    org = Organization.objects.create(name='defer-team-create-org')
+
+    with patch('ansible_base.rbac.triggers.compute_team_member_roles', wraps=compute_team_member_roles) as mock_ctmr:
+        with defer_rbac_computations():
+            team = Team.objects.create(name='deferred-team', organization=org)
+
+        mock_ctmr.assert_called_once()
+        assert team.id in mock_ctmr.call_args.kwargs['team_ids']
 
 
 class TestEmailPolicySignal:
