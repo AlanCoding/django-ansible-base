@@ -273,7 +273,7 @@ def test_defer_rbac_computations_empty_block(inventory):
     recomputation."""
     from unittest.mock import patch
 
-    with patch('ansible_base.rbac.triggers.compute_object_role_permissions') as mock_compute:
+    with patch('ansible_base.rbac.triggers.recompute_role_evaluations') as mock_compute:
         with defer_rbac_computations():
             pass
 
