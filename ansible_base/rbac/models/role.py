@@ -277,6 +277,36 @@ class RoleDefinition(CommonModel):
             )
         return self.give_or_remove_permission(actor, content_object, giving=False)
 
+    # -- Bulk permission API (delegates to ansible_base.rbac.bulk) --
+
+    @classmethod
+    def bulk_give_permissions(
+        cls,
+        user_permissions: Iterable[tuple['RoleDefinition', models.Model, Union[models.Model, RemoteObject]]] = (),
+        team_permissions: Iterable[tuple['RoleDefinition', models.Model, Union[models.Model, RemoteObject]]] = (),
+    ) -> None:
+        """Bulk-assign multiple roles to multiple users/teams on multiple objects.
+
+        See ansible_base.rbac.bulk.bulk_give_permissions for full documentation.
+        """
+        from ansible_base.rbac.bulk import bulk_give_permissions
+
+        bulk_give_permissions(user_permissions, team_permissions)
+
+    @classmethod
+    def bulk_remove_permissions(
+        cls,
+        user_permissions: Iterable[tuple['RoleDefinition', models.Model, Union[models.Model, RemoteObject]]] = (),
+        team_permissions: Iterable[tuple['RoleDefinition', models.Model, Union[models.Model, RemoteObject]]] = (),
+    ) -> None:
+        """Bulk-remove multiple role assignments.
+
+        See ansible_base.rbac.bulk.bulk_remove_permissions for full documentation.
+        """
+        from ansible_base.rbac.bulk import bulk_remove_permissions
+
+        bulk_remove_permissions(user_permissions, team_permissions)
+
     def get_or_create_object_role(self, kwargs, defaults):
         """Transaction-safe method to create ObjectRole
 
