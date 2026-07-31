@@ -565,7 +565,8 @@ class TestBulkGivePermissions:
                 user_permissions=[
                     (inv_rd, user1, inv1),
                     (inv_rd, user2, inv2),
-                ]
+                ],
+                fire_signals_on_create=False,
             )
             args = mock_audit.call_args
             db_assignments = args[0][0]
