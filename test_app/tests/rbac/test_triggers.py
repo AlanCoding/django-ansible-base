@@ -594,9 +594,7 @@ class TestBulkRemotePermissions:
         from ansible_base.rbac.models import DABPermission
 
         perm = DABPermission.objects.create(codename='foo_foo', content_type=foo_type)
-        return RoleDefinition.objects.create_from_permissions(
-            name='Bulk foo role', permissions=[perm.api_slug], content_type=foo_type
-        )
+        return RoleDefinition.objects.create_from_permissions(name='Bulk foo role', permissions=[perm.api_slug], content_type=foo_type)
 
     def test_bulk_give_remote_permission(self, rando, foo_type, foo_rd):
         from ansible_base.rbac.remote import RemoteObject

@@ -13,7 +13,7 @@ from ansible_base.rbac.remote import RemoteObject
 from ansible_base.rbac.validators import validate_assignment
 
 if TYPE_CHECKING:
-    from ansible_base.rbac.models.role import ObjectRole, RoleDefinition
+    from ansible_base.rbac.models.role import RoleDefinition
 
 
 class ResolvedAssignment(NamedTuple):
@@ -94,12 +94,7 @@ def ensure_object_roles(resolved: list[ResolvedAssignment]) -> ObjectRoleLookup:
         missing = [oid for oid in object_ids if (rd_id, ct_id, oid) not in lookup]
         if missing:
             ObjectRole.objects.bulk_create(
-                [
-                    ObjectRole(
-                        role_definition_id=rd_id, content_type_id=ct_id, object_id=oid, parent_reference=parent_refs.get(oid, '')
-                    )
-                    for oid in missing
-                ],
+                [ObjectRole(role_definition_id=rd_id, content_type_id=ct_id, object_id=oid, parent_reference=parent_refs.get(oid, '')) for oid in missing],
                 ignore_conflicts=True,
             )
             for obj_role in ObjectRole.objects.filter(role_definition_id=rd_id, content_type_id=ct_id, object_id__in=missing):
