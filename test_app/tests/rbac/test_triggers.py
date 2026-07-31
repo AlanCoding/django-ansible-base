@@ -638,6 +638,58 @@ class TestBulkRemovePermissions:
         bulk_remove_permissions(team_permissions=[(inv_rd, team, inv)])
         assert not user.has_obj_perm(inv, 'change')
 
+    def test_team_removal_no_stale_object_roles(self, organization, inv_rd):
+        """Removing a team assignment must not leave RoleEvaluation rows
+        pointing to deleted ObjectRoles when signal handlers cause
+        additional ObjectRole deletions.
+
+        Regression test: bulk_remove_permissions added team ancestor roles to
+        the surviving set, then orphaned.delete() fired signal handlers that
+        deleted some of those ancestor ObjectRoles. The stale in-memory
+        references caused compute_object_role_permissions to create
+        RoleEvaluation rows with dangling FK references.
+        """
+        from django.db.models.signals import post_delete
+
+        from test_app.models import Team
+
+        inv = Inventory.objects.create(name='stale-or-inv', organization=organization)
+        team = Team.objects.create(name='stale-or-team', organization=organization)
+        user = User.objects.create(username='stale-or-user')
+        member_rd = RoleDefinition.objects.managed.team_member
+        member_rd.give_permission(user, team)
+        inv_rd.give_permission(team, inv)
+        assert user.has_obj_perm(inv, 'change')
+
+        # The member ObjectRole is what team_ancestor_roles will add to surviving
+        member_obj_role = ObjectRole.objects.get(
+            role_definition=member_rd,
+            content_type_id=permission_registry.content_type_model.objects.get_for_model(team).pk,
+            object_id=team.pk,
+        )
+
+        # Simulate downstream signal handlers (like AWX's) that delete
+        # additional ObjectRoles during orphaned.delete() cascade.
+        def delete_ancestor_role(sender, instance, **kwargs):
+            if instance.pk == member_obj_role.pk:
+                return
+            ObjectRole.objects.filter(pk=member_obj_role.pk).delete()
+
+        post_delete.connect(delete_ancestor_role, sender=ObjectRole)
+        try:
+            bulk_remove_permissions(team_permissions=[(inv_rd, team, inv)])
+        finally:
+            post_delete.disconnect(delete_ancestor_role, sender=ObjectRole)
+
+        # Every RoleEvaluation must reference an existing ObjectRole
+        orphaned_evals = RoleEvaluation.objects.exclude(
+            role_id__in=ObjectRole.objects.values_list('id', flat=True)
+        )
+        assert not orphaned_evals.exists(), (
+            f"Found {orphaned_evals.count()} RoleEvaluation rows pointing to "
+            f"deleted ObjectRoles: {list(orphaned_evals.values_list('role_id', flat=True))}"
+        )
+
     def test_team_removal_no_cross_product(self, organization, inv_rd):
         """Removing team assignments must not affect unrelated team-object pairs."""
         from test_app.models import Team
