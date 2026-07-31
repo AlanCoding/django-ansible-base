@@ -160,9 +160,10 @@ def create_assignments(
         RoleUserAssignment.objects.bulk_create(user_assignments, ignore_conflicts=True)
         db_users = list(RoleUserAssignment.objects.filter(pair_q))
         all_assignments.extend(db_users)
-        _audit_log_created(db_users, existing_user_pks)
         if fire_signals_on_create:
             _fire_post_save(db_users, existing_user_pks)
+        else:
+            _audit_log_created(db_users, existing_user_pks)
 
     team_assignments = []
     for ra in requested_assignments[num_user_perms:]:
@@ -183,9 +184,10 @@ def create_assignments(
         RoleTeamAssignment.objects.bulk_create(team_assignments, ignore_conflicts=True)
         db_teams = list(RoleTeamAssignment.objects.filter(pair_q))
         all_assignments.extend(db_teams)
-        _audit_log_created(db_teams, existing_team_pks)
         if fire_signals_on_create:
             _fire_post_save(db_teams, existing_team_pks)
+        else:
+            _audit_log_created(db_teams, existing_team_pks)
 
     return all_assignments
 
