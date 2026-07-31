@@ -2,19 +2,20 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Iterable
-from typing import TYPE_CHECKING, NamedTuple, Union
+from typing import NamedTuple, Union
 
 from django.conf import settings
 from django.db import connection, models
 from django.db.models import Q
 
+from ansible_base.lib.utils.models import current_user_or_system_user
+from ansible_base.rbac.caching import compute_object_role_permissions, compute_team_member_roles
 from ansible_base.rbac.models.content_type import DABContentType
+from ansible_base.rbac.models.role import ObjectRole, RoleDefinition, RoleTeamAssignment, RoleUserAssignment
 from ansible_base.rbac.permission_registry import permission_registry
 from ansible_base.rbac.remote import RemoteObject
-from ansible_base.rbac.validators import validate_assignment
-
-if TYPE_CHECKING:
-    from ansible_base.rbac.models.role import RoleDefinition
+from ansible_base.rbac.triggers import _team_ids_from_role_target, team_ancestor_roles
+from ansible_base.rbac.validators import validate_assignment, validate_team_assignment_enabled
 
 
 class ResolvedAssignment(NamedTuple):
@@ -26,8 +27,8 @@ class ResolvedAssignment(NamedTuple):
 
 
 ContentObject = Union[models.Model, RemoteObject]
-PermissionTriple = tuple['RoleDefinition', models.Model, ContentObject]
-ObjectRoleLookup = dict[tuple[int, int, str], 'ObjectRole']
+PermissionTriple = tuple[RoleDefinition, models.Model, ContentObject]
+ObjectRoleLookup = dict[tuple[int, int, str], ObjectRole]
 
 
 def _resolve_content_object(obj: models.Model | RemoteObject) -> tuple[DABContentType, str, str]:
@@ -50,10 +51,8 @@ def resolve_assignments(
     team_permissions: list[PermissionTriple],
 ) -> list[ResolvedAssignment]:
     """Validate permissions and build the resolved assignment list."""
-    from ansible_base.rbac.validators import validate_team_assignment_enabled
-
     validated_pairs: set[tuple[int, int]] = set()
-    resolved: list[ResolvedAssignment] = []
+    requested_assignments: list[ResolvedAssignment] = []
 
     for rd, actor, obj in user_permissions:
         obj_ct, object_id, parent_ref = _resolve_content_object(obj)
@@ -61,7 +60,7 @@ def resolve_assignments(
         if key not in validated_pairs:
             validate_assignment(rd, actor, obj)
             validated_pairs.add(key)
-        resolved.append(ResolvedAssignment(rd, actor, obj_ct, object_id, parent_ref))
+        requested_assignments.append(ResolvedAssignment(rd, actor, obj_ct, object_id, parent_ref))
 
     for rd, actor, obj in team_permissions:
         obj_ct, object_id, parent_ref = _resolve_content_object(obj)
@@ -72,18 +71,16 @@ def resolve_assignments(
             has_org_member = rd.permissions.filter(codename='member_organization').exists()
             validate_team_assignment_enabled(obj_ct, has_team_perm=has_team_perm, has_org_member=has_org_member)
             validated_pairs.add(key)
-        resolved.append(ResolvedAssignment(rd, actor, obj_ct, object_id, parent_ref))
+        requested_assignments.append(ResolvedAssignment(rd, actor, obj_ct, object_id, parent_ref))
 
-    return resolved
+    return requested_assignments
 
 
-def ensure_object_roles(resolved: list[ResolvedAssignment]) -> ObjectRoleLookup:
+def ensure_object_roles(requested_assignments: list[ResolvedAssignment]) -> ObjectRoleLookup:
     """Group by (rd_id, ct_id), create missing ObjectRoles, and return lookup."""
-    from ansible_base.rbac.models.role import ObjectRole
-
     groups: dict[tuple[int, int], set[str]] = defaultdict(set)
     parent_refs: dict[str, str] = {}
-    for ra in resolved:
+    for ra in requested_assignments:
         groups[(ra.role_definition.pk, ra.content_type.id)].add(ra.object_id)
         if ra.parent_reference:
             parent_refs[ra.object_id] = ra.parent_reference
@@ -98,6 +95,8 @@ def ensure_object_roles(resolved: list[ResolvedAssignment]) -> ObjectRoleLookup:
                 [ObjectRole(role_definition_id=rd_id, content_type_id=ct_id, object_id=oid, parent_reference=parent_refs.get(oid, '')) for oid in missing],
                 ignore_conflicts=True,
             )
+            # Re-fetch to get PKs — bulk_create(ignore_conflicts=True) doesn't populate them.
+            # unique_together on (role_definition, content_type, object_id) guarantees one row per oid.
             for obj_role in ObjectRole.objects.filter(role_definition_id=rd_id, content_type_id=ct_id, object_id__in=missing):
                 lookup[(rd_id, ct_id, obj_role.object_id)] = obj_role
 
@@ -125,19 +124,16 @@ def _pair_filter(assignments, actor_field):
 
 
 def create_assignments(
-    resolved: list[ResolvedAssignment],
+    requested_assignments: list[ResolvedAssignment],
     lookup: ObjectRoleLookup,
     num_user_perms: int,
 ) -> list:
     """Bulk-create user and team assignment objects, return all resulting assignments."""
-    from ansible_base.lib.utils.models import current_user_or_system_user
-    from ansible_base.rbac.models.role import RoleTeamAssignment, RoleUserAssignment
-
     created_by = current_user_or_system_user()
     all_assignments = []
 
     user_assignments = []
-    for ra in resolved[:num_user_perms]:
+    for ra in requested_assignments[:num_user_perms]:
         obj_role = lookup[(ra.role_definition.pk, ra.content_type.id, ra.object_id)]
         user_assignments.append(
             RoleUserAssignment(
@@ -158,7 +154,7 @@ def create_assignments(
         _audit_log_created(db_users, existing_user_pks)
 
     team_assignments = []
-    for ra in resolved[num_user_perms:]:
+    for ra in requested_assignments[num_user_perms:]:
         obj_role = lookup[(ra.role_definition.pk, ra.content_type.id, ra.object_id)]
         team_assignments.append(
             RoleTeamAssignment(
@@ -183,9 +179,6 @@ def create_assignments(
 
 def collect_recompute_team_ids(lookup: ObjectRoleLookup) -> set[int]:
     """Identify team IDs that need member-role recomputation."""
-    from ansible_base.rbac.models.role import RoleDefinition
-    from ansible_base.rbac.triggers import _team_ids_from_role_target
-
     rd_has_team_perm: dict[int, bool] = {}
     for rd_id, _ct_id, _oid in lookup:
         if rd_id not in rd_has_team_perm:
@@ -201,20 +194,14 @@ def collect_recompute_team_ids(lookup: ObjectRoleLookup) -> set[int]:
 
 def recompute_after_give(
     lookup: ObjectRoleLookup,
-    resolved: list[ResolvedAssignment],
-    num_user_perms: int,
-    has_team_perms: bool,
+    assignments: list,
 ) -> None:
     """Run recomputation pass after bulk permission assignment."""
-    from ansible_base.rbac.caching import compute_object_role_permissions, compute_team_member_roles
-    from ansible_base.rbac.models.role import ObjectRole
-    from ansible_base.rbac.triggers import team_ancestor_roles
-
     recompute_team_ids = collect_recompute_team_ids(lookup)
     object_roles_to_update: set[ObjectRole] = set(lookup.values())
 
-    if has_team_perms:
-        unique_teams = {ra.actor for ra in resolved[num_user_perms:]}
+    unique_teams = {a.team for a in assignments if isinstance(a, RoleTeamAssignment)}
+    if unique_teams:
         for team in unique_teams:
             object_roles_to_update.update(team_ancestor_roles(team))
         prefetched = ObjectRole.objects.filter(pk__in=[obj_role.pk for obj_role in object_roles_to_update]).prefetch_related('provides_teams__has_roles')
@@ -231,16 +218,14 @@ def recompute_after_give(
 
 
 def delete_assignments(
-    resolved: list[ResolvedAssignment],
+    requested_assignments: list[ResolvedAssignment],
     lookup: ObjectRoleLookup,
     num_user_perms: int,
 ) -> None:
     """Delete assignments using pair-specific Q objects to avoid cross-product deletion."""
-    from ansible_base.rbac.models.role import RoleTeamAssignment, RoleUserAssignment
-
     for assignments, model, actor_field in [
-        (resolved[:num_user_perms], RoleUserAssignment, 'user_id'),
-        (resolved[num_user_perms:], RoleTeamAssignment, 'team_id'),
+        (requested_assignments[:num_user_perms], RoleUserAssignment, 'user_id'),
+        (requested_assignments[num_user_perms:], RoleTeamAssignment, 'team_id'),
     ]:
         if not assignments:
             continue
@@ -258,24 +243,22 @@ def find_object_roles(
 ) -> tuple[ObjectRoleLookup, list[ResolvedAssignment]]:
     """Build ObjectRole lookup from a list of (rd, actor, obj) triples.
 
-    Returns (lookup, resolved) where resolved includes content_type
-    and object_id for each entry.
+    Returns (lookup, requested_assignments) where each entry includes
+    content_type and object_id.
     """
-    from ansible_base.rbac.models.role import ObjectRole
-
     groups: dict[tuple[int, int], set[str]] = defaultdict(set)
-    resolved: list[ResolvedAssignment] = []
+    requested_assignments: list[ResolvedAssignment] = []
     for rd, actor, obj in permissions_list:
         obj_ct, object_id, parent_ref = _resolve_content_object(obj)
         groups[(rd.pk, obj_ct.id)].add(object_id)
-        resolved.append(ResolvedAssignment(rd, actor, obj_ct, object_id, parent_ref))
+        requested_assignments.append(ResolvedAssignment(rd, actor, obj_ct, object_id, parent_ref))
 
     lookup: ObjectRoleLookup = {}
     for (rd_id, ct_id), object_ids in groups.items():
         for obj_role in ObjectRole.objects.filter(role_definition_id=rd_id, content_type_id=ct_id, object_id__in=object_ids):
             lookup[(rd_id, ct_id, obj_role.object_id)] = obj_role
 
-    return lookup, resolved
+    return lookup, requested_assignments
 
 
 def bulk_give_permissions(
@@ -299,10 +282,10 @@ def bulk_give_permissions(
     if not user_permissions and not team_permissions:
         return []
 
-    resolved = resolve_assignments(user_permissions, team_permissions)
-    lookup = ensure_object_roles(resolved)
-    assignments = create_assignments(resolved, lookup, len(user_permissions))
-    recompute_after_give(lookup, resolved, len(user_permissions), bool(team_permissions))
+    requested_assignments = resolve_assignments(user_permissions, team_permissions)
+    lookup = ensure_object_roles(requested_assignments)
+    assignments = create_assignments(requested_assignments, lookup, len(user_permissions))
+    recompute_after_give(lookup, assignments)
     return assignments
 
 
@@ -318,20 +301,17 @@ def bulk_remove_permissions(
     This is the bulk replacement for remove_permission. Deletes assignments,
     cleans up orphaned ObjectRoles, and runs a single recomputation pass.
     """
-    from ansible_base.rbac.caching import compute_object_role_permissions, compute_team_member_roles
-    from ansible_base.rbac.models.role import ObjectRole
-
     user_permissions = list(user_permissions)
     team_permissions = list(team_permissions)
     if not user_permissions and not team_permissions:
         return
 
-    lookup, resolved = find_object_roles(user_permissions + team_permissions)
+    lookup, requested_assignments = find_object_roles(user_permissions + team_permissions)
     if not lookup:
         return
 
     all_object_role_ids = {obj_role.pk for obj_role in lookup.values()}
-    delete_assignments(resolved, lookup, len(user_permissions))
+    delete_assignments(requested_assignments, lookup, len(user_permissions))
 
     orphaned = ObjectRole.objects.filter(id__in=all_object_role_ids, users__isnull=True, teams__isnull=True)
     orphaned_ids = set(orphaned.values_list('id', flat=True))
@@ -340,8 +320,6 @@ def bulk_remove_permissions(
     recompute_team_ids = collect_recompute_team_ids(lookup)
 
     if team_permissions:
-        from ansible_base.rbac.triggers import team_ancestor_roles
-
         for obj_role in lookup.values():
             surviving.update(obj_role.descendent_roles())
         for _rd, team, _obj in team_permissions:
