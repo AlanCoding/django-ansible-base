@@ -303,10 +303,6 @@ def bulk_give_permissions(
     This is the bulk replacement for give_permission. It validates once per
     unique (role_definition, content_type) pair, bulk-creates ObjectRoles and
     assignments, then runs a single recomputation pass.
-
-    Must NOT be called inside defer_rbac_computations -- call it before or
-    after. The two APIs handle different concerns: defer_rbac_computations
-    is for resource create/delete, this is for permission assignment.
     """
     user_permissions = list(user_permissions)
     team_permissions = list(team_permissions)
@@ -331,9 +327,6 @@ def bulk_remove_permissions(
 
     This is the bulk replacement for remove_permission. Deletes assignments,
     cleans up orphaned ObjectRoles, and runs a single recomputation pass.
-
-    Must NOT be called inside defer_rbac_computations -- call it before or
-    after.
     """
     from ansible_base.rbac.caching import compute_object_role_permissions, compute_team_member_roles
     from ansible_base.rbac.models.role import ObjectRole

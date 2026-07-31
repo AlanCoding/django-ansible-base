@@ -13,10 +13,6 @@ Use this context manager when creating or deleting many RBAC-registered objects
 signal handlers that normally fire on every `save()` and `delete()`, then
 flushes all recomputation in a single pass when the context manager exits.
 
-**This is only for non-RBAC resource operations.** It does not handle permission
-assignments — use `RoleDefinition.bulk_give_permissions` /
-`bulk_remove_permissions` for that (provided separately).
-
 ```python
 from ansible_base.rbac.triggers import defer_rbac_computations
 
@@ -31,14 +27,11 @@ with defer_rbac_computations():
 Once resources have been created or deleted inside the context manager (i.e.
 deferred data is pending), the following calls will raise `RuntimeError`:
 
-- **`give_permission` / `remove_permission`** — these run incremental
-  recomputation that would produce incorrect results against stale state.
 - **`has_obj_perm`** — evaluations are stale until the flush completes, so
   permission checks would return wrong answers.
 
-These calls are allowed *before* any mutations occur inside the context manager.
-This means a view can enter `defer_rbac_computations()`, pass its DRF permission
-checks normally, and then perform bulk resource operations.
+`give_permission` / `remove_permission` delegate to the bulk functions and work
+correctly inside this context manager.
 
 #### Constraints
 
@@ -64,24 +57,24 @@ read stale `provides_teams` state when deferring, producing incorrect results.
 |---|---|
 | `with defer_rbac_cache():` around `obj.delete()` | `with defer_rbac_computations():` |
 | `with defer_rbac_cache():` around resource creation | `with defer_rbac_computations():` |
-| `with defer_rbac_cache():` around `give_permission` calls | `RoleDefinition.bulk_give_permissions(...)` (separate API) |
+| `with defer_rbac_cache():` around `give_permission` calls | `bulk_give_permissions(...)` (separate API) |
 
 ## Bulk Permission Assignment
 
 When assigning or removing permissions across many role definitions, users,
 teams, and objects, looping over individual `give_permission` /
 `remove_permission` calls is a performance bottleneck. DAB provides bulk
-classmethods that batch the work into a single recomputation pass.
+functions that batch the work into a single recomputation pass.
 
-### `RoleDefinition.bulk_give_permissions` — permission assignment
+### `bulk_give_permissions` — permission assignment
 
-Use this classmethod when assigning permissions across multiple role definitions,
+Use this function when assigning permissions across multiple role definitions,
 users, teams, and objects. It replaces looping over `give_permission` calls.
 
 ```python
-from ansible_base.rbac.models import RoleDefinition
+from ansible_base.rbac.bulk import bulk_give_permissions
 
-RoleDefinition.bulk_give_permissions(
+bulk_give_permissions(
     user_permissions=[
         (member_rd, user1, team_a),
         (member_rd, user2, team_a),
@@ -109,16 +102,15 @@ recomputation (ancestor roles, `provides_teams`, descendent roles).
 #### Constraints
 
 - Idempotent — calling with the same triples twice will not duplicate assignments.
-- Must NOT be called inside `defer_rbac_computations` after resources have been
-  created or deleted — a `RuntimeError` will be raised. Call it before or after
-  the context manager, not inside it.
 
-### `RoleDefinition.bulk_remove_permissions` — permission removal
+### `bulk_remove_permissions` — permission removal
 
 Same API shape as `bulk_give_permissions`, but for removal:
 
 ```python
-RoleDefinition.bulk_remove_permissions(
+from ansible_base.rbac.bulk import bulk_remove_permissions
+
+bulk_remove_permissions(
     user_permissions=[
         (member_rd, user1, team_a),
         (inv_admin_rd, user3, inv1),
@@ -135,9 +127,5 @@ These APIs handle different concerns:
 
 | Scenario | Use |
 |---|---|
-| Bulk permission assignment/removal | `RoleDefinition.bulk_give_permissions(...)` / `bulk_remove_permissions(...)` |
+| Bulk permission assignment/removal | `bulk_give_permissions(...)` / `bulk_remove_permissions(...)` |
 | Bulk resource creation/deletion (e.g. org delete cascade) | `defer_rbac_computations` context manager |
-
-Do not mix them — `bulk_give_permissions` / `bulk_remove_permissions` must not
-be called inside `defer_rbac_computations` after resources have been created or
-deleted.
