@@ -116,6 +116,14 @@ def _audit_log_created(db_assignments, existing_pks):
             _store_activitystream_entry(None, assignment, 'create')
 
 
+def _pair_filter(assignments, actor_field):
+    """Build a Q filter matching exact (actor, object_role) pairs — no cross-product."""
+    q = Q()
+    for a in assignments:
+        q |= Q(**{actor_field: getattr(a, actor_field), 'object_role': a.object_role})
+    return q
+
+
 def create_assignments(
     resolved: list[ResolvedAssignment],
     lookup: ObjectRoleLookup,
@@ -142,19 +150,12 @@ def create_assignments(
             )
         )
     if user_assignments:
+        pair_q = _pair_filter(user_assignments, 'user')
         existing_user_pks = set(
-            RoleUserAssignment.objects.filter(
-                object_role__in=[a.object_role for a in user_assignments],
-                user__in=[a.user for a in user_assignments],
-            ).values_list('pk', flat=True)
+            RoleUserAssignment.objects.filter(pair_q).values_list('pk', flat=True)
         )
         RoleUserAssignment.objects.bulk_create(user_assignments, ignore_conflicts=True)
-        db_users = list(
-            RoleUserAssignment.objects.filter(
-                object_role__in=[a.object_role for a in user_assignments],
-                user__in=[a.user for a in user_assignments],
-            )
-        )
+        db_users = list(RoleUserAssignment.objects.filter(pair_q))
         all_assignments.extend(db_users)
         _audit_log_created(db_users, existing_user_pks)
 
@@ -172,19 +173,12 @@ def create_assignments(
             )
         )
     if team_assignments:
+        pair_q = _pair_filter(team_assignments, 'team')
         existing_team_pks = set(
-            RoleTeamAssignment.objects.filter(
-                object_role__in=[a.object_role for a in team_assignments],
-                team__in=[a.team for a in team_assignments],
-            ).values_list('pk', flat=True)
+            RoleTeamAssignment.objects.filter(pair_q).values_list('pk', flat=True)
         )
         RoleTeamAssignment.objects.bulk_create(team_assignments, ignore_conflicts=True)
-        db_teams = list(
-            RoleTeamAssignment.objects.filter(
-                object_role__in=[a.object_role for a in team_assignments],
-                team__in=[a.team for a in team_assignments],
-            )
-        )
+        db_teams = list(RoleTeamAssignment.objects.filter(pair_q))
         all_assignments.extend(db_teams)
         _audit_log_created(db_teams, existing_team_pks)
 

@@ -529,6 +529,51 @@ class TestBulkGivePermissions:
     def test_empty_is_noop(self):
         bulk_give_permissions()
 
+    def test_return_no_cross_product(self, organization, inv_rd):
+        """Return value must contain only the requested assignments, not cross-product extras."""
+        inv1 = Inventory.objects.create(name='xp-inv1', organization=organization)
+        inv2 = Inventory.objects.create(name='xp-inv2', organization=organization)
+        user1 = User.objects.create(username='xp-user1')
+        user2 = User.objects.create(username='xp-user2')
+
+        # Pre-existing: user1 has inv2 (not part of the bulk call)
+        inv_rd.give_permission(user1, inv2)
+
+        assignments = bulk_give_permissions(
+            user_permissions=[
+                (inv_rd, user1, inv1),
+                (inv_rd, user2, inv2),
+            ]
+        )
+        returned_pairs = {(a.user_id, a.object_id) for a in assignments}
+        assert returned_pairs == {
+            (user1.pk, str(inv1.pk)),
+            (user2.pk, str(inv2.pk)),
+        }, f"Cross-product leak: got {returned_pairs}"
+
+    def test_audit_no_cross_product(self, organization, inv_rd):
+        """Audit logging must not fire for pre-existing assignments outside the batch."""
+        inv1 = Inventory.objects.create(name='audit-xp-inv1', organization=organization)
+        inv2 = Inventory.objects.create(name='audit-xp-inv2', organization=organization)
+        user1 = User.objects.create(username='audit-xp-user1')
+        user2 = User.objects.create(username='audit-xp-user2')
+
+        inv_rd.give_permission(user1, inv2)
+
+        with patch('ansible_base.rbac.bulk._audit_log_created') as mock_audit:
+            bulk_give_permissions(
+                user_permissions=[
+                    (inv_rd, user1, inv1),
+                    (inv_rd, user2, inv2),
+                ]
+            )
+            args = mock_audit.call_args
+            db_assignments = args[0][0]
+            existing_pks = args[0][1]
+            new_assignments = [a for a in db_assignments if a.pk not in existing_pks]
+            new_pairs = {(a.user_id, a.object_id) for a in new_assignments}
+            assert (user1.pk, str(inv2.pk)) not in new_pairs, "Pre-existing assignment leaked into new set"
+
 
 @pytest.mark.django_db
 class TestBulkRemovePermissions:
@@ -579,6 +624,48 @@ class TestBulkRemovePermissions:
 
     def test_empty_is_noop(self):
         bulk_remove_permissions()
+
+    def test_team_removal_revokes_inherited_permissions(self, organization, team, inv_rd):
+        """Removing a team assignment must revoke permissions inherited through the team."""
+        inv = Inventory.objects.create(name='team-rm-inv', organization=organization)
+        user = User.objects.create(username='team-rm-user')
+        member_rd = RoleDefinition.objects.managed.team_member
+        member_rd.give_permission(user, team)
+        inv_rd.give_permission(team, inv)
+        assert user.has_obj_perm(inv, 'change')
+
+        bulk_remove_permissions(team_permissions=[(inv_rd, team, inv)])
+        assert not user.has_obj_perm(inv, 'change')
+
+    def test_team_removal_no_cross_product(self, organization, inv_rd):
+        """Removing team assignments must not affect unrelated team-object pairs."""
+        from test_app.models import Team
+
+        inv1 = Inventory.objects.create(name='team-xp-inv1', organization=organization)
+        inv2 = Inventory.objects.create(name='team-xp-inv2', organization=organization)
+        team1 = Team.objects.create(name='team-xp-t1', organization=organization)
+        team2 = Team.objects.create(name='team-xp-t2', organization=organization)
+        member_rd = RoleDefinition.objects.managed.team_member
+        user = User.objects.create(username='team-xp-user')
+        member_rd.give_permission(user, team1)
+        member_rd.give_permission(user, team2)
+
+        bulk_give_permissions(
+            team_permissions=[
+                (inv_rd, team1, inv1),
+                (inv_rd, team1, inv2),
+                (inv_rd, team2, inv1),
+                (inv_rd, team2, inv2),
+            ]
+        )
+        assert user.has_obj_perm(inv1, 'change')
+        assert user.has_obj_perm(inv2, 'change')
+
+        bulk_remove_permissions(team_permissions=[(inv_rd, team1, inv1)])
+        assert RoleTeamAssignment.objects.filter(team=team1, role_definition=inv_rd, object_id=inv2.pk).exists()
+        assert RoleTeamAssignment.objects.filter(team=team2, role_definition=inv_rd, object_id=inv1.pk).exists()
+        assert RoleTeamAssignment.objects.filter(team=team2, role_definition=inv_rd, object_id=inv2.pk).exists()
+        assert user.has_obj_perm(inv2, 'change')
 
 
 @pytest.mark.django_db
