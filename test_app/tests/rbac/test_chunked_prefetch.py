@@ -1,5 +1,7 @@
 """Tests for EvaluationsPrefetch, EvaluationUpdates, and the batched recompute path."""
 
+from unittest import mock
+
 import pytest
 from django.test.utils import CaptureQueriesContext
 
@@ -7,7 +9,7 @@ from ansible_base.rbac import permission_registry
 from ansible_base.rbac.caching import EvaluationUpdates, recompute_all_role_evaluations, recompute_role_evaluations
 from ansible_base.rbac.models import ObjectRole, RoleDefinition, RoleEvaluation, RoleEvaluationUUID
 from ansible_base.rbac.prefetch import EvaluationsPrefetch, TypesPrefetch
-from test_app.models import Inventory, Organization, Team
+from test_app.models import Inventory, Organization, Team, UUIDModel
 
 
 @pytest.fixture
@@ -299,3 +301,138 @@ class TestComputeObjectRolePermissionsQueryReduction:
 
         assert old_evals == new_evals, "Both approaches must produce the same evaluations"
         assert len(new_ctx) < len(old_ctx), f"Batched prefetch ({len(new_ctx)} queries) should use fewer queries " f"than iterator ({len(old_ctx)} queries)"
+
+
+class TestUUIDEvaluationPath:
+    @pytest.fixture
+    def uuid_rd(self):
+        return RoleDefinition.objects.create_from_permissions(
+            permissions=['view_uuidmodel', 'change_uuidmodel'],
+            name='test-uuid-rd',
+            content_type=permission_registry.content_type_model.objects.get_for_model(UUIDModel),
+        )
+
+    @pytest.fixture
+    def org_uuid_rd(self):
+        return RoleDefinition.objects.create_from_permissions(
+            permissions=['view_organization', 'view_uuidmodel', 'change_uuidmodel'],
+            name='test-org-uuid-rd',
+            content_type=permission_registry.content_type_model.objects.get_for_model(Organization),
+        )
+
+    @pytest.mark.django_db
+    def test_uuid_object_role_prefetch(self, uuid_rd, rando):
+        """EvaluationsPrefetch correctly loads UUID-keyed evaluations for a direct assignment."""
+        org = Organization.objects.create(name='uuid_test_org')
+        uuid_obj = UUIDModel.objects.create(organization=org)
+        assignment = uuid_rd.give_permission(rando, uuid_obj)
+
+        role = assignment.object_role
+        ep = EvaluationsPrefetch.from_roles([role])
+
+        uuid_partials = ep.get_partials_uuid(role.pk)
+        assert len(uuid_partials) > 0, "UUID evaluations should be loaded"
+        for codename, ct_id, obj_id in uuid_partials:
+            assert obj_id == uuid_obj.pk
+
+    @pytest.mark.django_db
+    def test_uuid_recompute_round_trip(self, uuid_rd, rando):
+        """Deleting and recomputing UUID evaluations produces identical results."""
+        org = Organization.objects.create(name='uuid_rt_org')
+        uuid_obj = UUIDModel.objects.create(organization=org)
+        uuid_rd.give_permission(rando, uuid_obj)
+
+        original = set(RoleEvaluationUUID.objects.values_list('codename', 'content_type_id', 'object_id', 'role_id'))
+        assert len(original) > 0
+
+        RoleEvaluationUUID.objects.all().delete()
+        recompute_all_role_evaluations()
+
+        recomputed = set(RoleEvaluationUUID.objects.values_list('codename', 'content_type_id', 'object_id', 'role_id'))
+        assert recomputed == original
+
+    @pytest.mark.django_db
+    def test_org_scoped_uuid_evaluations(self, org_uuid_rd, rando):
+        """Org-scoped role with UUID child permissions produces both int and UUID evaluations."""
+        org = Organization.objects.create(name='uuid_org_scope')
+        uuid_obj = UUIDModel.objects.create(organization=org)
+        org_uuid_rd.give_permission(rando, org)
+
+        role = ObjectRole.objects.get(object_id=str(org.pk), role_definition=org_uuid_rd)
+        ep = EvaluationsPrefetch.from_roles([role])
+
+        int_partials = ep.get_partials(role.pk)
+        uuid_partials = ep.get_partials_uuid(role.pk)
+        assert len(int_partials) > 0, "Should have int evaluations for Organization"
+        assert len(uuid_partials) > 0, "Should have UUID evaluations for UUIDModel child"
+
+        uuid_obj_ids = {obj_id for _, _, obj_id in uuid_partials}
+        assert uuid_obj.pk in uuid_obj_ids
+
+    @pytest.mark.django_db
+    def test_uuid_prefetch_matches_fallback(self, uuid_rd, rando):
+        """Prefetch and fallback paths produce identical results for UUID models."""
+        org = Organization.objects.create(name='uuid_match_org')
+        uuid_obj = UUIDModel.objects.create(organization=org)
+        assignment = uuid_rd.give_permission(rando, uuid_obj)
+
+        types_prefetch = TypesPrefetch.from_db()
+        role = assignment.object_role
+
+        to_delete_fallback, to_add_fallback = role.needed_cache_updates(types_prefetch=types_prefetch)
+
+        ep = EvaluationsPrefetch.from_roles([role])
+        to_delete_ep, to_add_ep = role.needed_cache_updates(types_prefetch=types_prefetch, evaluations_prefetch=ep)
+
+        assert to_delete_fallback == to_delete_ep
+        assert set((e.codename, e.content_type_id, e.object_id) for e in to_add_fallback) == set(
+            (e.codename, e.content_type_id, e.object_id) for e in to_add_ep
+        )
+
+
+class TestChunkBoundary:
+    @pytest.mark.django_db
+    def test_chunk_boundary_no_roles_skipped_or_duplicated(self, org_inv_rd, rando):
+        """Keyset pagination at chunk boundaries doesn't skip or double-process roles."""
+        orgs = [Organization.objects.create(name=f'chunk_org_{i}') for i in range(5)]
+        for org in orgs:
+            Inventory.objects.create(name=f'chunk_inv_{org.name}', organization=org)
+            org_inv_rd.give_permission(rando, org)
+
+        original_int = set(RoleEvaluation.objects.values_list('codename', 'content_type_id', 'object_id', 'role_id'))
+        original_uuid = set(RoleEvaluationUUID.objects.values_list('codename', 'content_type_id', 'object_id', 'role_id'))
+        n_roles = ObjectRole.objects.count()
+        assert n_roles >= 5
+
+        RoleEvaluation.objects.all().delete()
+        RoleEvaluationUUID.objects.all().delete()
+
+        with mock.patch('ansible_base.rbac.caching.RECOMPUTE_CHUNK_SIZE', 2):
+            with mock.patch.object(EvaluationsPrefetch, 'from_roles', wraps=EvaluationsPrefetch.from_roles) as mock_from_roles:
+                recompute_all_role_evaluations()
+
+        assert mock_from_roles.call_count >= 3, f"Expected >=3 chunks for {n_roles} roles at chunk_size=2, got {mock_from_roles.call_count}"
+
+        recomputed_int = set(RoleEvaluation.objects.values_list('codename', 'content_type_id', 'object_id', 'role_id'))
+        recomputed_uuid = set(RoleEvaluationUUID.objects.values_list('codename', 'content_type_id', 'object_id', 'role_id'))
+        assert recomputed_int == original_int, "Chunk boundary must not skip or duplicate int evaluations"
+        assert recomputed_uuid == original_uuid, "Chunk boundary must not skip or duplicate UUID evaluations"
+
+    @pytest.mark.django_db
+    def test_chunk_size_one_still_correct(self, org_inv_rd, rando):
+        """Degenerate chunk size of 1 (every role in its own chunk) still produces correct results."""
+        org = Organization.objects.create(name='chunk1_org')
+        Inventory.objects.create(name='chunk1_inv', organization=org)
+        org_inv_rd.give_permission(rando, org)
+
+        original = set(RoleEvaluation.objects.values_list('codename', 'content_type_id', 'object_id', 'role_id'))
+        assert len(original) > 0
+
+        RoleEvaluation.objects.all().delete()
+        RoleEvaluationUUID.objects.all().delete()
+
+        with mock.patch('ansible_base.rbac.caching.RECOMPUTE_CHUNK_SIZE', 1):
+            recompute_all_role_evaluations()
+
+        recomputed = set(RoleEvaluation.objects.values_list('codename', 'content_type_id', 'object_id', 'role_id'))
+        assert recomputed == original

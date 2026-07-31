@@ -16,6 +16,8 @@ from ansible_base.rbac.prefetch import EvaluationsPrefetch, TypesPrefetch
 
 logger = logging.getLogger('ansible_base.rbac.caching')
 
+RECOMPUTE_CHUNK_SIZE = 1000
+
 
 """
 This module has callable methods to fill in things marked with COMPUTED DATA in the models
@@ -428,7 +430,7 @@ def recompute_all_role_evaluations() -> None:
 
     last_pk = 0
     while True:
-        chunk = list(ObjectRole.objects.order_by('pk').filter(pk__gt=last_pk)[:1000])
+        chunk = list(ObjectRole.objects.order_by('pk').filter(pk__gt=last_pk)[:RECOMPUTE_CHUNK_SIZE])
         if not chunk:
             break
         last_pk = chunk[-1].pk
