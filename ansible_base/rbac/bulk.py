@@ -339,12 +339,18 @@ def bulk_remove_permissions(
     recompute_team_ids = collect_recompute_team_ids(lookup)
 
     if team_permissions:
-        for obj_role in lookup.values():
+        for obj_role in list(surviving):
             surviving.update(obj_role.descendent_roles())
         for _rd, team, _obj in team_permissions:
             surviving.update(team_ancestor_roles(team))
 
     orphaned.delete()
+
+    # Re-filter: orphaned.delete() cascades and signal handlers may delete
+    # additional ObjectRoles, leaving stale in-memory references in surviving.
+    if surviving:
+        existing_ids = set(ObjectRole.objects.filter(pk__in=[o.pk for o in surviving]).values_list('pk', flat=True))
+        surviving = {o for o in surviving if o.pk in existing_ids}
 
     if recompute_team_ids:
         compute_team_member_roles(team_ids=recompute_team_ids)
