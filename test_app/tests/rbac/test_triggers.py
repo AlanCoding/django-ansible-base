@@ -5,6 +5,7 @@ from django.apps import apps
 from django.test.utils import override_settings
 from rest_framework.exceptions import ValidationError
 
+from ansible_base.rbac.bulk import bulk_give_permissions, bulk_remove_permissions
 from ansible_base.rbac.caching import compute_team_member_roles
 from ansible_base.rbac.models import ObjectRole, RoleDefinition, RoleEvaluation, RoleTeamAssignment, RoleUserAssignment
 from ansible_base.rbac.permission_registry import permission_registry
@@ -281,12 +282,12 @@ def test_defer_rbac_computations_empty_block(inventory):
 
 
 @pytest.mark.django_db
-def test_defer_rbac_computations_give_permission_raises_after_stash(organization, rando, org_inv_rd):
-    """give_permission raises after resources have been created/deleted inside the CM."""
+def test_defer_rbac_computations_give_permission_succeeds_after_stash(organization, rando, org_inv_rd):
+    """give_permission delegates to bulk and works even after resources are stashed."""
     with defer_rbac_computations():
         Inventory.objects.create(name='stash-trigger', organization=organization)
-        with pytest.raises(RuntimeError, match="give_permission cannot be called"):
-            org_inv_rd.give_permission(rando, organization)
+        org_inv_rd.give_permission(rando, organization)
+    assert rando.has_obj_perm(organization, 'view')
 
 
 @pytest.mark.django_db
@@ -298,13 +299,13 @@ def test_defer_rbac_computations_give_permission_ok_before_stash(organization, r
 
 
 @pytest.mark.django_db
-def test_defer_rbac_computations_remove_permission_raises_after_stash(organization, rando, org_inv_rd):
-    """remove_permission raises after resources have been created/deleted inside the CM."""
+def test_defer_rbac_computations_remove_permission_succeeds_after_stash(organization, rando, org_inv_rd):
+    """remove_permission delegates to bulk and works even after resources are stashed."""
     org_inv_rd.give_permission(rando, organization)
     with defer_rbac_computations():
         Inventory.objects.create(name='stash-trigger', organization=organization)
-        with pytest.raises(RuntimeError, match="remove_permission cannot be called"):
-            org_inv_rd.remove_permission(rando, organization)
+        org_inv_rd.remove_permission(rando, organization)
+    assert not rando.has_obj_perm(organization, 'view')
 
 
 @pytest.mark.django_db
@@ -468,11 +469,11 @@ def test_defer_rbac_computations_team_creation():
 
 @pytest.mark.django_db
 class TestBulkGivePermissions:
-    """Tests for the classmethod bulk_give_permissions."""
+    """Tests for bulk_give_permissions."""
 
     def test_multiple_users_single_rd(self, organization, rando, org_inv_rd):
         second_user = User.objects.create(username='second-user')
-        RoleDefinition.bulk_give_permissions(
+        bulk_give_permissions(
             user_permissions=[
                 (org_inv_rd, rando, organization),
                 (org_inv_rd, second_user, organization),
@@ -485,7 +486,7 @@ class TestBulkGivePermissions:
         inv1 = Inventory.objects.create(name='bulk-inv1', organization=organization)
         inv2 = Inventory.objects.create(name='bulk-inv2', organization=organization)
         user = User.objects.create(username='bulk-user')
-        RoleDefinition.bulk_give_permissions(user_permissions=[(inv_rd, user, inv1), (inv_rd, user, inv2)])
+        bulk_give_permissions(user_permissions=[(inv_rd, user, inv1), (inv_rd, user, inv2)])
         assert user.has_obj_perm(inv1, 'change')
         assert user.has_obj_perm(inv2, 'change')
 
@@ -494,7 +495,7 @@ class TestBulkGivePermissions:
 
         member_rd = RoleDefinition.objects.managed.team_member
         team = Team.objects.create(name='bulk-team', organization=organization)
-        RoleDefinition.bulk_give_permissions(
+        bulk_give_permissions(
             user_permissions=[
                 (org_inv_rd, rando, organization),
                 (member_rd, rando, team),
@@ -507,7 +508,7 @@ class TestBulkGivePermissions:
         inv = Inventory.objects.create(name='multi-rd-inv', organization=organization)
         user = User.objects.create(username='multi-rd-user')
         member_rd = RoleDefinition.objects.managed.team_member
-        RoleDefinition.bulk_give_permissions(
+        bulk_give_permissions(
             user_permissions=[(member_rd, user, team)],
             team_permissions=[(inv_rd, team, inv)],
         )
@@ -516,17 +517,17 @@ class TestBulkGivePermissions:
 
     def test_evaluations_correct(self, organization, rando, org_inv_rd):
         inv = Inventory.objects.create(name='eval-inv', organization=organization)
-        RoleDefinition.bulk_give_permissions(user_permissions=[(org_inv_rd, rando, organization)])
+        bulk_give_permissions(user_permissions=[(org_inv_rd, rando, organization)])
         assert rando.has_obj_perm(inv, 'change')
         assert RoleEvaluation.objects.filter(codename='change_inventory', object_id=inv.pk).exists()
 
     def test_idempotent(self, organization, rando, org_inv_rd):
-        RoleDefinition.bulk_give_permissions(user_permissions=[(org_inv_rd, rando, organization)])
-        RoleDefinition.bulk_give_permissions(user_permissions=[(org_inv_rd, rando, organization)])
+        bulk_give_permissions(user_permissions=[(org_inv_rd, rando, organization)])
+        bulk_give_permissions(user_permissions=[(org_inv_rd, rando, organization)])
         assert RoleUserAssignment.objects.filter(user=rando, role_definition=org_inv_rd).count() == 1
 
     def test_empty_is_noop(self):
-        RoleDefinition.bulk_give_permissions()
+        bulk_give_permissions()
 
 
 @pytest.mark.django_db
@@ -536,25 +537,25 @@ class TestBulkRemovePermissions:
     def test_removes_assignments(self, organization, rando, org_inv_rd):
         org_inv_rd.give_permission(rando, organization)
         assert rando.has_obj_perm(organization, 'view')
-        RoleDefinition.bulk_remove_permissions(user_permissions=[(org_inv_rd, rando, organization)])
+        bulk_remove_permissions(user_permissions=[(org_inv_rd, rando, organization)])
         assert not rando.has_obj_perm(organization, 'view')
 
     def test_orphans_object_role(self, organization, rando, org_inv_rd):
         org_inv_rd.give_permission(rando, organization)
         or_count_before = ObjectRole.objects.count()
-        RoleDefinition.bulk_remove_permissions(user_permissions=[(org_inv_rd, rando, organization)])
+        bulk_remove_permissions(user_permissions=[(org_inv_rd, rando, organization)])
         assert ObjectRole.objects.count() < or_count_before
 
     def test_keeps_other_users(self, organization, org_inv_rd):
         user1 = User.objects.create(username='keep-user1')
         user2 = User.objects.create(username='keep-user2')
-        RoleDefinition.bulk_give_permissions(
+        bulk_give_permissions(
             user_permissions=[
                 (org_inv_rd, user1, organization),
                 (org_inv_rd, user2, organization),
             ]
         )
-        RoleDefinition.bulk_remove_permissions(user_permissions=[(org_inv_rd, user1, organization)])
+        bulk_remove_permissions(user_permissions=[(org_inv_rd, user1, organization)])
         assert not user1.has_obj_perm(organization, 'view')
         assert user2.has_obj_perm(organization, 'view')
 
@@ -567,7 +568,7 @@ class TestBulkRemovePermissions:
         member_rd.give_permission(rando, team)
         assert rando.has_obj_perm(organization, 'view')
         assert rando.has_obj_perm(team, 'member_team')
-        RoleDefinition.bulk_remove_permissions(
+        bulk_remove_permissions(
             user_permissions=[
                 (org_inv_rd, rando, organization),
                 (member_rd, rando, team),
@@ -577,7 +578,7 @@ class TestBulkRemovePermissions:
         assert not rando.has_obj_perm(team, 'member_team')
 
     def test_empty_is_noop(self):
-        RoleDefinition.bulk_remove_permissions()
+        bulk_remove_permissions()
 
 
 @pytest.mark.django_db
@@ -600,14 +601,14 @@ class TestBulkRemotePermissions:
         from ansible_base.rbac.remote import RemoteObject
 
         a_foo = RemoteObject(content_type=foo_type, object_id=42)
-        RoleDefinition.bulk_give_permissions(user_permissions=[(foo_rd, rando, a_foo)])
+        bulk_give_permissions(user_permissions=[(foo_rd, rando, a_foo)])
         assert rando.has_obj_perm(a_foo, 'foo')
 
     def test_bulk_give_remote_with_parent_reference(self, rando, foo_type, foo_rd, organization):
         from ansible_base.rbac.remote import RemoteObject
 
         a_foo = RemoteObject(content_type=foo_type, object_id=42, parent_reference=organization.pk)
-        RoleDefinition.bulk_give_permissions(user_permissions=[(foo_rd, rando, a_foo)])
+        bulk_give_permissions(user_permissions=[(foo_rd, rando, a_foo)])
         obj_role = ObjectRole.objects.get(role_definition=foo_rd, object_id='42')
         assert str(obj_role.parent_reference) == str(organization.pk)
 
@@ -617,7 +618,7 @@ class TestBulkRemotePermissions:
         a_foo = RemoteObject(content_type=foo_type, object_id=42)
         foo_rd.give_permission(rando, a_foo)
         assert rando.has_obj_perm(a_foo, 'foo')
-        RoleDefinition.bulk_remove_permissions(user_permissions=[(foo_rd, rando, a_foo)])
+        bulk_remove_permissions(user_permissions=[(foo_rd, rando, a_foo)])
         assert not rando.has_obj_perm(a_foo, 'foo')
         assert not ObjectRole.objects.filter(role_definition=foo_rd, object_id='42').exists()
 
@@ -625,7 +626,7 @@ class TestBulkRemotePermissions:
         from ansible_base.rbac.remote import RemoteObject
 
         a_foo = RemoteObject(content_type=foo_type, object_id=42)
-        RoleDefinition.bulk_give_permissions(
+        bulk_give_permissions(
             user_permissions=[
                 (foo_rd, rando, a_foo),
                 (org_inv_rd, rando, organization),
@@ -773,3 +774,50 @@ class TestEmailPolicySignal:
         post_init_uids = {r[0][0] for r in post_init.receivers}
         assert 'permission-registry-enforce-email' in pre_save_uids
         assert 'permission-registry-stash-email' in post_init_uids
+
+
+@pytest.mark.django_db
+class TestPermissionQueryCount:
+    """Profile query counts for give_permission / remove_permission."""
+
+    @override_settings(DEBUG=True)
+    def test_give_permission_user_query_count(self, rando, organization, org_admin_rd):
+        from django.db import connection
+
+        connection.queries_log.clear()
+        before = len(connection.queries)
+        org_admin_rd.give_permission(rando, organization)
+        count = len(connection.queries) - before
+        print(f"\ngive_permission (user+org): {count} queries")
+
+    @override_settings(DEBUG=True)
+    def test_remove_permission_user_query_count(self, rando, organization, org_admin_rd):
+        from django.db import connection
+
+        org_admin_rd.give_permission(rando, organization)
+        connection.queries_log.clear()
+        before = len(connection.queries)
+        org_admin_rd.remove_permission(rando, organization)
+        count = len(connection.queries) - before
+        print(f"\nremove_permission (user+org): {count} queries")
+
+    @override_settings(DEBUG=True)
+    def test_give_permission_team_query_count(self, team, inventory, inv_rd):
+        from django.db import connection
+
+        connection.queries_log.clear()
+        before = len(connection.queries)
+        inv_rd.give_permission(team, inventory)
+        count = len(connection.queries) - before
+        print(f"\ngive_permission (team+inv): {count} queries")
+
+    @override_settings(DEBUG=True)
+    def test_remove_permission_team_query_count(self, team, inventory, inv_rd):
+        from django.db import connection
+
+        inv_rd.give_permission(team, inventory)
+        connection.queries_log.clear()
+        before = len(connection.queries)
+        inv_rd.remove_permission(team, inventory)
+        count = len(connection.queries) - before
+        print(f"\nremove_permission (team+inv): {count} queries")

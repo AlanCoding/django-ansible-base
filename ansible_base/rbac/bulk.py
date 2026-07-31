@@ -4,6 +4,7 @@ from collections import defaultdict
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, NamedTuple, Union
 
+from django.conf import settings
 from django.db import connection, models
 from django.db.models import Q
 
@@ -103,31 +104,80 @@ def ensure_object_roles(resolved: list[ResolvedAssignment]) -> ObjectRoleLookup:
     return lookup
 
 
+def _audit_log_new_assignments(model, assignments, existing_pks, actor_field):
+    """Emit audit logs for newly-created assignments (not idempotent re-assignments)."""
+    if not assignments:
+        return
+    if 'ansible_base.activitystream' not in settings.INSTALLED_APPS:
+        return
+
+    from ansible_base.activitystream.signals import _store_activitystream_entry
+
+    new_assignments = model.objects.filter(
+        object_role__in=[a.object_role for a in assignments],
+        **{f'{actor_field}__in': [getattr(a, actor_field) for a in assignments]},
+    ).exclude(pk__in=existing_pks)
+    for assignment in new_assignments:
+        _store_activitystream_entry(None, assignment, 'create')
+
+
 def create_assignments(
     resolved: list[ResolvedAssignment],
     lookup: ObjectRoleLookup,
     num_user_perms: int,
 ) -> None:
     """Bulk-create user and team assignment objects."""
+    from ansible_base.lib.utils.models import current_user_or_system_user
     from ansible_base.rbac.models.role import RoleTeamAssignment, RoleUserAssignment
+
+    created_by = current_user_or_system_user()
 
     user_assignments = []
     for ra in resolved[:num_user_perms]:
         obj_role = lookup[(ra.role_definition.pk, ra.content_type.id, ra.object_id)]
         user_assignments.append(
-            RoleUserAssignment(user=ra.actor, object_role=obj_role, role_definition=ra.role_definition, content_type=ra.content_type, object_id=ra.object_id)
+            RoleUserAssignment(
+                user=ra.actor,
+                object_role=obj_role,
+                role_definition=ra.role_definition,
+                content_type=ra.content_type,
+                object_id=ra.object_id,
+                created_by=created_by,
+            )
         )
     if user_assignments:
+        existing_user_pks = set(
+            RoleUserAssignment.objects.filter(
+                object_role__in=[a.object_role for a in user_assignments],
+                user__in=[a.user for a in user_assignments],
+            ).values_list('pk', flat=True)
+        )
         RoleUserAssignment.objects.bulk_create(user_assignments, ignore_conflicts=True)
 
     team_assignments = []
     for ra in resolved[num_user_perms:]:
         obj_role = lookup[(ra.role_definition.pk, ra.content_type.id, ra.object_id)]
         team_assignments.append(
-            RoleTeamAssignment(team=ra.actor, object_role=obj_role, role_definition=ra.role_definition, content_type=ra.content_type, object_id=ra.object_id)
+            RoleTeamAssignment(
+                team=ra.actor,
+                object_role=obj_role,
+                role_definition=ra.role_definition,
+                content_type=ra.content_type,
+                object_id=ra.object_id,
+                created_by=created_by,
+            )
         )
     if team_assignments:
+        existing_team_pks = set(
+            RoleTeamAssignment.objects.filter(
+                object_role__in=[a.object_role for a in team_assignments],
+                team__in=[a.team for a in team_assignments],
+            ).values_list('pk', flat=True)
+        )
         RoleTeamAssignment.objects.bulk_create(team_assignments, ignore_conflicts=True)
+
+    _audit_log_new_assignments(RoleUserAssignment, user_assignments, existing_user_pks if user_assignments else set(), 'user')
+    _audit_log_new_assignments(RoleTeamAssignment, team_assignments, existing_team_pks if team_assignments else set(), 'team')
 
 
 def collect_recompute_team_ids(lookup: ObjectRoleLookup) -> set[int]:
@@ -230,7 +280,7 @@ def find_object_roles(
 def bulk_give_permissions(
     user_permissions: Iterable[PermissionTriple] = (),
     team_permissions: Iterable[PermissionTriple] = (),
-) -> None:
+) -> ObjectRoleLookup:
     """Bulk-assign multiple roles to multiple users/teams on multiple objects.
 
     user_permissions: iterable of (role_definition, user, content_object) triples
@@ -247,12 +297,13 @@ def bulk_give_permissions(
     user_permissions = list(user_permissions)
     team_permissions = list(team_permissions)
     if not user_permissions and not team_permissions:
-        return
+        return {}
 
     resolved = resolve_assignments(user_permissions, team_permissions)
     lookup = ensure_object_roles(resolved)
     create_assignments(resolved, lookup, len(user_permissions))
     recompute_after_give(lookup, resolved, len(user_permissions), bool(team_permissions))
+    return lookup
 
 
 def bulk_remove_permissions(
@@ -292,8 +343,12 @@ def bulk_remove_permissions(
     recompute_team_ids = collect_recompute_team_ids(lookup)
 
     if team_permissions:
+        from ansible_base.rbac.triggers import team_ancestor_roles
+
         for obj_role in lookup.values():
             surviving.update(obj_role.descendent_roles())
+        for _rd, team, _obj in team_permissions:
+            surviving.update(team_ancestor_roles(team))
 
     orphaned.delete()
 
