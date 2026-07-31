@@ -258,21 +258,15 @@ class RoleDefinition(CommonModel):
         return assignment
 
     def give_permission(self, actor, content_object):
-        from ansible_base.rbac.bulk import _resolve_content_object, bulk_give_permissions
+        from ansible_base.rbac.bulk import bulk_give_permissions
 
         is_user = actor._meta.model_name == 'user'
         perm = [(self, actor, content_object)]
-        lookup = bulk_give_permissions(
+        assignments = bulk_give_permissions(
             user_permissions=perm if is_user else (),
             team_permissions=() if is_user else perm,
         )
-
-        ct, oid, _ = _resolve_content_object(content_object)
-        obj_role = lookup[(self.pk, ct.id, oid)]
-
-        model = RoleUserAssignment if is_user else RoleTeamAssignment
-        actor_field = 'user' if is_user else 'team'
-        return model.objects.get(**{actor_field: actor}, object_role=obj_role)
+        return assignments[0]
 
     def remove_permission(self, actor, content_object):
         from ansible_base.rbac.bulk import bulk_remove_permissions
