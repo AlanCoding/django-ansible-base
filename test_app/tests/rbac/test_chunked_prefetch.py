@@ -7,7 +7,6 @@ from ansible_base.rbac import permission_registry
 from ansible_base.rbac.caching import EvaluationUpdates, recompute_all_role_evaluations, recompute_role_evaluations
 from ansible_base.rbac.models import ObjectRole, RoleDefinition, RoleEvaluation, RoleEvaluationUUID
 from ansible_base.rbac.prefetch import EvaluationsPrefetch, TypesPrefetch
-from ansible_base.rbac.triggers import defer_rbac_cache
 from test_app.models import Inventory, Organization, Team
 
 
@@ -277,9 +276,8 @@ class TestComputeObjectRolePermissionsQueryReduction:
             for j in range(3):
                 Inventory.objects.create(name=f'qr_inv_{org.name}_{j}', organization=org)
 
-        with defer_rbac_cache():
-            for org in orgs:
-                org_inv_rd.give_permission(rando, org)
+        for org in orgs:
+            org_inv_rd.give_permission(rando, org)
 
         n_roles = ObjectRole.objects.count()
         assert n_roles >= 5
