@@ -7,6 +7,7 @@ from typing import NamedTuple, Union
 from django.conf import settings
 from django.db import connection, models
 from django.db.models import Q
+from django.db.models.signals import post_save
 
 from ansible_base.lib.utils.models import current_user_or_system_user
 from ansible_base.rbac.caching import compute_object_role_permissions, compute_team_member_roles
@@ -123,10 +124,18 @@ def _pair_filter(assignments, actor_field):
     return q
 
 
+def _fire_post_save(db_assignments, existing_pks):
+    """Fire post_save signals for newly-created assignments (skipped by bulk_create)."""
+    for assignment in db_assignments:
+        if assignment.pk not in existing_pks:
+            post_save.send(sender=type(assignment), instance=assignment, created=True, raw=False, using='default', update_fields=None)
+
+
 def create_assignments(
     requested_assignments: list[ResolvedAssignment],
     lookup: ObjectRoleLookup,
     num_user_perms: int,
+    fire_signals_on_create: bool = True,
 ) -> list:
     """Bulk-create user and team assignment objects, return all resulting assignments."""
     created_by = current_user_or_system_user()
@@ -152,6 +161,8 @@ def create_assignments(
         db_users = list(RoleUserAssignment.objects.filter(pair_q))
         all_assignments.extend(db_users)
         _audit_log_created(db_users, existing_user_pks)
+        if fire_signals_on_create:
+            _fire_post_save(db_users, existing_user_pks)
 
     team_assignments = []
     for ra in requested_assignments[num_user_perms:]:
@@ -173,6 +184,8 @@ def create_assignments(
         db_teams = list(RoleTeamAssignment.objects.filter(pair_q))
         all_assignments.extend(db_teams)
         _audit_log_created(db_teams, existing_team_pks)
+        if fire_signals_on_create:
+            _fire_post_save(db_teams, existing_team_pks)
 
     return all_assignments
 
@@ -264,11 +277,15 @@ def find_object_roles(
 def bulk_give_permissions(
     user_permissions: Iterable[PermissionTriple] = (),
     team_permissions: Iterable[PermissionTriple] = (),
+    fire_signals_on_create: bool = True,
 ) -> list:
     """Bulk-assign multiple roles to multiple users/teams on multiple objects.
 
     user_permissions: iterable of (role_definition, user, content_object) triples
     team_permissions: iterable of (role_definition, team, content_object) triples
+    fire_signals_on_create: if True (default), fire post_save for each new
+        assignment. Set to False when the caller handles downstream sync
+        (e.g. JWT claims).
 
     Returns the list of all resulting assignment objects (both new and
     pre-existing for idempotent calls).
@@ -284,7 +301,7 @@ def bulk_give_permissions(
 
     requested_assignments = resolve_assignments(user_permissions, team_permissions)
     lookup = ensure_object_roles(requested_assignments)
-    assignments = create_assignments(requested_assignments, lookup, len(user_permissions))
+    assignments = create_assignments(requested_assignments, lookup, len(user_permissions), fire_signals_on_create=fire_signals_on_create)
     recompute_after_give(lookup, assignments)
     return assignments
 
