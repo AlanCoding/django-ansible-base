@@ -151,9 +151,7 @@ def create_assignments(
         )
     if user_assignments:
         pair_q = _pair_filter(user_assignments, 'user')
-        existing_user_pks = set(
-            RoleUserAssignment.objects.filter(pair_q).values_list('pk', flat=True)
-        )
+        existing_user_pks = set(RoleUserAssignment.objects.filter(pair_q).values_list('pk', flat=True))
         RoleUserAssignment.objects.bulk_create(user_assignments, ignore_conflicts=True)
         db_users = list(RoleUserAssignment.objects.filter(pair_q))
         all_assignments.extend(db_users)
@@ -174,9 +172,7 @@ def create_assignments(
         )
     if team_assignments:
         pair_q = _pair_filter(team_assignments, 'team')
-        existing_team_pks = set(
-            RoleTeamAssignment.objects.filter(pair_q).values_list('pk', flat=True)
-        )
+        existing_team_pks = set(RoleTeamAssignment.objects.filter(pair_q).values_list('pk', flat=True))
         RoleTeamAssignment.objects.bulk_create(team_assignments, ignore_conflicts=True)
         db_teams = list(RoleTeamAssignment.objects.filter(pair_q))
         all_assignments.extend(db_teams)
