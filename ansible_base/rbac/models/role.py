@@ -278,6 +278,13 @@ class RoleDefinition(CommonModel):
             team_permissions=() if is_user else perm,
         )
 
+    def give_or_remove_permission(self, actor, content_object, giving=True):
+        """Compat shim — AWX calls this via awx.main.models.rbac.give_or_remove_permission."""
+        if giving:
+            return self.give_permission(actor, content_object)
+        else:
+            return self.remove_permission(actor, content_object)
+
     @classmethod
     def user_global_permissions(cls, user, permission_qs=None):
         """Evaluation method only for global permissions from global roles
