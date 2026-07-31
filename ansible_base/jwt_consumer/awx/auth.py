@@ -2,7 +2,6 @@
 import logging
 
 from django.apps import apps
-from django.conf import settings
 
 from ansible_base.jwt_consumer.common.auth import JWTAuthentication
 
@@ -64,7 +63,8 @@ class AwxJWTAuthentication(JWTAuthentication):
                         desired_role_pks.add(old_role.pk)
 
             stale_roles = Role.objects.filter(
-                members=user, role_field__in=managed_field_names,
+                members=user,
+                role_field__in=managed_field_names,
             ).exclude(pk__in=desired_role_pks)
             for role in stale_roles:
                 role.members.remove(user)

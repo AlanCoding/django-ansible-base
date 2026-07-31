@@ -329,6 +329,7 @@ def save_user_claims(user: Model, objects: dict, object_roles: dict, global_role
             continue
         assignment = rd.give_global_permission(user)
         global_assignment_pks.add(assignment.pk)
+        logger.info(f"Granting user {user.username} global role {system_role_name}")
 
     # Pass 1: resolve resources (may create org/team stubs)
     desired_permissions = []
@@ -354,6 +355,7 @@ def save_user_claims(user: Model, objects: dict, object_roles: dict, global_role
                 continue
             if resource is not None:
                 desired_permissions.append((rd, user, obj))
+                logger.info(f"Granting user {user.username} role {object_role_name} to object {obj.name} with ansible_id {object_data['ansible_id']}")
 
     # Pass 2: bulk assign all desired permissions
     if desired_permissions:
@@ -361,9 +363,11 @@ def save_user_claims(user: Model, objects: dict, object_roles: dict, global_role
 
     # Pass 3: remove stale assignments not in the desired set
     desired_keys = {(rd.pk, obj.pk) for rd, _user, obj in desired_permissions}
-    stale_assignments = RoleUserAssignment.objects.filter(
-        user=user, role_definition__name__in=managed_roles
-    ).exclude(pk__in=global_assignment_pks).select_related('role_definition')
+    stale_assignments = (
+        RoleUserAssignment.objects.filter(user=user, role_definition__name__in=managed_roles)
+        .exclude(pk__in=global_assignment_pks)
+        .select_related('role_definition')
+    )
 
     stale_permissions = []
     for assignment in stale_assignments:
@@ -375,6 +379,7 @@ def save_user_claims(user: Model, objects: dict, object_roles: dict, global_role
                 stale_permissions.append((assignment.role_definition, user, content_object))
 
     if stale_permissions:
+        logger.info(f"Removing {len(stale_permissions)} stale role assignments for user {user.username}")
         bulk_remove_permissions(user_permissions=stale_permissions)
 
 
