@@ -196,7 +196,7 @@ def defer_rbac_computations() -> Generator[None, None, None]:
     work correctly inside this context manager.
 
     Cannot be nested. For bulk permission assignment, use
-    bulk_give_permissions / bulk_remove_permissions from ansible_base.rbac.bulk.
+    bulk_give_permissions / bulk_remove_permissions from ansible_base.rbac.pipeline.
 
     Limitation: the deferred flush does not recompute descendant roles from
     member_team permissions. This is correct when the objects granting

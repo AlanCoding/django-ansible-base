@@ -313,7 +313,7 @@ def save_user_claims(user: Model, objects: dict, object_roles: dict, global_role
     """
     Apply RBAC permissions from claims data
     """
-    from ansible_base.rbac.bulk import bulk_give_permissions, bulk_remove_permissions
+    from ansible_base.rbac.pipeline import bulk_give_permissions, bulk_remove_permissions
 
     managed_roles = settings.ANSIBLE_BASE_JWT_MANAGED_ROLES
 

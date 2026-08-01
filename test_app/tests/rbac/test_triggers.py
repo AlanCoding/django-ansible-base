@@ -5,7 +5,7 @@ from django.apps import apps
 from django.test.utils import override_settings
 from rest_framework.exceptions import ValidationError
 
-from ansible_base.rbac.bulk import bulk_give_permissions, bulk_remove_permissions
+from ansible_base.rbac.pipeline import bulk_give_permissions, bulk_remove_permissions
 from ansible_base.rbac.caching import compute_team_member_roles
 from ansible_base.rbac.models import ObjectRole, RoleDefinition, RoleEvaluation, RoleTeamAssignment, RoleUserAssignment
 from ansible_base.rbac.permission_registry import permission_registry
@@ -560,7 +560,7 @@ class TestBulkGivePermissions:
 
         inv_rd.give_permission(user1, inv2)
 
-        with patch('ansible_base.rbac.bulk._audit_log_created') as mock_audit:
+        with patch('ansible_base.rbac.pipeline._audit_log_created') as mock_audit:
             bulk_give_permissions(
                 user_permissions=[
                     (inv_rd, user1, inv1),

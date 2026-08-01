@@ -258,7 +258,7 @@ class RoleDefinition(CommonModel):
         return assignment
 
     def give_permission(self, actor, content_object):
-        from ansible_base.rbac.bulk import bulk_give_permissions
+        from ansible_base.rbac.pipeline import bulk_give_permissions
 
         is_user = actor._meta.model_name == 'user'
         perm = [(self, actor, content_object)]
@@ -269,7 +269,7 @@ class RoleDefinition(CommonModel):
         return assignments[0]
 
     def remove_permission(self, actor, content_object):
-        from ansible_base.rbac.bulk import bulk_remove_permissions
+        from ansible_base.rbac.pipeline import bulk_remove_permissions
 
         is_user = actor._meta.model_name == 'user'
         perm = [(self, actor, content_object)]
