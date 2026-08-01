@@ -337,7 +337,10 @@ def bulk_remove_permissions(
     if recompute_team_ids:
         compute_team_member_roles(team_ids=recompute_team_ids)
     if object_roles_to_update:
-        compute_object_role_permissions(object_roles=object_roles_to_update)
+        # Re-fetch from DB: signal handlers during delete_assignments may have
+        # deleted ObjectRoles, leaving stale in-memory references.
+        existing = ObjectRole.objects.filter(pk__in=[o.pk for o in object_roles_to_update])
+        compute_object_role_permissions(object_roles=existing)
 
     deleted_count, _ = ObjectRole.objects.filter(id__in={obj_role.pk for obj_role in lookup.values()}, users__isnull=True, teams__isnull=True).delete()
     if deleted_count:

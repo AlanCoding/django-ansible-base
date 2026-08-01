@@ -5,10 +5,10 @@ from django.apps import apps
 from django.test.utils import override_settings
 from rest_framework.exceptions import ValidationError
 
-from ansible_base.rbac.pipeline import bulk_give_permissions, bulk_remove_permissions
 from ansible_base.rbac.caching import compute_team_member_roles
 from ansible_base.rbac.models import ObjectRole, RoleDefinition, RoleEvaluation, RoleTeamAssignment, RoleUserAssignment
 from ansible_base.rbac.permission_registry import permission_registry
+from ansible_base.rbac.pipeline import bulk_give_permissions, bulk_remove_permissions
 from ansible_base.rbac.triggers import dab_post_migrate, defer_rbac_computations, post_migration_rbac_setup
 from test_app.models import Inventory, Organization, User
 
@@ -700,12 +700,9 @@ class TestBulkRemovePermissions:
             post_delete.disconnect(delete_ancestor_role, sender=ObjectRole)
 
         # Every RoleEvaluation must reference an existing ObjectRole
-        orphaned_evals = RoleEvaluation.objects.exclude(
-            role_id__in=ObjectRole.objects.values_list('id', flat=True)
-        )
+        orphaned_evals = RoleEvaluation.objects.exclude(role_id__in=ObjectRole.objects.values_list('id', flat=True))
         assert not orphaned_evals.exists(), (
-            f"Found {orphaned_evals.count()} RoleEvaluation rows pointing to "
-            f"deleted ObjectRoles: {list(orphaned_evals.values_list('role_id', flat=True))}"
+            f"Found {orphaned_evals.count()} RoleEvaluation rows pointing to " f"deleted ObjectRoles: {list(orphaned_evals.values_list('role_id', flat=True))}"
         )
 
     def test_team_removal_no_cross_product(self, organization, inv_rd):
