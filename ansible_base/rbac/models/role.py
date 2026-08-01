@@ -263,8 +263,8 @@ class RoleDefinition(CommonModel):
         is_user = actor._meta.model_name == 'user'
         perm = [(self, actor, content_object)]
         assignments = bulk_give_permissions(
-            user_permissions=perm if is_user else (),
-            team_permissions=() if is_user else perm,
+            user_permissions=perm if is_user else [],
+            team_permissions=[] if is_user else perm,
         )
         return assignments[0]
 
@@ -274,8 +274,8 @@ class RoleDefinition(CommonModel):
         is_user = actor._meta.model_name == 'user'
         perm = [(self, actor, content_object)]
         bulk_remove_permissions(
-            user_permissions=perm if is_user else (),
-            team_permissions=() if is_user else perm,
+            user_permissions=perm if is_user else [],
+            team_permissions=[] if is_user else perm,
         )
 
     def give_or_remove_permission(self, actor, content_object, giving=True):
