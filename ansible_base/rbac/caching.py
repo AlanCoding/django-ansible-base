@@ -69,6 +69,14 @@ def cleanup_deleted_object_roles(object_pks: list[tuple[int, int | UUID]]) -> se
     return deleted_or_ids
 
 
+def cleanup_orphaned_object_roles() -> int:
+    """Delete ObjectRoles with no user or team assignments."""
+    deleted_count, _ = ObjectRole.objects.filter(users__isnull=True, teams__isnull=True).delete()
+    if deleted_count:
+        logger.info('Cleaned up %d orphaned ObjectRole(s)', deleted_count)
+    return deleted_count
+
+
 def object_roles_for_parents(parent_gfks: set[tuple]) -> set['ObjectRole']:
     """Return ObjectRoles affected by created objects via their parent chain. Called by defer_rbac_computations flush."""
     q_exprs = [Q(content_type=parent_ct, object_id=parent_id) for parent_ct, parent_id in parent_gfks]

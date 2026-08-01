@@ -13,6 +13,7 @@ from ansible_base.lib.utils.db import migrations_are_complete
 from ansible_base.rbac.caching import (
     cleanup_deleted_object_roles,
     cleanup_deleted_team_roles,
+    cleanup_orphaned_object_roles,
     compute_object_role_permissions,
     compute_team_member_roles,
     object_roles_for_parents,
@@ -561,6 +562,7 @@ def post_migration_rbac_setup(sender, *args, **kwargs):
 
     dab_post_migrate.send(sender=sender)
 
+    cleanup_orphaned_object_roles()
     compute_team_member_roles()
     compute_object_role_permissions()
 

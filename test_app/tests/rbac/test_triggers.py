@@ -23,6 +23,24 @@ def test_post_migrate_signals():
 
 
 @pytest.mark.django_db
+def test_cleanup_orphaned_object_roles(organization, inv_rd):
+    """cleanup_orphaned_object_roles deletes ObjectRoles with no assignments."""
+    from ansible_base.rbac.caching import cleanup_orphaned_object_roles
+
+    inv = Inventory.objects.create(name='orphan-test-inv', organization=organization)
+    inv_rd.give_permission(User.objects.create(username='orphan-user'), inv)
+    obj_role = ObjectRole.objects.get(role_definition=inv_rd, object_id=inv.pk)
+
+    # Remove the assignment — ObjectRole is now orphaned
+    obj_role.users.clear()
+    assert not obj_role.users.exists() and not obj_role.teams.exists()
+
+    deleted = cleanup_orphaned_object_roles()
+    assert deleted >= 1
+    assert not ObjectRole.objects.filter(pk=obj_role.pk).exists()
+
+
+@pytest.mark.django_db
 def test_change_parent_field(team, rando, inventory, org_inv_rd, member_rd):
     member_rd.give_permission(rando, team)
     org_inv_rd.give_permission(team, inventory.organization)
