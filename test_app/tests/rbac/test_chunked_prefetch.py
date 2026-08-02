@@ -436,3 +436,125 @@ class TestChunkBoundary:
 
         recomputed = set(RoleEvaluation.objects.values_list('codename', 'content_type_id', 'object_id', 'role_id'))
         assert recomputed == original
+
+    @pytest.mark.django_db
+    def test_exact_chunk_boundary_roles_equal_chunk_size(self, org_inv_rd, rando):
+        """When role count == chunk size, one full chunk is processed and the next iteration exits cleanly."""
+        orgs = [Organization.objects.create(name=f'exact_org_{i}') for i in range(3)]
+        for org in orgs:
+            Inventory.objects.create(name=f'exact_inv_{org.name}', organization=org)
+            org_inv_rd.give_permission(rando, org)
+
+        n_roles = ObjectRole.objects.count()
+
+        original_int = set(RoleEvaluation.objects.values_list('codename', 'content_type_id', 'object_id', 'role_id'))
+        original_uuid = set(RoleEvaluationUUID.objects.values_list('codename', 'content_type_id', 'object_id', 'role_id'))
+        assert len(original_int) > 0
+
+        RoleEvaluation.objects.all().delete()
+        RoleEvaluationUUID.objects.all().delete()
+
+        with mock.patch('ansible_base.rbac.caching.RECOMPUTE_CHUNK_SIZE', n_roles):
+            with mock.patch.object(EvaluationsPrefetch, 'from_roles', wraps=EvaluationsPrefetch.from_roles) as mock_from_roles:
+                recompute_all_role_evaluations()
+
+        assert mock_from_roles.call_count == 1, f"Exactly {n_roles} roles at chunk_size={n_roles} should produce 1 chunk call, got {mock_from_roles.call_count}"
+
+        recomputed_int = set(RoleEvaluation.objects.values_list('codename', 'content_type_id', 'object_id', 'role_id'))
+        recomputed_uuid = set(RoleEvaluationUUID.objects.values_list('codename', 'content_type_id', 'object_id', 'role_id'))
+        assert recomputed_int == original_int
+        assert recomputed_uuid == original_uuid
+
+    @pytest.mark.django_db
+    def test_chunk_boundary_one_over(self, org_inv_rd, rando):
+        """When role count == chunk_size + 1, the last role spills into a second chunk."""
+        orgs = [Organization.objects.create(name=f'over_org_{i}') for i in range(3)]
+        for org in orgs:
+            Inventory.objects.create(name=f'over_inv_{org.name}', organization=org)
+            org_inv_rd.give_permission(rando, org)
+
+        n_roles = ObjectRole.objects.count()
+        assert n_roles >= 3
+
+        original_int = set(RoleEvaluation.objects.values_list('codename', 'content_type_id', 'object_id', 'role_id'))
+        assert len(original_int) > 0
+
+        RoleEvaluation.objects.all().delete()
+        RoleEvaluationUUID.objects.all().delete()
+
+        with mock.patch('ansible_base.rbac.caching.RECOMPUTE_CHUNK_SIZE', n_roles - 1):
+            with mock.patch.object(EvaluationsPrefetch, 'from_roles', wraps=EvaluationsPrefetch.from_roles) as mock_from_roles:
+                recompute_all_role_evaluations()
+
+        assert mock_from_roles.call_count == 2, f"{n_roles} roles at chunk_size={n_roles - 1} should produce 2 chunk calls, got {mock_from_roles.call_count}"
+
+        recomputed_int = set(RoleEvaluation.objects.values_list('codename', 'content_type_id', 'object_id', 'role_id'))
+        assert recomputed_int == original_int
+
+
+class TestMixedPKRecomputeEndToEnd:
+    """Verify chunked recompute handles a mix of int-PK and UUID-PK ObjectRoles in the same batch."""
+
+    @pytest.fixture
+    def org_uuid_rd(self):
+        return RoleDefinition.objects.create_from_permissions(
+            permissions=['view_organization', 'view_uuidmodel', 'change_uuidmodel'],
+            name='test-mixed-org-uuid-rd',
+            content_type=permission_registry.content_type_model.objects.get_for_model(Organization),
+        )
+
+    @pytest.mark.django_db
+    def test_mixed_int_uuid_recompute(self, org_inv_rd, org_uuid_rd, rando):
+        """recompute_all_role_evaluations correctly rebuilds both int and UUID evaluations
+        when ObjectRoles for int-PK and UUID-PK models coexist in the same chunk."""
+        org1 = Organization.objects.create(name='mixed_int_org')
+        Inventory.objects.create(name='mixed_inv', organization=org1)
+        org_inv_rd.give_permission(rando, org1)
+
+        org2 = Organization.objects.create(name='mixed_uuid_org')
+        UUIDModel.objects.create(organization=org2)
+        UUIDModel.objects.create(organization=org2)
+        org_uuid_rd.give_permission(rando, org2)
+
+        original_int = set(RoleEvaluation.objects.values_list('codename', 'content_type_id', 'object_id', 'role_id'))
+        original_uuid = set(RoleEvaluationUUID.objects.values_list('codename', 'content_type_id', 'object_id', 'role_id'))
+        assert len(original_int) > 0, "Should have int evaluations from Inventory and Organization"
+        assert len(original_uuid) > 0, "Should have UUID evaluations from UUIDModel"
+
+        RoleEvaluation.objects.all().delete()
+        RoleEvaluationUUID.objects.all().delete()
+
+        recompute_all_role_evaluations()
+
+        recomputed_int = set(RoleEvaluation.objects.values_list('codename', 'content_type_id', 'object_id', 'role_id'))
+        recomputed_uuid = set(RoleEvaluationUUID.objects.values_list('codename', 'content_type_id', 'object_id', 'role_id'))
+        assert recomputed_int == original_int, "Int evaluations should be identical after mixed recompute"
+        assert recomputed_uuid == original_uuid, "UUID evaluations should be identical after mixed recompute"
+
+    @pytest.mark.django_db
+    def test_mixed_int_uuid_chunked_across_boundary(self, org_inv_rd, org_uuid_rd, rando):
+        """When int-PK and UUID-PK ObjectRoles land in different chunks, EvaluationUpdates
+        correctly accumulates and applies both types across chunk boundaries."""
+        org1 = Organization.objects.create(name='cross_int_org')
+        Inventory.objects.create(name='cross_inv', organization=org1)
+        org_inv_rd.give_permission(rando, org1)
+
+        org2 = Organization.objects.create(name='cross_uuid_org')
+        UUIDModel.objects.create(organization=org2)
+        org_uuid_rd.give_permission(rando, org2)
+
+        original_int = set(RoleEvaluation.objects.values_list('codename', 'content_type_id', 'object_id', 'role_id'))
+        original_uuid = set(RoleEvaluationUUID.objects.values_list('codename', 'content_type_id', 'object_id', 'role_id'))
+        assert len(original_int) > 0
+        assert len(original_uuid) > 0
+
+        RoleEvaluation.objects.all().delete()
+        RoleEvaluationUUID.objects.all().delete()
+
+        with mock.patch('ansible_base.rbac.caching.RECOMPUTE_CHUNK_SIZE', 1):
+            recompute_all_role_evaluations()
+
+        recomputed_int = set(RoleEvaluation.objects.values_list('codename', 'content_type_id', 'object_id', 'role_id'))
+        recomputed_uuid = set(RoleEvaluationUUID.objects.values_list('codename', 'content_type_id', 'object_id', 'role_id'))
+        assert recomputed_int == original_int, "Int evaluations must survive cross-chunk accumulation"
+        assert recomputed_uuid == original_uuid, "UUID evaluations must survive cross-chunk accumulation"
