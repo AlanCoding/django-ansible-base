@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from collections import defaultdict
 from collections.abc import Iterable, Sequence
 from typing import NamedTuple, Union
 
@@ -11,12 +10,12 @@ from django.db.models import Q
 from django.db.models.signals import post_save
 
 from ansible_base.lib.utils.models import current_user_or_system_user
-from ansible_base.rbac.caching import compute_object_role_permissions, compute_team_member_roles
+from ansible_base.rbac.caching import bulk_ancestor_roles, compute_object_role_permissions, compute_team_member_roles
 from ansible_base.rbac.models.content_type import DABContentType
 from ansible_base.rbac.models.role import AssignmentBase, ObjectRole, RoleDefinition, RoleTeamAssignment, RoleUserAssignment
 from ansible_base.rbac.permission_registry import permission_registry
 from ansible_base.rbac.remote import RemoteObject
-from ansible_base.rbac.triggers import _team_ids_from_role_target, team_ancestor_roles
+from ansible_base.rbac.triggers import _team_ids_from_role_target
 from ansible_base.rbac.validators import validate_assignment, validate_team_assignment_enabled
 
 logger = logging.getLogger(__name__)
@@ -55,7 +54,7 @@ def _resolve_triples(triples: Iterable[PermissionTriple]) -> list[ResolvedAssign
     return [ResolvedAssignment(rd, actor, *_resolve_content_object(obj)) for rd, actor, obj in triples]
 
 
-def resolve_assignments(
+def _resolve_assignments(
     user_permissions: Sequence[PermissionTriple],
     team_permissions: Sequence[PermissionTriple],
 ) -> tuple[list[ResolvedAssignment], list[ResolvedAssignment]]:
@@ -103,7 +102,7 @@ def _lookup_object_roles(resolved: list[ResolvedAssignment]) -> ObjectRoleLookup
     return lookup
 
 
-def ensure_object_roles(requested_assignments: list[ResolvedAssignment]) -> ObjectRoleLookup:
+def _ensure_object_roles(requested_assignments: list[ResolvedAssignment]) -> ObjectRoleLookup:
     """Look up existing ObjectRoles, create any that are missing, and return the full lookup."""
     object_ids_by_rd: dict[int, tuple[int, set[str]]] = {}
     parent_refs: dict[str, str] = {}
@@ -160,7 +159,7 @@ def _fire_post_save(db_assignments: list[AssignmentBase], existing_pks: set[int]
             post_save.send(sender=type(assignment), instance=assignment, created=True, raw=False, using='default', update_fields=None)
 
 
-def create_assignments(
+def _create_assignments(
     user_resolved: list[ResolvedAssignment],
     team_resolved: list[ResolvedAssignment],
     lookup: ObjectRoleLookup,
@@ -221,33 +220,30 @@ def create_assignments(
     return all_assignments
 
 
-def collect_recompute_team_ids(lookup: ObjectRoleLookup) -> set[int]:
+def _collect_recompute_team_ids(object_roles: Iterable[ObjectRole]) -> set[int]:
     """Identify team IDs that need member-role recomputation."""
     rd_has_team_perm: dict[int, bool] = {}
-    for rd_id, _oid in lookup:
+    recompute_team_ids: set[int] = set()
+    for obj_role in object_roles:
+        rd_id = obj_role.role_definition_id
         if rd_id not in rd_has_team_perm:
             rd_has_team_perm[rd_id] = RoleDefinition.objects.filter(pk=rd_id, permissions__codename=permission_registry.team_permission).exists()
-    team_rd_ids = {rd_id for rd_id, has_perm in rd_has_team_perm.items() if has_perm}
-
-    recompute_team_ids: set[int] = set()
-    for (rd_id, _oid), obj_role in lookup.items():
-        if rd_id in team_rd_ids:
+        if rd_has_team_perm[rd_id]:
             recompute_team_ids.update(_team_ids_from_role_target(obj_role))
     return recompute_team_ids
 
 
-def recompute_after_give(
+def _recompute_after_give(
     lookup: ObjectRoleLookup,
     assignments: list[AssignmentBase],
 ) -> None:
     """Run recomputation pass after bulk permission assignment."""
-    recompute_team_ids = collect_recompute_team_ids(lookup)
+    recompute_team_ids = _collect_recompute_team_ids(lookup.values())
     object_roles_to_update: set[ObjectRole] = set(lookup.values())
 
     unique_teams = {a.team for a in assignments if isinstance(a, RoleTeamAssignment)}
     if unique_teams:
-        for team in unique_teams:
-            object_roles_to_update.update(team_ancestor_roles(team))
+        object_roles_to_update.update(bulk_ancestor_roles({team.pk for team in unique_teams}))
         expanded_roles = ObjectRole.objects.filter(pk__in=[obj_role.pk for obj_role in object_roles_to_update]).prefetch_related('provides_teams__has_roles')
         for obj_role in expanded_roles:
             object_roles_to_update.update(obj_role.descendent_roles())
@@ -261,25 +257,91 @@ def recompute_after_give(
         compute_object_role_permissions(object_roles=roles_to_recompute)
 
 
-def delete_assignments(
-    user_resolved: list[ResolvedAssignment],
-    team_resolved: list[ResolvedAssignment],
+def _find_assignments(
+    resolved: Sequence[ResolvedAssignment],
     lookup: ObjectRoleLookup,
+    model: type[AssignmentBase],
+    actor_field: str,
+) -> list[AssignmentBase]:
+    """Find existing assignments matching resolved triples via the ObjectRole lookup."""
+    q = Q()
+    for ra in resolved:
+        obj_role = lookup.get((ra.role_definition.pk, ra.object_id))
+        if obj_role is not None:
+            q |= Q(object_role_id=obj_role.pk, **{actor_field: ra.actor.pk})
+    if not q:
+        return []
+    return list(model.objects.filter(q))
+
+
+def _recompute_after_remove(
+    object_role_ids: set[int],
+    actor_team_ids: set[int] = frozenset(),
 ) -> None:
-    """Delete assignments using pair-specific Q objects to avoid cross-product deletion."""
-    for batch, model, actor_field in [
-        (user_resolved, RoleUserAssignment, 'user_id'),
-        (team_resolved, RoleTeamAssignment, 'team_id'),
-    ]:
-        if not batch:
-            continue
-        q = Q()
-        for ra in batch:
-            obj_role = lookup.get((ra.role_definition.pk, ra.object_id))
-            if obj_role is not None:
-                q |= Q(object_role_id=obj_role.pk, **{actor_field: ra.actor.pk})
-        if q:
-            model.objects.filter(q).delete()
+    """Recompute permissions, expand team ancestors, and clean up orphaned ObjectRoles."""
+    object_roles = set(ObjectRole.objects.filter(pk__in=object_role_ids))
+    recompute_team_ids = _collect_recompute_team_ids(object_roles)
+    object_roles_to_update: set[ObjectRole] = set(object_roles)
+
+    if actor_team_ids:
+        for obj_role in list(object_roles_to_update):
+            object_roles_to_update.update(obj_role.descendent_roles())
+        object_roles_to_update.update(bulk_ancestor_roles(actor_team_ids))
+
+    if recompute_team_ids:
+        compute_team_member_roles(team_ids=recompute_team_ids)
+    if object_roles_to_update:
+        surviving_object_roles = ObjectRole.objects.filter(pk__in=[o.pk for o in object_roles_to_update])
+        compute_object_role_permissions(object_roles=surviving_object_roles)
+
+    ObjectRole.objects.filter(id__in=object_role_ids, users__isnull=True, teams__isnull=True).delete()
+
+
+def remove_assignments(
+    user_assignments: Sequence[RoleUserAssignment] = (),
+    team_assignments: Sequence[RoleTeamAssignment] = (),
+) -> None:
+    """Remove assignments by reference and recompute affected permissions.
+
+    Lower-level alternative to bulk_remove_permissions — accepts assignment objects
+    directly, avoiding the triple resolution and GFK lookups that the bulk API requires.
+    """
+    if not user_assignments and not team_assignments:
+        return
+
+    object_role_ids: set[int] = set()
+    actor_team_ids: set[int] = set()
+    for a in user_assignments:
+        object_role_ids.add(a.object_role_id)
+    for a in team_assignments:
+        object_role_ids.add(a.object_role_id)
+        actor_team_ids.add(a.team_id)
+
+    if user_assignments:
+        RoleUserAssignment.objects.filter(pk__in=[a.pk for a in user_assignments]).delete()
+    if team_assignments:
+        RoleTeamAssignment.objects.filter(pk__in=[a.pk for a in team_assignments]).delete()
+
+    _recompute_after_remove(object_role_ids, actor_team_ids)
+
+
+def give_assignments(
+    user_resolved: Sequence[ResolvedAssignment] = (),
+    team_resolved: Sequence[ResolvedAssignment] = (),
+    fire_signals_on_create: bool = True,
+) -> list[AssignmentBase]:
+    """Assign roles from already-resolved assignments (skips validation).
+
+    Lower-level alternative to bulk_give_permissions — accepts ResolvedAssignment
+    lists directly, for callers that have already resolved and validated.
+    """
+    if not user_resolved and not team_resolved:
+        return []
+
+    lookup = _ensure_object_roles(list(user_resolved) + list(team_resolved))
+    assignments = _create_assignments(list(user_resolved), list(team_resolved), lookup, fire_signals_on_create=fire_signals_on_create)
+    _recompute_after_give(lookup, assignments)
+    return assignments
 
 
 def bulk_give_permissions(
@@ -287,24 +349,12 @@ def bulk_give_permissions(
     team_permissions: Sequence[PermissionTriple] = (),
     fire_signals_on_create: bool = True,
 ) -> list[AssignmentBase]:
-    """Bulk-assign multiple roles to multiple users/teams on multiple objects.
-
-    user_permissions: sequence of (role_definition, user, content_object) triples
-    team_permissions: sequence of (role_definition, team, content_object) triples
-    fire_signals_on_create: if True (default), fire post_save for each new
-        assignment. Set to False when the caller handles downstream sync
-        (e.g. JWT claims).
-
-    Returns all resulting assignment objects (both new and pre-existing).
-    """
+    """Convenience API: validates triples, resolves, and delegates to give_assignments."""
     if not user_permissions and not team_permissions:
         return []
 
-    user_resolved, team_resolved = resolve_assignments(user_permissions, team_permissions)
-    lookup = ensure_object_roles(user_resolved + team_resolved)
-    assignments = create_assignments(user_resolved, team_resolved, lookup, fire_signals_on_create=fire_signals_on_create)
-    recompute_after_give(lookup, assignments)
-    return assignments
+    user_resolved, team_resolved = _resolve_assignments(user_permissions, team_permissions)
+    return give_assignments(user_resolved, team_resolved, fire_signals_on_create=fire_signals_on_create)
 
 
 def bulk_remove_permissions(
@@ -328,25 +378,6 @@ def bulk_remove_permissions(
     if not lookup:
         return
 
-    delete_assignments(user_resolved, team_resolved, lookup)
-
-    recompute_team_ids = collect_recompute_team_ids(lookup)
-    object_roles_to_update: set[ObjectRole] = set(lookup.values())
-
-    if team_permissions:
-        for obj_role in list(object_roles_to_update):
-            object_roles_to_update.update(obj_role.descendent_roles())
-        for _rd, team, _obj in team_permissions:
-            object_roles_to_update.update(team_ancestor_roles(team))
-
-    if recompute_team_ids:
-        compute_team_member_roles(team_ids=recompute_team_ids)
-    if object_roles_to_update:
-        # Re-fetch from DB: signal handlers during delete_assignments may have
-        # deleted ObjectRoles, leaving stale in-memory references.
-        surviving_object_roles = ObjectRole.objects.filter(pk__in=[o.pk for o in object_roles_to_update])
-        compute_object_role_permissions(object_roles=surviving_object_roles)
-
-    deleted_count, _ = ObjectRole.objects.filter(id__in={obj_role.pk for obj_role in lookup.values()}, users__isnull=True, teams__isnull=True).delete()
-    if deleted_count:
-        logger.debug('Cleaned up %d orphaned ObjectRole(s)', deleted_count)
+    user_found = _find_assignments(user_resolved, lookup, RoleUserAssignment, 'user_id')
+    team_found = _find_assignments(team_resolved, lookup, RoleTeamAssignment, 'team_id')
+    remove_assignments(user_assignments=user_found, team_assignments=team_found)

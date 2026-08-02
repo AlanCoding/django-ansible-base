@@ -313,7 +313,7 @@ def save_user_claims(user: Model, objects: dict, object_roles: dict, global_role
     """
     Apply RBAC permissions from claims data
     """
-    from ansible_base.rbac.pipeline import bulk_give_permissions, bulk_remove_permissions
+    from ansible_base.rbac.pipeline import bulk_give_permissions, remove_assignments
 
     managed_roles = settings.ANSIBLE_BASE_JWT_MANAGED_ROLES
 
@@ -369,18 +369,17 @@ def save_user_claims(user: Model, objects: dict, object_roles: dict, global_role
         .select_related('role_definition')
     )
 
-    stale_permissions = []
+    stale_user_assignments = []
     for assignment in stale_assignments:
         if (assignment.role_definition_id, assignment.cache_id) not in desired_keys:
-            content_object = assignment.content_object
-            if content_object is None:
+            if not assignment.content_type_id:
                 assignment.role_definition.remove_global_permission(user)
             else:
-                stale_permissions.append((assignment.role_definition, user, content_object))
+                stale_user_assignments.append(assignment)
 
-    if stale_permissions:
-        logger.info(f"Removing {len(stale_permissions)} stale role assignments for user {user.username}")
-        bulk_remove_permissions(user_permissions=stale_permissions)
+    if stale_user_assignments:
+        logger.info(f"Removing {len(stale_user_assignments)} stale role assignments for user {user.username}")
+        remove_assignments(user_assignments=stale_user_assignments)
 
 
 # ---- for claims hashing ----
