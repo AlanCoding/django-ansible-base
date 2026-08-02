@@ -300,12 +300,12 @@ def test_defer_rbac_computations_empty_block(inventory):
 
 
 @pytest.mark.django_db
-def test_defer_rbac_computations_give_permission_succeeds_after_stash(organization, rando, org_inv_rd):
-    """give_permission delegates to bulk and works even after resources are stashed."""
+def test_defer_rbac_computations_give_permission_raises_after_stash(organization, rando, org_inv_rd):
+    """give_permission raises after resources are stashed because RoleEvaluation is stale."""
     with defer_rbac_computations():
         Inventory.objects.create(name='stash-trigger', organization=organization)
-        org_inv_rd.give_permission(rando, organization)
-    assert rando.has_obj_perm(organization, 'view')
+        with pytest.raises(RuntimeError, match="Permission assignment/removal cannot be called"):
+            org_inv_rd.give_permission(rando, organization)
 
 
 @pytest.mark.django_db
@@ -317,13 +317,13 @@ def test_defer_rbac_computations_give_permission_ok_before_stash(organization, r
 
 
 @pytest.mark.django_db
-def test_defer_rbac_computations_remove_permission_succeeds_after_stash(organization, rando, org_inv_rd):
-    """remove_permission delegates to bulk and works even after resources are stashed."""
+def test_defer_rbac_computations_remove_permission_raises_after_stash(organization, rando, org_inv_rd):
+    """remove_permission raises after resources are stashed because RoleEvaluation is stale."""
     org_inv_rd.give_permission(rando, organization)
     with defer_rbac_computations():
         Inventory.objects.create(name='stash-trigger', organization=organization)
-        org_inv_rd.remove_permission(rando, organization)
-    assert not rando.has_obj_perm(organization, 'view')
+        with pytest.raises(RuntimeError, match="Permission assignment/removal cannot be called"):
+            org_inv_rd.remove_permission(rando, organization)
 
 
 @pytest.mark.django_db

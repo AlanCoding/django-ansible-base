@@ -15,7 +15,7 @@ from ansible_base.rbac.models.content_type import DABContentType
 from ansible_base.rbac.models.role import AssignmentBase, ObjectRole, RoleDefinition, RoleTeamAssignment, RoleUserAssignment
 from ansible_base.rbac.permission_registry import permission_registry
 from ansible_base.rbac.remote import RemoteObject
-from ansible_base.rbac.triggers import _team_ids_from_role_target
+from ansible_base.rbac.triggers import _defer_rbac, _team_ids_from_role_target
 from ansible_base.rbac.validators import validate_assignment, validate_team_assignment_enabled
 
 logger = logging.getLogger(__name__)
@@ -233,11 +233,20 @@ def _collect_recompute_team_ids(object_roles: Iterable[ObjectRole]) -> set[int]:
     return recompute_team_ids
 
 
+def _check_defer_guard() -> None:
+    if _defer_rbac.active and _defer_rbac.has_deferred_data:
+        raise RuntimeError(
+            "Permission assignment/removal cannot be called inside defer_rbac_computations "
+            "after resources have been created or deleted. RoleEvaluation data is stale."
+        )
+
+
 def _recompute_after_give(
     lookup: ObjectRoleLookup,
     assignments: list[AssignmentBase],
 ) -> None:
     """Run recomputation pass after bulk permission assignment."""
+    _check_defer_guard()
     recompute_team_ids = _collect_recompute_team_ids(lookup.values())
     object_roles_to_update: set[ObjectRole] = set(lookup.values())
 
@@ -279,6 +288,7 @@ def _recompute_after_remove(
     actor_team_ids: set[int] = frozenset(),
 ) -> None:
     """Recompute permissions, expand team ancestors, and clean up orphaned ObjectRoles."""
+    _check_defer_guard()
     object_roles = set(ObjectRole.objects.filter(pk__in=object_role_ids))
     recompute_team_ids = _collect_recompute_team_ids(object_roles)
     object_roles_to_update: set[ObjectRole] = set(object_roles)

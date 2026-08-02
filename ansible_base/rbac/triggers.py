@@ -191,13 +191,16 @@ def defer_rbac_computations() -> Generator[None, None, None]:
     exit.
 
     While deferred data is pending, the following will raise RuntimeError:
+    - give_permission / remove_permission and the bulk/assignment variants
+      (RoleEvaluation is stale until the flush)
     - has_obj_perm (evaluations are stale until the flush)
 
-    give_permission / remove_permission delegate to the bulk functions and
-    work correctly inside this context manager.
+    These calls are allowed before any resources are created or deleted inside
+    the context manager, so DRF permission checks that run before the view
+    action will work normally.
 
-    Cannot be nested. For bulk permission assignment, use
-    bulk_give_permissions / bulk_remove_permissions from ansible_base.rbac.pipeline.
+    Cannot be nested. For permission assignment, call
+    bulk_give_permissions / bulk_remove_permissions outside this context manager.
 
     Limitation: the deferred flush does not recompute descendant roles from
     member_team permissions. This is correct when the objects granting
