@@ -13,9 +13,10 @@ from ansible_base.lib.utils.db import migrations_are_complete
 from ansible_base.rbac.caching import (
     cleanup_deleted_object_roles,
     cleanup_deleted_team_roles,
-    compute_object_role_permissions,
     compute_team_member_roles,
     object_roles_for_parents,
+    recompute_all_role_evaluations,
+    recompute_role_evaluations,
 )
 from ansible_base.rbac.models import ObjectRole, RoleDefinition, RoleEvaluation, get_evaluation_model
 from ansible_base.rbac.permission_registry import permission_registry
@@ -255,7 +256,7 @@ def _flush_rbac(deleted_team_pks, deleted_object_pks, created_instances):
         compute_team_member_roles(team_ids=team_ids)
 
     if object_roles:
-        compute_object_role_permissions(object_roles=object_roles)
+        recompute_role_evaluations(object_roles)
 
     ObjectRole.objects.filter(users__isnull=True, teams__isnull=True).delete()
 
@@ -265,7 +266,8 @@ def update_after_assignment(recompute_team_ids: Optional[set[int]], to_update: O
     if recompute_team_ids is not None:
         compute_team_member_roles(team_ids=recompute_team_ids)
 
-    compute_object_role_permissions(object_roles=to_update)
+    if to_update:
+        recompute_role_evaluations(to_update)
 
 
 def _handle_permission_add_or_remove(to_recompute: set['ObjectRole'], pk_set: set, action: str) -> None:
@@ -314,8 +316,9 @@ def permissions_changed(instance: 'RoleDefinition', action: str, model: type, pk
         _handle_permission_add_or_remove(to_recompute, pk_set, action)
     elif action == 'post_clear':
         _handle_permission_clear(to_recompute)
-        to_recompute = None  # all
-    compute_object_role_permissions(object_roles=to_recompute)
+        recompute_all_role_evaluations()
+        return
+    recompute_role_evaluations(to_recompute)
 
 
 m2m_changed.connect(permissions_changed, sender=RoleDefinition.permissions.through)
@@ -389,7 +392,7 @@ def post_save_update_obj_permissions(instance, object_pk=None, object_ct_id=None
         compute_team_member_roles(team_ids=[instance.id])
 
     if to_update:
-        compute_object_role_permissions(object_roles=to_update, object_pk=object_pk, object_ct_id=object_ct_id)
+        recompute_role_evaluations(to_update, object_pk=object_pk, object_ct_id=object_ct_id)
 
 
 def rbac_pre_save_identify_changes(instance, *args, **kwargs):
@@ -465,7 +468,7 @@ def rbac_post_delete_remove_object_roles(instance: Model, *args, **kwargs) -> No
         for team_role in instance.__rbac_stashed_member_roles:
             indirectly_affected_roles.update(team_role.descendent_roles())
         compute_team_member_roles(team_ids=instance.__rbac_stashed_recompute_team_ids)
-        compute_object_role_permissions(object_roles=indirectly_affected_roles)
+        recompute_role_evaluations(indirectly_affected_roles)
         ObjectRole.objects.filter(users__isnull=True, teams__isnull=True).delete()
 
     if _defer_rbac.active:
@@ -570,7 +573,7 @@ def post_migration_rbac_setup(sender, *args, **kwargs):
         return
 
     compute_team_member_roles()
-    compute_object_role_permissions()
+    recompute_all_role_evaluations()
 
 
 def connect_rbac_signals(cls):

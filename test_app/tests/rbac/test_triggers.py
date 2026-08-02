@@ -27,7 +27,7 @@ def test_post_migrate_skips_recompute_when_no_migrations_applied():
     is an empty list, meaning no migrations were actually applied."""
     with (
         patch('ansible_base.rbac.triggers.compute_team_member_roles') as mock_team,
-        patch('ansible_base.rbac.triggers.compute_object_role_permissions') as mock_obj,
+        patch('ansible_base.rbac.triggers.recompute_all_role_evaluations') as mock_obj,
     ):
         post_migration_rbac_setup(apps.get_app_config('dab_rbac'), plan=[])
 
@@ -41,7 +41,7 @@ def test_post_migrate_runs_recompute_when_plan_has_entries():
     plan kwarg contains migration entries."""
     with (
         patch('ansible_base.rbac.triggers.compute_team_member_roles') as mock_team,
-        patch('ansible_base.rbac.triggers.compute_object_role_permissions') as mock_obj,
+        patch('ansible_base.rbac.triggers.recompute_all_role_evaluations') as mock_obj,
     ):
         post_migration_rbac_setup(apps.get_app_config('dab_rbac'), plan=[('fake_migration',)])
 
@@ -301,7 +301,7 @@ def test_defer_rbac_computations_empty_block(inventory):
     recomputation."""
     from unittest.mock import patch
 
-    with patch('ansible_base.rbac.triggers.compute_object_role_permissions') as mock_compute:
+    with patch('ansible_base.rbac.triggers.recompute_role_evaluations') as mock_compute:
         with defer_rbac_computations():
             pass
 
