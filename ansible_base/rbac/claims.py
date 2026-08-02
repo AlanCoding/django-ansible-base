@@ -13,6 +13,7 @@ from ansible_base.lib.utils.auth import get_team_model
 
 from .models.content_type import DABContentType
 from .models.role import RoleDefinition, RoleUserAssignment
+from .pipeline import bulk_give_permissions, remove_assignments
 
 logger = logging.getLogger(__name__)
 
@@ -313,7 +314,6 @@ def save_user_claims(user: Model, objects: dict, object_roles: dict, global_role
     """
     Apply RBAC permissions from claims data
     """
-    from ansible_base.rbac.pipeline import bulk_give_permissions, remove_assignments
 
     managed_roles = settings.ANSIBLE_BASE_JWT_MANAGED_ROLES
 
