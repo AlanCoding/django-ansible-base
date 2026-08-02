@@ -221,7 +221,7 @@ def test_api_delete_uses_deferral_context_managers(admin_api_client, organizatio
     signal fires during the cascade."""
     from django.db.models.signals import post_delete
 
-    from ansible_base.rbac.triggers import _defer_rbac
+    from ansible_base.rbac.caching import defer_rbac_state
 
     org_inv_rd.give_permission(rando, organization)
     for i in range(3):
@@ -230,7 +230,7 @@ def test_api_delete_uses_deferral_context_managers(admin_api_client, organizatio
     was_active = []
 
     def check_defer(sender, instance, **kwargs):
-        was_active.append(_defer_rbac.active)
+        was_active.append(defer_rbac_state.active)
 
     post_delete.connect(check_defer, sender=Inventory)
     try:
@@ -679,7 +679,7 @@ class TestBulkRemovePermissions:
         inv_rd.give_permission(team, inv)
         assert user.has_obj_perm(inv, 'change')
 
-        # The member ObjectRole is what team_ancestor_roles will add to surviving
+        # The member ObjectRole is what bulk_ancestor_roles will add to surviving
         member_obj_role = ObjectRole.objects.get(
             role_definition=member_rd,
             content_type_id=permission_registry.content_type_model.objects.get_for_model(team).pk,

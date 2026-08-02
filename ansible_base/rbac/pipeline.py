@@ -10,12 +10,17 @@ from django.db.models import Q
 from django.db.models.signals import post_save
 
 from ansible_base.lib.utils.models import current_user_or_system_user
-from ansible_base.rbac.caching import bulk_ancestor_roles, compute_object_role_permissions, compute_team_member_roles
+from ansible_base.rbac.caching import (
+    bulk_ancestor_roles,
+    compute_object_role_permissions,
+    compute_team_member_roles,
+    defer_rbac_state,
+    team_ids_from_role_target,
+)
 from ansible_base.rbac.models.content_type import DABContentType
 from ansible_base.rbac.models.role import AssignmentBase, ObjectRole, RoleDefinition, RoleTeamAssignment, RoleUserAssignment
 from ansible_base.rbac.permission_registry import permission_registry
 from ansible_base.rbac.remote import RemoteObject
-from ansible_base.rbac.triggers import _defer_rbac, _team_ids_from_role_target
 from ansible_base.rbac.validators import validate_assignment, validate_team_assignment_enabled
 
 logger = logging.getLogger(__name__)
@@ -229,12 +234,12 @@ def _collect_recompute_team_ids(object_roles: Iterable[ObjectRole]) -> set[int]:
         if rd_id not in rd_has_team_perm:
             rd_has_team_perm[rd_id] = RoleDefinition.objects.filter(pk=rd_id, permissions__codename=permission_registry.team_permission).exists()
         if rd_has_team_perm[rd_id]:
-            recompute_team_ids.update(_team_ids_from_role_target(obj_role))
+            recompute_team_ids.update(team_ids_from_role_target(obj_role))
     return recompute_team_ids
 
 
 def _check_defer_guard() -> None:
-    if _defer_rbac.active and _defer_rbac.has_deferred_data:
+    if defer_rbac_state.active and defer_rbac_state.has_deferred_data:
         raise RuntimeError(
             "Permission assignment/removal cannot be called inside defer_rbac_computations "
             "after resources have been created or deleted. RoleEvaluation data is stale."

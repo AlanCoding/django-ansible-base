@@ -1,7 +1,8 @@
 import logging
+import threading
 from collections import defaultdict
 from collections.abc import Iterable
-from typing import Optional
+from typing import Optional, Union
 from uuid import UUID
 
 from django.conf import settings
@@ -26,6 +27,38 @@ NOTE:
 This is highly dependent on the model methods ObjectRole.needed_cache_updates and expected_direct_permissions
 Those methods are what truly dictate the object-role to object-permission translation
 """
+
+
+class DeferRBACComputations(threading.local):
+    def __init__(self):
+        self.active = False
+        self.deleted_team_pks: set[int] = set()
+        self.deleted_object_pks: list[tuple[int, Union[int, UUID]]] = []
+        self.created_instances: list[tuple] = []
+
+    @property
+    def has_deferred_data(self):
+        return bool(self.deleted_team_pks or self.deleted_object_pks or self.created_instances)
+
+
+defer_rbac_state = DeferRBACComputations()
+
+
+def team_ids_from_role_target(object_role: 'ObjectRole') -> set[int]:
+    """Derive which teams a member_team ObjectRole targets from its content type.
+
+    Used only when the provides_teams relationship is not yet computed —
+    i.e. for newly created ObjectRoles or when member_team permission was
+    just added to a RoleDefinition. For existing roles where provides_teams
+    is already populated, query provides_teams directly instead.
+    """
+    if object_role.content_type_id == permission_registry.team_ct_id:
+        return {int(object_role.object_id)}
+    if object_role.content_type_id == permission_registry.org_ct_id:
+        parent_fd = permission_registry.get_parent_fd_name(permission_registry.team_model)
+        if parent_fd:
+            return set(permission_registry.team_model.objects.filter(**{f'{parent_fd}_id': int(object_role.object_id)}).values_list('id', flat=True))
+    return set()
 
 
 def bulk_ancestor_roles(team_pks: Iterable[int]) -> set['ObjectRole']:
