@@ -50,7 +50,7 @@ def _create_org_with_teams(n_teams, users_per_team=0):
 class TestDeferRBACCacheOnDelete:
 
     def test_defer_rbac_computations_batches_compute_calls(self):
-        """compute_team_member_roles and compute_object_role_permissions
+        """compute_team_member_roles and recompute_role_evaluations
         each fire once (at flush) instead of once per team."""
         from ansible_base.rbac import caching
         from ansible_base.rbac.triggers import defer_rbac_computations
@@ -63,8 +63,8 @@ class TestDeferRBACCacheOnDelete:
                 wraps=caching.compute_team_member_roles,
             ) as mock_ctmr,
             mock.patch(
-                'ansible_base.rbac.triggers.compute_object_role_permissions',
-                wraps=caching.compute_object_role_permissions,
+                'ansible_base.rbac.triggers.recompute_role_evaluations',
+                wraps=caching.recompute_role_evaluations,
             ) as mock_corp,
         ):
             with defer_rbac_computations():
