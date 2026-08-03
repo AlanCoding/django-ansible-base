@@ -225,6 +225,37 @@ def test_defer_rbac_computations_flushes_on_exception(organization, rando, org_i
 
 
 @pytest.mark.django_db
+def test_service_index_delete_uses_deferral_context_managers(organization, rando, org_inv_rd):
+    """Resource.delete_resource (used by service-index DELETE) should use
+    defer_rbac_computations, verified by checking that the context manager
+    is active when the post_delete signal fires during the cascade."""
+    from django.db.models.signals import post_delete
+
+    from ansible_base.rbac.triggers import _defer_rbac
+    from ansible_base.resource_registry.models import Resource
+
+    org_inv_rd.give_permission(rando, organization)
+    for i in range(3):
+        Inventory.objects.create(name=f'defer-svc-inv-{i}', organization=organization)
+
+    was_active = []
+
+    def check_defer(sender, instance, **kwargs):
+        was_active.append(_defer_rbac.active)
+
+    post_delete.connect(check_defer, sender=Inventory)
+    try:
+        resource = Resource.get_resource_for_object(organization)
+        resource.delete_resource()
+    finally:
+        post_delete.disconnect(check_defer, sender=Inventory)
+
+    assert len(was_active) == 3
+    assert all(was_active), "defer_rbac_computations should have been active during delete_resource cascade"
+    assert not Organization.objects.filter(pk=organization.pk).exists()
+
+
+@pytest.mark.django_db
 def test_defer_rbac_computations_defers_resource_creation(organization, rando, org_inv_rd):
     """Creating a child resource inside defer_rbac_computations should defer
     RoleEvaluation updates until the context manager exits."""

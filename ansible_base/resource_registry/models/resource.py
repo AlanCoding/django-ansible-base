@@ -1,7 +1,9 @@
 import uuid
+from contextlib import ExitStack
 from functools import lru_cache
 from typing import TYPE_CHECKING, Union
 
+from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ObjectDoesNotExist
@@ -139,7 +141,16 @@ class Resource(models.Model):
             raise ValidationError({"resource_type": _(f"Resource type: {self.content_type.resource_type.name} cannot be managed by Resources.")})
 
         with transaction.atomic():
-            with no_reverse_sync():
+            with ExitStack() as stack:
+                if 'ansible_base.activitystream' in settings.INSTALLED_APPS:
+                    from ansible_base.activitystream import deferred_activity_stream
+
+                    stack.enter_context(deferred_activity_stream())
+                if 'ansible_base.rbac' in settings.INSTALLED_APPS:
+                    from ansible_base.rbac.triggers import defer_rbac_computations
+
+                    stack.enter_context(defer_rbac_computations())
+                stack.enter_context(no_reverse_sync())
                 self.content_object.delete()
             self.delete()
 
