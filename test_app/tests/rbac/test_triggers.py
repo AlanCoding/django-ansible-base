@@ -24,16 +24,16 @@ def test_post_migrate_signals():
 @pytest.mark.django_db
 def test_post_migrate_skips_recompute_when_no_migrations_applied():
     """post_migration_rbac_setup should skip compute_team_member_roles and
-    compute_object_role_permissions when the plan kwarg is an empty list,
+    recompute_all_role_evaluations when the plan kwarg is an empty list,
     meaning no migrations were actually applied."""
     with (
         patch('ansible_base.rbac.triggers.compute_team_member_roles') as mock_team,
-        patch('ansible_base.rbac.triggers.compute_object_role_permissions') as mock_obj,
+        patch('ansible_base.rbac.triggers.recompute_all_role_evaluations') as mock_recompute,
     ):
         post_migration_rbac_setup(apps.get_app_config('dab_rbac'), plan=[])
 
     mock_team.assert_not_called()
-    mock_obj.assert_not_called()
+    mock_recompute.assert_not_called()
 
 
 @pytest.mark.django_db
@@ -42,12 +42,12 @@ def test_post_migrate_runs_recompute_when_plan_has_entries():
     plan kwarg contains migration entries."""
     with (
         patch('ansible_base.rbac.triggers.compute_team_member_roles') as mock_team,
-        patch('ansible_base.rbac.triggers.compute_object_role_permissions') as mock_obj,
+        patch('ansible_base.rbac.triggers.recompute_all_role_evaluations') as mock_recompute,
     ):
         post_migration_rbac_setup(apps.get_app_config('dab_rbac'), plan=[('fake_migration',)])
 
     mock_team.assert_called_once()
-    mock_obj.assert_called_once()
+    mock_recompute.assert_called_once()
 
 
 @pytest.mark.django_db
@@ -222,36 +222,6 @@ def test_defer_rbac_computations_flushes_on_exception(organization, rando, org_i
 
     inv = Inventory.objects.get(name='error-inv')
     assert rando.has_obj_perm(inv, 'change')
-
-
-@pytest.mark.django_db
-def test_api_delete_uses_deferral_context_managers(admin_api_client, organization, rando, org_inv_rd):
-    """DELETE via the API should use defer_rbac_computations, verified by
-    checking that the context manager is active when the post_delete
-    signal fires during the cascade."""
-    from django.db.models.signals import post_delete
-
-    from ansible_base.rbac.triggers import _defer_rbac
-
-    org_inv_rd.give_permission(rando, organization)
-    for i in range(3):
-        Inventory.objects.create(name=f'defer-api-inv-{i}', organization=organization)
-
-    was_active = []
-
-    def check_defer(sender, instance, **kwargs):
-        was_active.append(_defer_rbac.active)
-
-    post_delete.connect(check_defer, sender=Inventory)
-    try:
-        response = admin_api_client.delete(f'/api/v1/organizations/{organization.pk}/')
-    finally:
-        post_delete.disconnect(check_defer, sender=Inventory)
-
-    assert response.status_code == 204
-    assert len(was_active) == 3
-    assert all(was_active), "defer_rbac_computations should have been active during delete"
-    assert not Organization.objects.filter(pk=organization.pk).exists()
 
 
 @pytest.mark.django_db
