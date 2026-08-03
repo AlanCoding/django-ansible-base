@@ -75,16 +75,19 @@ def _resolve_assignments(
             validated_pairs.add(key)
         user_resolved.append(ResolvedAssignment(rd, actor, obj_ct, object_id, parent_ref))
 
+    team_validated_pairs: set[tuple[int, int]] = set()
     team_resolved: list[ResolvedAssignment] = []
     for rd, actor, obj in team_permissions:
         obj_ct, object_id, parent_ref = _resolve_content_object(obj)
         key = (rd.pk, obj_ct.id)
         if key not in validated_pairs:
             validate_assignment(rd, actor, obj)
+            validated_pairs.add(key)
+        if key not in team_validated_pairs:
             has_team_perm = rd.permissions.filter(codename=permission_registry.team_permission).exists()
             has_org_member = rd.permissions.filter(codename='member_organization').exists()
             validate_team_assignment_enabled(obj_ct, has_team_perm=has_team_perm, has_org_member=has_org_member)
-            validated_pairs.add(key)
+            team_validated_pairs.add(key)
         team_resolved.append(ResolvedAssignment(rd, actor, obj_ct, object_id, parent_ref))
 
     return user_resolved, team_resolved
