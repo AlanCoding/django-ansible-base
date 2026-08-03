@@ -61,7 +61,8 @@ def test_cleanup_orphaned_object_roles(organization, inv_rd):
 
     # Remove the assignment — ObjectRole is now orphaned
     obj_role.users.clear()
-    assert not obj_role.users.exists() and not obj_role.teams.exists()
+    assert not obj_role.users.exists()
+    assert not obj_role.teams.exists()
 
     deleted = cleanup_orphaned_object_roles()
     assert deleted >= 1

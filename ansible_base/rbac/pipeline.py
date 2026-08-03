@@ -302,7 +302,8 @@ def _recompute_after_remove(
     object_roles_to_update: set[ObjectRole] = set(object_roles)
 
     if actor_team_ids:
-        for obj_role in list(object_roles_to_update):
+        snapshot = list(object_roles_to_update)  # snapshot: set is mutated in the loop
+        for obj_role in snapshot:
             object_roles_to_update.update(obj_role.descendent_roles())
         object_roles_to_update.update(bulk_ancestor_roles(actor_team_ids))
 
