@@ -26,7 +26,7 @@ class AwxJWTAuthentication(JWTAuthentication):
         the claims dict.
         """
         try:
-            from awx.main.models.rbac import ROLE_DEFINITION_TO_ROLE_FIELD, Role
+            from awx.main.models.rbac import ROLE_DEFINITION_TO_ROLE_FIELD, Role, disable_rbac_sync
             from awx.main.signals import disable_activity_stream
         except ImportError:
             return
@@ -34,7 +34,7 @@ class AwxJWTAuthentication(JWTAuthentication):
         managed_field_names = set(ROLE_DEFINITION_TO_ROLE_FIELD.values())
         resource_map = self._build_resource_map(objects, object_roles)
 
-        with disable_activity_stream():
+        with disable_activity_stream(), disable_rbac_sync():
             desired_role_pks = self._add_desired_members(user, objects, object_roles, resource_map, ROLE_DEFINITION_TO_ROLE_FIELD)
             self._remove_stale_members(user, Role, managed_field_names, desired_role_pks)
 
