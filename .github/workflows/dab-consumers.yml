@@ -177,7 +177,6 @@ jobs:
         working-directory: jewel
         env:
           PYTEST_NUM_PROCESSES: auto
-          GATEWAY_TEST_DIRS: ""
           PYTEST_ADDOPTS: --disable-warnings
         run: tox -e py312 -- -m "not perf"
 
