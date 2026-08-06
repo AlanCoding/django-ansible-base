@@ -395,7 +395,6 @@ class UserAccessViewSet(
         permission, ct, obj = self.get_data_from_url()
 
         evaluation_cls = get_evaluation_model(obj)
-        reverse_name = evaluation_cls._meta.get_field('role').remote_field.name
         assignment_cls = actor_cls._meta.get_field('role_assignments').related_model
         actor_field = 'user_id' if actor_cls._meta.model_name == 'user' else 'team_id'
 
