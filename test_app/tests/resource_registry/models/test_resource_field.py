@@ -206,9 +206,7 @@ def test_assignment_resource_field_f_annotation(admin_user, organization):
     )
     rd.give_permission(admin_user, organization)
 
-    qs = RoleUserAssignment.objects.filter(user=admin_user, role_definition=rd).annotate(
-        _ansible_id=F('resource__ansible_id')
-    )
+    qs = RoleUserAssignment.objects.filter(user=admin_user, role_definition=rd).annotate(_ansible_id=F('resource__ansible_id'))
     assignment = qs.first()
     assert assignment is not None
     assert str(assignment._ansible_id) == str(org_resource.ansible_id)
@@ -262,6 +260,22 @@ def test_assignment_resource_field_null_object(admin_user):
     assignment = RoleUserAssignment.objects.filter(user=admin_user, role_definition=rd).select_related('resource').first()
     assert assignment is not None
     assert assignment.resource is None
+
+
+@pytest.mark.django_db
+def test_assignment_resource_excluded_from_summary_fields(admin_user, organization):
+    """Test that resource is excluded from summary_fields via ignore_relations."""
+    rd = RoleDefinition.objects.create_from_permissions(
+        name='test-org-view-sf',
+        permissions=['view_organization'],
+        content_type=permission_registry.content_type_model.objects.get_for_model(Organization),
+    )
+    rd.give_permission(admin_user, organization)
+
+    assignment = RoleUserAssignment.objects.filter(user=admin_user, role_definition=rd).first()
+    assert 'resource' in type(assignment).ignore_relations
+    summary = assignment.get_summary_fields()
+    assert 'resource' not in summary
 
 
 @pytest.mark.skipif(VERSION[0] < 5, reason='get_prefetch_querysets() is only valid for Django 5+')
