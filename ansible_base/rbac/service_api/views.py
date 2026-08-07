@@ -125,15 +125,17 @@ class ServiceRoleUserAssignmentViewSet(BaseSerivceRoleAssignmentViewSet):
 
     resource_purpose = "RBAC role assignments for users on resources indexed from connected AAP services"
 
-    queryset = RoleUserAssignment.objects.prefetch_related('user__resource__content_type', *prefetch_related).annotate(
-        _object_ansible_id_annotation=F('resource__ansible_id')
-    )
     serializer_class = service_serializers.ServiceRoleUserAssignmentSerializer
     filter_backends = AnsibleBaseDjangoAppApiView.filter_backends + [
         ansible_id_backend.UserAnsibleIdAliasFilterBackend,
         ansible_id_backend.RoleAssignmentFilterBackend,
         ServiceFilterBackend,
     ]
+
+    def get_queryset(self):
+        return RoleUserAssignment.objects.prefetch_related('user__resource__content_type', *prefetch_related).annotate(
+            _object_ansible_id_annotation=F('resource__ansible_id')
+        )
 
     @action(detail=False, methods=['post'], url_path='assign')
     def assign(self, request):
@@ -149,15 +151,17 @@ class ServiceRoleTeamAssignmentViewSet(BaseSerivceRoleAssignmentViewSet):
 
     resource_purpose = "RBAC role assignments for teams on resources indexed from connected AAP services"
 
-    queryset = RoleTeamAssignment.objects.prefetch_related('team__resource__content_type', *prefetch_related).annotate(
-        _object_ansible_id_annotation=F('resource__ansible_id')
-    )
     serializer_class = service_serializers.ServiceRoleTeamAssignmentSerializer
     filter_backends = AnsibleBaseDjangoAppApiView.filter_backends + [
         ansible_id_backend.TeamAnsibleIdAliasFilterBackend,
         ansible_id_backend.RoleAssignmentFilterBackend,
         ServiceFilterBackend,
     ]
+
+    def get_queryset(self):
+        return RoleTeamAssignment.objects.prefetch_related('team__resource__content_type', *prefetch_related).annotate(
+            _object_ansible_id_annotation=F('resource__ansible_id')
+        )
 
     @action(detail=False, methods=['post'], url_path='assign')
     def assign(self, request):
