@@ -130,6 +130,19 @@ def test_no_duplicates(rando, inv_rd, inventory, org_inv_rd, admin_api_client):
 
 
 @pytest.mark.django_db
+def test_no_duplicates_multiple_direct_roles(rando, inv_rd, view_inv_rd, inventory, admin_api_client):
+    """User with two different direct roles on the same object should appear once."""
+    inv_rd.give_permission(rando, inventory)
+    view_inv_rd.give_permission(rando, inventory)
+
+    url = get_relative_url('role-user-access', kwargs={'pk': inventory.pk, 'model_name': 'aap.inventory'}) + '?is_superuser=false'
+    response = admin_api_client.get(url)
+    assert response.status_code == 200, response.data
+    assert response.data['count'] == 1, response.data
+    assert len(response.data['results'][0]['object_role_assignments']) == 2
+
+
+@pytest.mark.django_db
 def test_no_duplicates_team(team, inv_rd, inventory, org_inv_rd, admin_api_client):
     inv_rd.give_permission(team, inventory)
     org_inv_rd.give_permission(team, inventory.organization)
@@ -138,6 +151,19 @@ def test_no_duplicates_team(team, inv_rd, inventory, org_inv_rd, admin_api_clien
     response = admin_api_client.get(url)
     assert response.status_code == 200, response.data
     assert response.data['count'] == 1, response.data
+
+
+@pytest.mark.django_db
+def test_no_duplicates_team_multiple_direct_roles(team, inv_rd, view_inv_rd, inventory, admin_api_client):
+    """Team with two different direct roles on the same object should appear once."""
+    inv_rd.give_permission(team, inventory)
+    view_inv_rd.give_permission(team, inventory)
+
+    url = get_relative_url('role-team-access', kwargs={'pk': inventory.pk, 'model_name': 'aap.inventory'})
+    response = admin_api_client.get(url)
+    assert response.status_code == 200, response.data
+    assert response.data['count'] == 1, response.data
+    assert len(response.data['results'][0]['object_role_assignments']) == 2
 
 
 @pytest.mark.django_db
