@@ -10,7 +10,7 @@ from rest_framework.exceptions import PermissionDenied
 
 from ansible_base.lib.utils.settings import get_setting
 from ansible_base.rbac.evaluations import has_super_permission
-from ansible_base.rbac.models import DABPermission, ObjectRole
+from ansible_base.rbac.models import DABContentType, DABPermission, ObjectRole
 from ansible_base.rbac.permission_registry import permission_registry
 from ansible_base.rbac.remote import RemoteObject
 from ansible_base.rbac.validators import permissions_allowed_for_role
@@ -97,11 +97,65 @@ def _check_all_obj_permissions(request_user, obj):
             raise PermissionDenied({'detail': _('You do not have {codename} permission the object').format(codename=codename)})
 
 
+def _user_permission_ids_from_role_definitions(request_user, obj):
+    """Get permission IDs a user holds on an object by inspecting role definitions directly.
+
+    This is an alternative to has_obj_perm for the escalation check, needed when
+    ANSIBLE_BASE_CACHE_PARENT_PERMISSIONS is False (the default). In that case,
+    child-model permissions (e.g. view_team in an org-scoped role) do not get
+    RoleEvaluation entries on the parent object, so has_obj_perm(org, 'view_team')
+    returns False even though the user's role definition includes that permission.
+
+    This function bypasses the evaluation table entirely and instead queries which
+    RoleDefinitions the user holds on the object — directly or via team membership —
+    and collects their declared permissions.
+    """
+    from django.db.models import Q
+
+    ct = DABContentType.objects.get_for_model(obj)
+    user_teams = permission_registry.team_model.objects.filter(member_roles__users=request_user)
+    obj_roles = ObjectRole.objects.filter(
+        content_type_id=ct.id,
+        object_id=obj.pk,
+    ).filter(Q(users=request_user) | Q(teams__in=user_teams))
+    return set(
+        DABPermission.objects.filter(role_definitions__object_roles__in=obj_roles).values_list('pk', flat=True)
+    )
+
+
 def _check_role_permissions(request_user, obj, role_definition):
-    """Verify user has every permission contained in the role being assigned"""
-    for permission in role_definition.permissions.all():
-        if not request_user.has_obj_perm(obj, permission.codename):
-            raise PermissionDenied({'detail': _('You do not have {codename} permission and cannot assign it to others').format(codename=permission.codename)})
+    """Verify user has every permission contained in the role being assigned.
+
+    When ANSIBLE_BASE_CACHE_PARENT_PERMISSIONS is True, all child-model permissions
+    have RoleEvaluation entries on the parent object, so we can use has_obj_perm
+    per-permission for a fast evaluation-table lookup.
+
+    When False (the default), child-model permissions like view_team in an org-scoped
+    role have no evaluation entry on the org — they only exist on child objects (teams).
+    In that case we fall back to comparing role definition permissions directly, which
+    is more expensive but correct regardless of what child objects exist.
+    """
+    role_perms = list(role_definition.permissions.all())
+
+    # Check for superuser flags and global role permissions first.
+    # has_super_permission covers is_superuser, action-specific bypass flags,
+    # and singleton (global) role assignments — a user with a global role that
+    # includes the needed permissions can assign them at any object scope.
+    missing_perms = [p for p in role_perms if not has_super_permission(request_user, p.codename)]
+    if not missing_perms:
+        return
+
+    if settings.ANSIBLE_BASE_CACHE_PARENT_PERMISSIONS:
+        for permission in missing_perms:
+            if not request_user.has_obj_perm(obj, permission.codename):
+                raise PermissionDenied({'detail': _('You do not have {codename} permission and cannot assign it to others').format(codename=permission.codename)})
+    else:
+        user_perm_ids = _user_permission_ids_from_role_definitions(request_user, obj)
+        missing_perm_ids = {p.pk for p in missing_perms}
+        still_missing = missing_perm_ids - user_perm_ids
+        if still_missing:
+            codename = DABPermission.objects.filter(pk__in=still_missing).values_list('codename', flat=True).first()
+            raise PermissionDenied({'detail': _('You do not have {codename} permission and cannot assign it to others').format(codename=codename)})
 
 
 def check_content_obj_permission(request_user, obj, role_definition=None) -> None:
