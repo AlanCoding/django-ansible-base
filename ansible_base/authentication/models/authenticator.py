@@ -1,8 +1,13 @@
+import logging
+
+from cryptography.fernet import InvalidToken
 from django.db.models import SET_NULL, ForeignKey, JSONField, fields
 
 from ansible_base.authentication.authenticator_plugins.utils import generate_authenticator_slug, get_authenticator_plugin
 from ansible_base.lib.abstract_models.common import UniqueNamedCommonModel
 from ansible_base.lib.utils.models import prevent_search
+
+logger = logging.getLogger('ansible_base.authentication.models.authenticator')
 
 
 def get_next_authenticator_order():
@@ -86,6 +91,16 @@ class Authenticator(UniqueNamedCommonModel):
         except ImportError:
             # A log message will already be displayed if this fails
             pass
+        except InvalidToken:
+            logger.critical(
+                "Failed to decrypt configuration field on Authenticator(name=%r, type=%r): "
+                "the SECRET_KEY may have changed. "
+                "Restore the original SECRET_KEY that encrypted this database, then restart. "
+                "Re-raising to prevent startup with corrupted authenticator configuration.",
+                instance.name,
+                instance.type,
+            )
+            raise
 
         return instance
 
