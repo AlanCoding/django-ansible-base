@@ -212,9 +212,7 @@ class TestRoleBasedAssignment:
             holder_perms.append('view_team')
 
         with override_settings(ANSIBLE_BASE_CACHE_PARENT_PERMISSIONS=cache_parent_permissions):
-            holder_rd = RoleDefinition.objects.create_from_permissions(
-                name='custom-org-holder', permissions=holder_perms, content_type=org_ct
-            )
+            holder_rd = RoleDefinition.objects.create_from_permissions(name='custom-org-holder', permissions=holder_perms, content_type=org_ct)
 
             assignee_rd = RoleDefinition.objects.create_from_permissions(
                 name='custom-org-assignee', permissions=['view_organization', 'view_team'], content_type=org_ct
@@ -239,9 +237,7 @@ class TestRoleBasedAssignment:
             pytest.param(False, False, id='team-no-perm'),
         ],
     )
-    def test_escalation_check_with_team_inherited_permissions(
-        self, user, user_api_client, organization, member_rd, team_role_has_view_team, expect_success
-    ):
+    def test_escalation_check_with_team_inherited_permissions(self, user, user_api_client, organization, member_rd, team_role_has_view_team, expect_success):
         """Same escalation check, but the user's permissions come from team membership
         rather than a direct role assignment. The user is a member of a team, and the team
         has a role on the org. The escalation check must traverse team inheritance."""
@@ -250,9 +246,7 @@ class TestRoleBasedAssignment:
         team_perms = ['change_organization', 'view_organization']
         if team_role_has_view_team:
             team_perms.append('view_team')
-        team_rd = RoleDefinition.objects.create_from_permissions(
-            name='custom-org-team-role', permissions=team_perms, content_type=org_ct
-        )
+        team_rd = RoleDefinition.objects.create_from_permissions(name='custom-org-team-role', permissions=team_perms, content_type=org_ct)
 
         assignee_rd = RoleDefinition.objects.create_from_permissions(
             name='custom-org-assignee-via-team', permissions=['view_organization', 'view_team'], content_type=org_ct

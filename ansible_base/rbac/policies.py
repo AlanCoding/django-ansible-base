@@ -118,9 +118,7 @@ def _user_permission_ids_from_role_definitions(request_user, obj):
         content_type_id=ct.id,
         object_id=obj.pk,
     ).filter(Q(users=request_user) | Q(teams__in=user_teams))
-    return set(
-        DABPermission.objects.filter(role_definitions__object_roles__in=obj_roles).values_list('pk', flat=True)
-    )
+    return set(DABPermission.objects.filter(role_definitions__object_roles__in=obj_roles).values_list('pk', flat=True))
 
 
 def _check_role_permissions(request_user, obj, role_definition):
@@ -148,7 +146,9 @@ def _check_role_permissions(request_user, obj, role_definition):
     if settings.ANSIBLE_BASE_CACHE_PARENT_PERMISSIONS:
         for permission in missing_perms:
             if not request_user.has_obj_perm(obj, permission.codename):
-                raise PermissionDenied({'detail': _('You do not have {codename} permission and cannot assign it to others').format(codename=permission.codename)})
+                raise PermissionDenied(
+                    {'detail': _('You do not have {codename} permission and cannot assign it to others').format(codename=permission.codename)}
+                )
     else:
         user_perm_ids = _user_permission_ids_from_role_definitions(request_user, obj)
         missing_perm_ids = {p.pk for p in missing_perms}
