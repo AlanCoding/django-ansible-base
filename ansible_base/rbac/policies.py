@@ -15,6 +15,8 @@ from ansible_base.rbac.permission_registry import permission_registry
 from ansible_base.rbac.remote import RemoteObject
 from ansible_base.rbac.validators import permissions_allowed_for_role
 
+ContentObject = Model | RemoteObject
+
 
 def visible_users(request_user, queryset=None, always_show_superusers=True, always_show_self=True) -> QuerySet:
     """Gives a queryset of users that another user should be able to view"""
@@ -89,7 +91,7 @@ def _model_has_permission_action(cls: type[Model], action: str) -> bool:
     return any(code == codename for code, _ in cls._meta.permissions)
 
 
-def _check_all_obj_permissions(request_user: Model, obj: Model) -> None:
+def _check_all_obj_permissions(request_user: Model, obj: ContentObject) -> None:
     """Require user to have all object-level permissions"""
     cls = type(obj)
     for codename in permissions_allowed_for_role(cls)[cls]:
@@ -97,7 +99,7 @@ def _check_all_obj_permissions(request_user: Model, obj: Model) -> None:
             raise PermissionDenied({'detail': _('You do not have {codename} permission the object').format(codename=codename)})
 
 
-def _user_permission_ids_from_role_definitions(request_user: Model, obj: Model) -> set[int]:
+def _user_permission_ids_from_role_definitions(request_user: Model, obj: ContentObject) -> set[int]:
     """Get permission IDs a user holds on an object by inspecting role definitions directly.
 
     This is an alternative to has_obj_perm for the escalation check, needed when
@@ -119,7 +121,7 @@ def _user_permission_ids_from_role_definitions(request_user: Model, obj: Model) 
     return set(DABPermission.objects.filter(role_definitions__object_roles__in=obj_roles).values_list('pk', flat=True))
 
 
-def _check_assignment_permissions_non_cached(request_user: Model, obj: Model, role_definition: Model) -> None:
+def _check_assignment_permissions_non_cached(request_user: Model, obj: ContentObject, role_definition: Model) -> None:
     """Verify user has every permission contained in the role being assigned.
 
     For each permission, uses has_obj_perm when the permission's content type matches
