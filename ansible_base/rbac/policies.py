@@ -124,38 +124,39 @@ def _user_permission_ids_from_role_definitions(request_user, obj):
 def _check_role_permissions(request_user, obj, role_definition):
     """Verify user has every permission contained in the role being assigned.
 
-    When ANSIBLE_BASE_CACHE_PARENT_PERMISSIONS is True, all child-model permissions
-    have RoleEvaluation entries on the parent object, so we can use has_obj_perm
-    per-permission for a fast evaluation-table lookup.
-
-    When False (the default), child-model permissions like view_team in an org-scoped
-    role have no evaluation entry on the org — they only exist on child objects (teams).
-    In that case we fall back to comparing role definition permissions directly, which
-    is more expensive but correct regardless of what child objects exist.
+    For each permission, uses has_obj_perm when the permission's content type matches
+    the object (the evaluation table handles this correctly). For cross-content-type
+    permissions (e.g. view_team in an org-scoped role), falls back to inspecting
+    role definitions directly, since has_obj_perm can't find those entries on a
+    mismatched object type.
     """
     role_perms = list(role_definition.permissions.all())
 
-    # Check for superuser flags and global role permissions first.
     # has_super_permission covers is_superuser, action-specific bypass flags,
-    # and singleton (global) role assignments — a user with a global role that
-    # includes the needed permissions can assign them at any object scope.
+    # and singleton (global) role assignments.
     missing_perms = [p for p in role_perms if not has_super_permission(request_user, p.codename)]
     if not missing_perms:
         return
 
-    if settings.ANSIBLE_BASE_CACHE_PARENT_PERMISSIONS:
-        for permission in missing_perms:
+    obj_ct = DABContentType.objects.get_for_model(obj)
+    cross_type_perms = []
+
+    for permission in missing_perms:
+        if permission.content_type_id == obj_ct.id:
             if not request_user.has_obj_perm(obj, permission.codename):
                 raise PermissionDenied(
                     {'detail': _('You do not have {codename} permission and cannot assign it to others').format(codename=permission.codename)}
                 )
-    else:
+        else:
+            cross_type_perms.append(permission)
+
+    if cross_type_perms:
         user_perm_ids = _user_permission_ids_from_role_definitions(request_user, obj)
-        missing_perm_ids = {p.pk for p in missing_perms}
-        still_missing = missing_perm_ids - user_perm_ids
-        if still_missing:
-            codename = DABPermission.objects.filter(pk__in=still_missing).values_list('codename', flat=True).first()
-            raise PermissionDenied({'detail': _('You do not have {codename} permission and cannot assign it to others').format(codename=codename)})
+        for permission in cross_type_perms:
+            if permission.pk not in user_perm_ids:
+                raise PermissionDenied(
+                    {'detail': _('You do not have {codename} permission and cannot assign it to others').format(codename=permission.codename)}
+                )
 
 
 def check_content_obj_permission(request_user, obj, role_definition=None) -> None:

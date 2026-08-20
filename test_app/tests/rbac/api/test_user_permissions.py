@@ -297,6 +297,22 @@ class TestRoleBasedAssignment:
         assert response.status_code == 201, response.data
 
     @override_settings(ALLOW_LOCAL_ASSIGNING_JWT_ROLES=True)
+    def test_escalation_check_with_parent_object_permissions(self, user, user_api_client, organization, org_admin_rd, member_rd):
+        """An org admin assigns the Team Member role on a team within their org.
+        The org admin's permissions come from an ObjectRole on the organization,
+        not on the team itself. The escalation check must recognize that the org
+        admin holds member_team and view_team via their org-scoped role."""
+        team = Team.objects.create(name='test-team', organization=organization)
+        org_admin_rd.give_permission(user, organization)
+
+        rando = User.objects.create(username='rando')
+        url = get_relative_url('roleuserassignment-list')
+        data = {'role_definition': member_rd.id, 'object_id': team.id, 'user': rando.id}
+
+        response = user_api_client.post(url, data=data)
+        assert response.status_code == 201, response.data
+
+    @override_settings(ALLOW_LOCAL_ASSIGNING_JWT_ROLES=True)
     def test_team_admins_can_add_children(self, user, user_api_client, organization, inventory, inv_rd, admin_rd, member_rd):
         url = get_relative_url('roleteamassignment-list')
 
