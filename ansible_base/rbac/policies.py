@@ -3,7 +3,7 @@ from typing import Optional
 from django.apps import apps
 from django.conf import settings
 from django.contrib.auth.models import AbstractBaseUser
-from django.db.models import Model
+from django.db.models import Model, Q
 from django.db.models.query import QuerySet
 from django.utils.translation import gettext_lazy as _
 from rest_framework.exceptions import PermissionDenied
@@ -81,7 +81,7 @@ def can_change_user(request_user: Optional[AbstractBaseUser], target_user: Optio
     return not target_user_orgs.exclude(pk__in=org_cls.access_ids_qs(request_user, 'change_organization')).exists()
 
 
-def _model_has_permission_action(cls, action):
+def _model_has_permission_action(cls: type[Model], action: str) -> bool:
     """Check if a model has a permission for the given action (default or custom)"""
     if action in cls._meta.default_permissions:
         return True
@@ -89,7 +89,7 @@ def _model_has_permission_action(cls, action):
     return any(code == codename for code, _ in cls._meta.permissions)
 
 
-def _check_all_obj_permissions(request_user, obj):
+def _check_all_obj_permissions(request_user: Model, obj: Model) -> None:
     """Require user to have all object-level permissions"""
     cls = type(obj)
     for codename in permissions_allowed_for_role(cls)[cls]:
@@ -97,7 +97,7 @@ def _check_all_obj_permissions(request_user, obj):
             raise PermissionDenied({'detail': _('You do not have {codename} permission the object').format(codename=codename)})
 
 
-def _user_permission_ids_from_role_definitions(request_user, obj):
+def _user_permission_ids_from_role_definitions(request_user: Model, obj: Model) -> set[int]:
     """Get permission IDs a user holds on an object by inspecting role definitions directly.
 
     This is an alternative to has_obj_perm for the escalation check, needed when
@@ -110,8 +110,6 @@ def _user_permission_ids_from_role_definitions(request_user, obj):
     RoleDefinitions the user holds on the object — directly or via team membership —
     and collects their declared permissions.
     """
-    from django.db.models import Q
-
     ct = DABContentType.objects.get_for_model(obj)
     user_teams = permission_registry.team_model.objects.filter(member_roles__users=request_user)
     obj_roles = ObjectRole.objects.filter(
@@ -121,7 +119,7 @@ def _user_permission_ids_from_role_definitions(request_user, obj):
     return set(DABPermission.objects.filter(role_definitions__object_roles__in=obj_roles).values_list('pk', flat=True))
 
 
-def _check_role_permissions(request_user, obj, role_definition):
+def _check_assignment_permissions_non_cached(request_user: Model, obj: Model, role_definition: Model) -> None:
     """Verify user has every permission contained in the role being assigned.
 
     For each permission, uses has_obj_perm when the permission's content type matches
@@ -180,14 +178,14 @@ def check_content_obj_permission(request_user, obj, role_definition=None) -> Non
                     if not request_user.has_obj_perm(obj, manage_action):
                         raise PermissionDenied
                     if role_definition:
-                        _check_role_permissions(request_user, obj, role_definition)
+                        _check_assignment_permissions_non_cached(request_user, obj, role_definition)
                     return
         _check_all_obj_permissions(request_user, obj)
     elif manage_action and _model_has_permission_action(type(obj), manage_action):
         if not request_user.has_obj_perm(obj, manage_action):
             raise PermissionDenied
         if role_definition:
-            _check_role_permissions(request_user, obj, role_definition)
+            _check_assignment_permissions_non_cached(request_user, obj, role_definition)
     else:
         _check_all_obj_permissions(request_user, obj)
 
