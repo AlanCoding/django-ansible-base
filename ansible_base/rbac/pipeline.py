@@ -22,6 +22,7 @@ from ansible_base.rbac.models.role import AssignmentBase, ObjectRole, RoleDefini
 from ansible_base.rbac.permission_registry import permission_registry
 from ansible_base.rbac.remote import RemoteObject
 from ansible_base.rbac.validators import validate_assignment, validate_team_assignment_enabled
+from ansible_base.rbac.signals import dab_rbac_assignments_created, dab_rbac_assignments_pre_delete
 
 logger = logging.getLogger(__name__)
 
@@ -173,9 +174,9 @@ def _create_assignments(
     lookup: ObjectRoleLookup,
     fire_signals_on_create: bool = True,
 ) -> list[AssignmentBase]:
-    """Bulk-create user and team assignment objects, return all resulting assignments."""
+    """Bulk-create user and team assignment objects, return only newly created assignments."""
     created_by = current_user_or_system_user()
-    all_assignments = []
+    new_assignments = []
 
     user_assignments = []
     for ra in user_resolved:
@@ -195,7 +196,8 @@ def _create_assignments(
         existing_user_pks = set(RoleUserAssignment.objects.filter(pair_q).values_list('pk', flat=True))
         RoleUserAssignment.objects.bulk_create(user_assignments, ignore_conflicts=True)
         db_users = list(RoleUserAssignment.objects.filter(pair_q))
-        all_assignments.extend(db_users)
+        new_users = [a for a in db_users if a.pk not in existing_user_pks]
+        new_assignments.extend(new_users)
         if fire_signals_on_create:
             _fire_post_save(db_users, existing_user_pks)
         else:
@@ -219,13 +221,14 @@ def _create_assignments(
         existing_team_pks = set(RoleTeamAssignment.objects.filter(pair_q).values_list('pk', flat=True))
         RoleTeamAssignment.objects.bulk_create(team_assignments, ignore_conflicts=True)
         db_teams = list(RoleTeamAssignment.objects.filter(pair_q))
-        all_assignments.extend(db_teams)
+        new_teams = [a for a in db_teams if a.pk not in existing_team_pks]
+        new_assignments.extend(new_teams)
         if fire_signals_on_create:
             _fire_post_save(db_teams, existing_team_pks)
         else:
             _audit_log_created(db_teams, existing_team_pks)
 
-    return all_assignments
+    return new_assignments
 
 
 def _collect_recompute_team_ids(object_roles: Iterable[ObjectRole]) -> set[int]:
@@ -319,6 +322,7 @@ def _recompute_after_remove(
 def remove_assignments(
     user_assignments: Sequence[RoleUserAssignment] = (),
     team_assignments: Sequence[RoleTeamAssignment] = (),
+    content_objects: dict[tuple[int, str], ContentObject] | None = None,
 ) -> None:
     """Remove assignments by reference and recompute affected permissions.
 
@@ -327,6 +331,17 @@ def remove_assignments(
     """
     if not user_assignments and not team_assignments:
         return
+
+    # Send pre-delete signal before assignments are deleted
+    all_assignments = list(user_assignments) + list(team_assignments)
+    if all_assignments:
+        # Pair each assignment with its content object
+        content_objects_dict = content_objects or {}
+        assignment_data = [(a, content_objects_dict.get((a.content_type_id, a.object_id))) for a in all_assignments]
+        dab_rbac_assignments_pre_delete.send(
+            sender=None,
+            assignment_data=assignment_data,
+        )
 
     object_role_ids: set[int] = set()
     actor_team_ids: set[int] = set()
@@ -348,6 +363,7 @@ def give_assignments(
     user_resolved: Sequence[ResolvedAssignment] = (),
     team_resolved: Sequence[ResolvedAssignment] = (),
     fire_signals_on_create: bool = True,
+    content_objects: dict[tuple[int, str], ContentObject] | None = None,
 ) -> list[AssignmentBase]:
     """Assign roles from already-resolved assignments (skips validation).
 
@@ -359,6 +375,16 @@ def give_assignments(
 
     lookup = _ensure_object_roles(list(user_resolved) + list(team_resolved))
     assignments = _create_assignments(list(user_resolved), list(team_resolved), lookup, fire_signals_on_create=fire_signals_on_create)
+
+    if assignments:
+        # Pair each assignment with its content object
+        content_objects_dict = content_objects or {}
+        assignment_data = [(a, content_objects_dict.get((a.content_type_id, a.object_id))) for a in assignments]
+        dab_rbac_assignments_created.send(
+            sender=None,
+            assignment_data=assignment_data,
+        )
+
     _recompute_after_give(lookup, assignments)
     return assignments
 
@@ -372,8 +398,18 @@ def bulk_give_permissions(
     if not user_permissions and not team_permissions:
         return []
 
+    # Build content_objects dict from triples for signal payload
+    # Key by (content_type_id, object_id) to handle different types with same ID
+    content_objects: dict[tuple[int, str], ContentObject] = {}
+    for _rd, _actor, obj in user_permissions:
+        ct, object_id, _parent_ref = _resolve_content_object(obj)
+        content_objects[(ct.id, object_id)] = obj
+    for _rd, _actor, obj in team_permissions:
+        ct, object_id, _parent_ref = _resolve_content_object(obj)
+        content_objects[(ct.id, object_id)] = obj
+
     user_resolved, team_resolved = _resolve_assignments(user_permissions, team_permissions)
-    return give_assignments(user_resolved, team_resolved, fire_signals_on_create=fire_signals_on_create)
+    return give_assignments(user_resolved, team_resolved, fire_signals_on_create=fire_signals_on_create, content_objects=content_objects)
 
 
 def bulk_remove_permissions(
@@ -391,6 +427,16 @@ def bulk_remove_permissions(
     if not user_permissions and not team_permissions:
         return
 
+    # Build content_objects dict from triples for signal payload
+    # Key by (content_type_id, object_id) to handle different types with same ID
+    content_objects: dict[tuple[int, str], ContentObject] = {}
+    for _rd, _actor, obj in user_permissions:
+        ct, object_id, _parent_ref = _resolve_content_object(obj)
+        content_objects[(ct.id, object_id)] = obj
+    for _rd, _actor, obj in team_permissions:
+        ct, object_id, _parent_ref = _resolve_content_object(obj)
+        content_objects[(ct.id, object_id)] = obj
+
     user_resolved = _resolve_triples(user_permissions)
     team_resolved = _resolve_triples(team_permissions)
     lookup = _lookup_object_roles(user_resolved + team_resolved)
@@ -399,4 +445,4 @@ def bulk_remove_permissions(
 
     user_found = _find_assignments(user_resolved, lookup, RoleUserAssignment, 'user_id')
     team_found = _find_assignments(team_resolved, lookup, RoleTeamAssignment, 'team_id')
-    remove_assignments(user_assignments=user_found, team_assignments=team_found)
+    remove_assignments(user_assignments=user_found, team_assignments=team_found, content_objects=content_objects)
