@@ -207,9 +207,14 @@ def _create_assignments(
     team_resolved: list[ResolvedAssignment],
     lookup: ObjectRoleLookup,
     fire_signals_on_create: bool = True,
-) -> list[AssignmentBase]:
-    """Bulk-create user and team assignment objects, return only newly created assignments."""
+) -> tuple[list[AssignmentBase], list[AssignmentBase]]:
+    """Bulk-create user and team assignment objects.
+
+    Returns:
+        (all_assignments, new_assignments) - all assignments (idempotent), and only newly created ones (for signals)
+    """
     created_by = current_user_or_system_user()
+    all_assignments = []
     new_assignments = []
 
     user_assignments = []
@@ -231,6 +236,7 @@ def _create_assignments(
         RoleUserAssignment.objects.bulk_create(user_assignments, ignore_conflicts=True)
         db_users = list(RoleUserAssignment.objects.filter(pair_q))
         new_users = [a for a in db_users if a.pk not in existing_user_pks]
+        all_assignments.extend(db_users)
         new_assignments.extend(new_users)
         if fire_signals_on_create:
             _fire_post_save(db_users, existing_user_pks)
@@ -256,13 +262,14 @@ def _create_assignments(
         RoleTeamAssignment.objects.bulk_create(team_assignments, ignore_conflicts=True)
         db_teams = list(RoleTeamAssignment.objects.filter(pair_q))
         new_teams = [a for a in db_teams if a.pk not in existing_team_pks]
+        all_assignments.extend(db_teams)
         new_assignments.extend(new_teams)
         if fire_signals_on_create:
             _fire_post_save(db_teams, existing_team_pks)
         else:
             _audit_log_created(db_teams, existing_team_pks)
 
-    return new_assignments
+    return all_assignments, new_assignments
 
 
 def _collect_recompute_team_ids(object_roles: Iterable[ObjectRole]) -> set[int]:
@@ -410,24 +417,24 @@ def give_assignments(
     Args:
         content_objects: Optional dict mapping (content_type_id, object_id) to model instances.
             When provided, these are included in the bulk signal. When None, signal fires
-            with None for content objects (consumer can fetch if needed).
+            with empty dict (consumer can fetch if needed).
     """
     if not user_resolved and not team_resolved:
         return []
 
     lookup = _ensure_object_roles(list(user_resolved) + list(team_resolved))
-    assignments = _create_assignments(list(user_resolved), list(team_resolved), lookup, fire_signals_on_create=fire_signals_on_create)
+    all_assignments, new_assignments = _create_assignments(list(user_resolved), list(team_resolved), lookup, fire_signals_on_create=fire_signals_on_create)
 
-    # Always fire bulk signal with whatever content_objects we have (may be empty dict)
-    if assignments:
+    # Fire bulk signal only for newly created assignments (not idempotent re-creates)
+    if new_assignments:
         dab_rbac_assignments_created.send(
             sender=None,
-            assignments=assignments,
+            assignments=new_assignments,
             content_objects=content_objects or {},
         )
 
-    _recompute_after_give(lookup, assignments)
-    return assignments
+    _recompute_after_give(lookup, all_assignments)
+    return all_assignments
 
 
 def bulk_give_permissions(
