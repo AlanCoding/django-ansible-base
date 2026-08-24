@@ -371,14 +371,13 @@ def remove_assignments(
     if not user_assignments and not team_assignments:
         return
 
-    # Always fire bulk signal BEFORE deletion with whatever content_objects we have (may be None)
+    # Always fire bulk signal BEFORE deletion with whatever content_objects we have (may be empty dict)
     all_assignments = list(user_assignments) + list(team_assignments)
     if all_assignments:
-        content_objects_dict = content_objects or {}
-        assignment_data = [(a, content_objects_dict.get((a.content_type_id, a.object_id))) for a in all_assignments]
         dab_rbac_assignments_pre_delete.send(
             sender=None,
-            assignment_data=assignment_data,
+            assignments=all_assignments,
+            content_objects=content_objects or {},
         )
 
     object_role_ids: set[int] = set()
@@ -419,13 +418,12 @@ def give_assignments(
     lookup = _ensure_object_roles(list(user_resolved) + list(team_resolved))
     assignments = _create_assignments(list(user_resolved), list(team_resolved), lookup, fire_signals_on_create=fire_signals_on_create)
 
-    # Always fire bulk signal with whatever content_objects we have (may be None)
+    # Always fire bulk signal with whatever content_objects we have (may be empty dict)
     if assignments:
-        content_objects_dict = content_objects or {}
-        assignment_data = [(a, content_objects_dict.get((a.content_type_id, a.object_id))) for a in assignments]
         dab_rbac_assignments_created.send(
             sender=None,
-            assignment_data=assignment_data,
+            assignments=assignments,
+            content_objects=content_objects or {},
         )
 
     _recompute_after_give(lookup, assignments)

@@ -27,15 +27,15 @@ class TestBulkAssignmentCreatedSignal:
 
             mck.signal_handler.assert_called_once()
             call_kwargs = mck.signal_handler.call_args.kwargs
-            assert 'assignment_data' in call_kwargs
-            assignment_data = call_kwargs['assignment_data']
-            assert len(assignment_data) == 2
-            # Verify it's a list of tuples
-            for item in assignment_data:
-                assert isinstance(item, tuple) and len(item) == 2
-                assignment, content_object = item
-                assert assignment in assignments
-                assert content_object == organization
+            assert 'assignments' in call_kwargs
+            assert 'content_objects' in call_kwargs
+            assert len(call_kwargs['assignments']) == 2
+            assert all(a in call_kwargs['assignments'] for a in assignments)
+            # Verify content_objects dict contains the organization
+            for assignment in call_kwargs['assignments']:
+                key = (assignment.content_type_id, assignment.object_id)
+                assert key in call_kwargs['content_objects']
+                assert call_kwargs['content_objects'][key] == organization
         finally:
             dab_rbac_assignments_created.disconnect(mck.signal_handler, dispatch_uid='test-created')
 
@@ -49,11 +49,14 @@ class TestBulkAssignmentCreatedSignal:
 
             mck.signal_handler.assert_called_once()
             call_kwargs = mck.signal_handler.call_args.kwargs
-            assert 'assignment_data' in call_kwargs
-            assignment_data = call_kwargs['assignment_data']
-            assert len(assignment_data) == 1
-            assert assignment_data[0][0] == assignment
-            # Content object may be None for single give_permission calls
+            assert 'assignments' in call_kwargs
+            assert 'content_objects' in call_kwargs
+            assert len(call_kwargs['assignments']) == 1
+            assert call_kwargs['assignments'][0] == assignment
+            # Content object should be present (give_permission calls bulk_give_permissions)
+            key = (assignment.content_type_id, assignment.object_id)
+            assert key in call_kwargs['content_objects']
+            assert call_kwargs['content_objects'][key] == organization
         finally:
             dab_rbac_assignments_created.disconnect(mck.signal_handler, dispatch_uid='test-single')
 
@@ -86,12 +89,15 @@ class TestBulkAssignmentCreatedSignal:
 
             mck.signal_handler.assert_called_once()
             call_kwargs = mck.signal_handler.call_args.kwargs
-            assignment_data = call_kwargs['assignment_data']
-            assert len(assignment_data) == 1
-            assignment, content_object = assignment_data[0]
+            assert 'assignments' in call_kwargs
+            assert 'content_objects' in call_kwargs
+            assert len(call_kwargs['assignments']) == 1
+            assignment = call_kwargs['assignments'][0]
             assert assignment == assignments[0]
             assert assignment.team == team
-            assert content_object == inv
+            # Verify content object in dict
+            key = (assignment.content_type_id, assignment.object_id)
+            assert call_kwargs['content_objects'][key] == inv
         finally:
             dab_rbac_assignments_created.disconnect(mck.signal_handler, dispatch_uid='test-team')
 
@@ -109,11 +115,14 @@ class TestBulkAssignmentCreatedSignal:
 
             mck.signal_handler.assert_called_once()
             call_kwargs = mck.signal_handler.call_args.kwargs
-            assignment_data = call_kwargs['assignment_data']
-            assert len(assignment_data) == 2
-            for assignment, content_object in assignment_data:
-                assert assignment in assignments
-                assert content_object == inv
+            assert 'assignments' in call_kwargs
+            assert 'content_objects' in call_kwargs
+            assert len(call_kwargs['assignments']) == 2
+            assert all(a in call_kwargs['assignments'] for a in assignments)
+            # Verify all assignments have content objects in dict
+            for assignment in call_kwargs['assignments']:
+                key = (assignment.content_type_id, assignment.object_id)
+                assert call_kwargs['content_objects'][key] == inv
         finally:
             dab_rbac_assignments_created.disconnect(mck.signal_handler, dispatch_uid='test-mixed')
 
@@ -130,9 +139,10 @@ class TestBulkAssignmentCreatedSignal:
 
             mck.signal_handler.assert_called_once()
             call_kwargs = mck.signal_handler.call_args.kwargs
-            assignment_data = call_kwargs['assignment_data']
-            assert len(assignment_data) == 1
-            assert assignment_data[0][0] == assignments[0]
+            assert 'assignments' in call_kwargs
+            assert 'content_objects' in call_kwargs
+            assert len(call_kwargs['assignments']) == 1
+            assert call_kwargs['assignments'][0] == assignments[0]
         finally:
             dab_rbac_assignments_created.disconnect(mck.signal_handler, dispatch_uid='test-flag')
 
@@ -164,10 +174,13 @@ class TestBulkAssignmentPreDeleteSignal:
 
             mck.signal_handler.assert_called_once()
             call_kwargs = mck.signal_handler.call_args.kwargs
-            assignment_data = call_kwargs['assignment_data']
-            assert len(assignment_data) == 2
-            for assignment, content_object in assignment_data:
-                assert content_object == organization
+            assert 'assignments' in call_kwargs
+            assert 'content_objects' in call_kwargs
+            assert len(call_kwargs['assignments']) == 2
+            # Verify content_objects dict contains the organization
+            for assignment in call_kwargs['assignments']:
+                key = (assignment.content_type_id, assignment.object_id)
+                assert call_kwargs['content_objects'][key] == organization
         finally:
             dab_rbac_assignments_pre_delete.disconnect(mck.signal_handler, dispatch_uid='test-pre-delete')
 
@@ -183,8 +196,9 @@ class TestBulkAssignmentPreDeleteSignal:
 
             mck.signal_handler.assert_called_once()
             call_kwargs = mck.signal_handler.call_args.kwargs
-            assignment_data = call_kwargs['assignment_data']
-            assert len(assignment_data) == 1
+            assert 'assignments' in call_kwargs
+            assert 'content_objects' in call_kwargs
+            assert len(call_kwargs['assignments']) == 1
         finally:
             dab_rbac_assignments_pre_delete.disconnect(mck.signal_handler, dispatch_uid='test-single-rm')
 
@@ -194,14 +208,16 @@ class TestBulkAssignmentPreDeleteSignal:
 
         captured_data = {}
 
-        def capture_assignment_data(sender, assignment_data, **kwargs):
+        def capture_assignment_data(sender, assignments, content_objects, **kwargs):
             # Read assignment data — this should not raise because the signal
             # fires BEFORE deletion
-            assignment, content_object = assignment_data[0]
+            assignment = assignments[0]
             captured_data['role_name'] = assignment.role_definition.name
             captured_data['object_id'] = assignment.object_id
             captured_data['user_id'] = assignment.user_id
-            captured_data['content_object'] = content_object
+            # Look up content object from dict
+            key = (assignment.content_type_id, assignment.object_id)
+            captured_data['content_object'] = content_objects.get(key)
 
         dab_rbac_assignments_pre_delete.connect(capture_assignment_data, dispatch_uid='test-valid')
 
@@ -242,11 +258,14 @@ class TestBulkAssignmentPreDeleteSignal:
 
             mck.signal_handler.assert_called_once()
             call_kwargs = mck.signal_handler.call_args.kwargs
-            assignment_data = call_kwargs['assignment_data']
-            assert len(assignment_data) == 1
-            assignment, content_object = assignment_data[0]
+            assert 'assignments' in call_kwargs
+            assert 'content_objects' in call_kwargs
+            assert len(call_kwargs['assignments']) == 1
+            assignment = call_kwargs['assignments'][0]
             assert assignment.team == team
-            assert content_object == inv
+            # Verify content object in dict
+            key = (assignment.content_type_id, assignment.object_id)
+            assert call_kwargs['content_objects'][key] == inv
         finally:
             dab_rbac_assignments_pre_delete.disconnect(mck.signal_handler, dispatch_uid='test-team-rm')
 
@@ -269,9 +288,12 @@ class TestBulkAssignmentPreDeleteSignal:
 
             mck.signal_handler.assert_called_once()
             call_kwargs = mck.signal_handler.call_args.kwargs
-            assignment_data = call_kwargs['assignment_data']
-            assert len(assignment_data) == 2
-            for assignment, content_object in assignment_data:
-                assert content_object == inv
+            assert 'assignments' in call_kwargs
+            assert 'content_objects' in call_kwargs
+            assert len(call_kwargs['assignments']) == 2
+            # Verify all assignments have content objects in dict
+            for assignment in call_kwargs['assignments']:
+                key = (assignment.content_type_id, assignment.object_id)
+                assert call_kwargs['content_objects'][key] == inv
         finally:
             dab_rbac_assignments_pre_delete.disconnect(mck.signal_handler, dispatch_uid='test-mixed-rm')
