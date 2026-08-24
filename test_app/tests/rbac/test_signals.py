@@ -2,7 +2,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from ansible_base.rbac.models import RoleDefinition
 from ansible_base.rbac.pipeline import bulk_give_permissions, bulk_remove_permissions
 from ansible_base.rbac.signals import dab_rbac_assignments_created, dab_rbac_assignments_pre_delete
 from test_app.models import Inventory, User

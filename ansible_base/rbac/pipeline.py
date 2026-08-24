@@ -21,8 +21,8 @@ from ansible_base.rbac.models.content_type import DABContentType
 from ansible_base.rbac.models.role import AssignmentBase, ObjectRole, RoleDefinition, RoleTeamAssignment, RoleUserAssignment
 from ansible_base.rbac.permission_registry import permission_registry
 from ansible_base.rbac.remote import RemoteObject
-from ansible_base.rbac.validators import validate_assignment, validate_team_assignment_enabled
 from ansible_base.rbac.signals import dab_rbac_assignments_created, dab_rbac_assignments_pre_delete
+from ansible_base.rbac.validators import validate_assignment, validate_team_assignment_enabled
 
 logger = logging.getLogger(__name__)
 
