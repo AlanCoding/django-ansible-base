@@ -55,17 +55,47 @@ def _resolve_content_object(obj: models.Model | RemoteObject) -> tuple[DABConten
     )
 
 
-def _resolve_triples(triples: Iterable[PermissionTriple]) -> list[ResolvedAssignment]:
-    """Convert permission triples to ResolvedAssignments (no validation, no DB queries beyond content type lookup)."""
-    return [ResolvedAssignment(rd, actor, *_resolve_content_object(obj)) for rd, actor, obj in triples]
+def _resolve_triples(
+    triples: Iterable[PermissionTriple],
+    collect_content_objects: bool = False,
+) -> tuple[list[ResolvedAssignment], dict[tuple[int, str], ContentObject] | None]:
+    """Convert permission triples to ResolvedAssignments (no validation, no DB queries beyond content type lookup).
+
+    Args:
+        collect_content_objects: If True, also build a dict mapping (content_type_id, object_id)
+            to content objects for signal use.
+
+    Returns:
+        (resolved_assignments, content_objects_dict or None)
+    """
+    resolved = []
+    content_objects: dict[tuple[int, str], ContentObject] | None = {} if collect_content_objects else None
+
+    for rd, actor, obj in triples:
+        ct, object_id, parent_ref = _resolve_content_object(obj)
+        resolved.append(ResolvedAssignment(rd, actor, ct, object_id, parent_ref))
+        if content_objects is not None:
+            content_objects[(ct.id, object_id)] = obj
+
+    return resolved, content_objects
 
 
 def _resolve_assignments(
     user_permissions: Sequence[PermissionTriple],
     team_permissions: Sequence[PermissionTriple],
-) -> tuple[list[ResolvedAssignment], list[ResolvedAssignment]]:
-    """Validate permissions and build the resolved assignment lists."""
+    collect_content_objects: bool = False,
+) -> tuple[list[ResolvedAssignment], list[ResolvedAssignment], dict[tuple[int, str], ContentObject] | None]:
+    """Validate permissions and build the resolved assignment lists.
+
+    Args:
+        collect_content_objects: If True, also build a dict mapping (content_type_id, object_id)
+            to content objects for signal use. This avoids double-looping and double-resolving.
+
+    Returns:
+        (user_resolved, team_resolved, content_objects_dict or None)
+    """
     validated_pairs: set[tuple[int, int]] = set()
+    content_objects: dict[tuple[int, str], ContentObject] | None = {} if collect_content_objects else None
 
     user_resolved: list[ResolvedAssignment] = []
     for rd, actor, obj in user_permissions:
@@ -75,6 +105,8 @@ def _resolve_assignments(
             validate_assignment(rd, actor, obj)
             validated_pairs.add(key)
         user_resolved.append(ResolvedAssignment(rd, actor, obj_ct, object_id, parent_ref))
+        if content_objects is not None:
+            content_objects[(obj_ct.id, object_id)] = obj
 
     team_validated_pairs: set[tuple[int, int]] = set()
     team_resolved: list[ResolvedAssignment] = []
@@ -90,8 +122,10 @@ def _resolve_assignments(
             validate_team_assignment_enabled(obj_ct, has_team_perm=has_team_perm, has_org_member=has_org_member)
             team_validated_pairs.add(key)
         team_resolved.append(ResolvedAssignment(rd, actor, obj_ct, object_id, parent_ref))
+        if content_objects is not None:
+            content_objects[(obj_ct.id, object_id)] = obj
 
-    return user_resolved, team_resolved
+    return user_resolved, team_resolved, content_objects
 
 
 def _lookup_object_roles(resolved: list[ResolvedAssignment]) -> ObjectRoleLookup:
@@ -407,17 +441,10 @@ def bulk_give_permissions(
     if not user_permissions and not team_permissions:
         return []
 
-    # Build content_objects dict from triples to pass to lower level for signal
-    # Key by (content_type_id, object_id) to handle different types with same ID
-    content_objects: dict[tuple[int, str], ContentObject] = {}
-    for _rd, _actor, obj in user_permissions:
-        ct, object_id, _parent_ref = _resolve_content_object(obj)
-        content_objects[(ct.id, object_id)] = obj
-    for _rd, _actor, obj in team_permissions:
-        ct, object_id, _parent_ref = _resolve_content_object(obj)
-        content_objects[(ct.id, object_id)] = obj
-
-    user_resolved, team_resolved = _resolve_assignments(user_permissions, team_permissions)
+    # Resolve and collect content_objects in one pass
+    user_resolved, team_resolved, content_objects = _resolve_assignments(
+        user_permissions, team_permissions, collect_content_objects=True
+    )
     # Signal fires in give_assignments with the content_objects we pass
     return give_assignments(user_resolved, team_resolved, fire_signals_on_create=fire_signals_on_create, content_objects=content_objects)
 
@@ -437,18 +464,13 @@ def bulk_remove_permissions(
     if not user_permissions and not team_permissions:
         return
 
-    # Build content_objects dict from triples to pass to lower level for signal
-    # Key by (content_type_id, object_id) to handle different types with same ID
-    content_objects: dict[tuple[int, str], ContentObject] = {}
-    for _rd, _actor, obj in user_permissions:
-        ct, object_id, _parent_ref = _resolve_content_object(obj)
-        content_objects[(ct.id, object_id)] = obj
-    for _rd, _actor, obj in team_permissions:
-        ct, object_id, _parent_ref = _resolve_content_object(obj)
-        content_objects[(ct.id, object_id)] = obj
+    # Resolve and collect content_objects in one pass
+    user_resolved, user_content_objects = _resolve_triples(user_permissions, collect_content_objects=True)
+    team_resolved, team_content_objects = _resolve_triples(team_permissions, collect_content_objects=True)
 
-    user_resolved = _resolve_triples(user_permissions)
-    team_resolved = _resolve_triples(team_permissions)
+    # Merge content_objects dicts
+    content_objects = {**(user_content_objects or {}), **(team_content_objects or {})}
+
     lookup = _lookup_object_roles(user_resolved + team_resolved)
     if not lookup:
         return
