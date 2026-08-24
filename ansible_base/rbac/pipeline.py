@@ -440,9 +440,7 @@ def bulk_give_permissions(
         return []
 
     # Resolve and collect content_objects in one pass
-    user_resolved, team_resolved, content_objects = _resolve_assignments(
-        user_permissions, team_permissions, collect_content_objects=True
-    )
+    user_resolved, team_resolved, content_objects = _resolve_assignments(user_permissions, team_permissions, collect_content_objects=True)
     # Signal fires in give_assignments with the content_objects we pass
     return give_assignments(user_resolved, team_resolved, fire_signals_on_create=fire_signals_on_create, content_objects=content_objects)
 
