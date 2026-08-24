@@ -328,14 +328,18 @@ def remove_assignments(
 
     Lower-level alternative to bulk_remove_permissions — accepts assignment objects
     directly, avoiding the triple resolution and GFK lookups that the bulk API requires.
+
+    Args:
+        content_objects: Optional dict mapping (content_type_id, object_id) to model instances.
+            When provided, these are included in the bulk signal. When None, signal fires
+            with None for content objects (consumer can fetch if needed).
     """
     if not user_assignments and not team_assignments:
         return
 
-    # Send pre-delete signal before assignments are deleted
+    # Always fire bulk signal BEFORE deletion with whatever content_objects we have (may be None)
     all_assignments = list(user_assignments) + list(team_assignments)
     if all_assignments:
-        # Pair each assignment with its content object
         content_objects_dict = content_objects or {}
         assignment_data = [(a, content_objects_dict.get((a.content_type_id, a.object_id))) for a in all_assignments]
         dab_rbac_assignments_pre_delete.send(
@@ -369,6 +373,11 @@ def give_assignments(
 
     Lower-level alternative to bulk_give_permissions — accepts ResolvedAssignment
     lists directly, for callers that have already resolved and validated.
+
+    Args:
+        content_objects: Optional dict mapping (content_type_id, object_id) to model instances.
+            When provided, these are included in the bulk signal. When None, signal fires
+            with None for content objects (consumer can fetch if needed).
     """
     if not user_resolved and not team_resolved:
         return []
@@ -376,8 +385,8 @@ def give_assignments(
     lookup = _ensure_object_roles(list(user_resolved) + list(team_resolved))
     assignments = _create_assignments(list(user_resolved), list(team_resolved), lookup, fire_signals_on_create=fire_signals_on_create)
 
+    # Always fire bulk signal with whatever content_objects we have (may be None)
     if assignments:
-        # Pair each assignment with its content object
         content_objects_dict = content_objects or {}
         assignment_data = [(a, content_objects_dict.get((a.content_type_id, a.object_id))) for a in assignments]
         dab_rbac_assignments_created.send(
@@ -398,7 +407,7 @@ def bulk_give_permissions(
     if not user_permissions and not team_permissions:
         return []
 
-    # Build content_objects dict from triples for signal payload
+    # Build content_objects dict from triples to pass to lower level for signal
     # Key by (content_type_id, object_id) to handle different types with same ID
     content_objects: dict[tuple[int, str], ContentObject] = {}
     for _rd, _actor, obj in user_permissions:
@@ -409,6 +418,7 @@ def bulk_give_permissions(
         content_objects[(ct.id, object_id)] = obj
 
     user_resolved, team_resolved = _resolve_assignments(user_permissions, team_permissions)
+    # Signal fires in give_assignments with the content_objects we pass
     return give_assignments(user_resolved, team_resolved, fire_signals_on_create=fire_signals_on_create, content_objects=content_objects)
 
 
@@ -427,7 +437,7 @@ def bulk_remove_permissions(
     if not user_permissions and not team_permissions:
         return
 
-    # Build content_objects dict from triples for signal payload
+    # Build content_objects dict from triples to pass to lower level for signal
     # Key by (content_type_id, object_id) to handle different types with same ID
     content_objects: dict[tuple[int, str], ContentObject] = {}
     for _rd, _actor, obj in user_permissions:
@@ -445,4 +455,5 @@ def bulk_remove_permissions(
 
     user_found = _find_assignments(user_resolved, lookup, RoleUserAssignment, 'user_id')
     team_found = _find_assignments(team_resolved, lookup, RoleTeamAssignment, 'team_id')
+    # Signal fires in remove_assignments with the content_objects we pass
     remove_assignments(user_assignments=user_found, team_assignments=team_found, content_objects=content_objects)
