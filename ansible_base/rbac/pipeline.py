@@ -380,12 +380,11 @@ def remove_assignments(
 
     # Always fire bulk signal BEFORE deletion with whatever content_objects we have (may be empty dict)
     all_assignments = list(user_assignments) + list(team_assignments)
-    if all_assignments:
-        dab_rbac_assignments_pre_delete.send(
-            sender=None,
-            assignments=all_assignments,
-            content_objects=content_objects or {},
-        )
+    dab_rbac_assignments_pre_delete.send(
+        sender=None,
+        assignments=all_assignments,
+        content_objects=content_objects or {},
+    )
 
     object_role_ids: set[int] = set()
     actor_team_ids: set[int] = set()
@@ -426,12 +425,11 @@ def give_assignments(
     all_assignments, new_assignments = _create_assignments(list(user_resolved), list(team_resolved), lookup, fire_signals_on_create=fire_signals_on_create)
 
     # Fire bulk signal only for newly created assignments (not idempotent re-creates)
-    if new_assignments:
-        dab_rbac_assignments_created.send(
-            sender=None,
-            assignments=new_assignments,
-            content_objects=content_objects or {},
-        )
+    dab_rbac_assignments_created.send(
+        sender=None,
+        assignments=new_assignments,
+        content_objects=content_objects or {},
+    )
 
     _recompute_after_give(lookup, all_assignments)
     return all_assignments
