@@ -268,7 +268,14 @@ class RoleDefinition(CommonModel):
             user_permissions=perm if is_user else [],
             team_permissions=[] if is_user else perm,
         )
-        return assignments[0]
+        if assignments:
+            return assignments[0]
+        # The assignment already existed. The bulk path returns only newly-created rows
+        # (bulk_create can't report skipped ones), so fetch the existing one -- this path is
+        # a single row, so the lookup that doesn't scale in bulk is fine here.
+        model = RoleUserAssignment if is_user else RoleTeamAssignment
+        actor_field = 'user' if is_user else 'team'
+        return model.objects.get(role_definition=self, object_id=content_object.pk, **{actor_field: actor})
 
     def remove_permission(self, actor, content_object):
         from ansible_base.rbac.pipeline import bulk_remove_permissions

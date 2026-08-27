@@ -598,6 +598,49 @@ class TestBulkGivePermissions:
             (user2.pk, str(inv2.pk)),
         }, f"Cross-product leak: got {returned_pairs}"
 
+    def test_skinny_shape_scale(self, organization, inv_rd):
+        """Skinny batch (one user, many objects) must not build a query that scales with N.
+
+        The old OR-of-pairs filter produced an N-deep expression tree that SQLite rejects
+        past ~1000 terms; a two-axis IN filter merely moves the wall. This exercises the
+        PK-range detection path with N well over that threshold.
+        """
+        n = 1100
+        user = User.objects.create(username='skinny-user')
+        invs = Inventory.objects.bulk_create([Inventory(name=f'skinny-inv-{i}', organization=organization) for i in range(n)])
+
+        assignments = bulk_give_permissions(user_permissions=[(inv_rd, user, inv) for inv in invs])
+
+        assert len(assignments) == n
+        assert RoleUserAssignment.objects.filter(user=user, role_definition=inv_rd).count() == n
+        # spot-check a few objects actually resolve permissions
+        assert user.has_obj_perm(invs[0], 'change')
+        assert user.has_obj_perm(invs[-1], 'change')
+
+    def test_reassign_existing_returns_only_created(self, organization, inv_rd):
+        """Re-giving an existing batch returns nothing and fires no create signals.
+
+        The bulk path returns only newly-created rows; pre-existing pairs are omitted (they
+        can't be reported by bulk_create, and fetching them back is the query that doesn't
+        scale). A second identical call must therefore create nothing, return [], and stay
+        idempotent.
+        """
+        n = 1100
+        user = User.objects.create(username='reassign-user')
+        invs = Inventory.objects.bulk_create([Inventory(name=f'reassign-inv-{i}', organization=organization) for i in range(n)])
+        perms = [(inv_rd, user, inv) for inv in invs]
+
+        first = bulk_give_permissions(user_permissions=perms)
+        assert len(first) == n  # all newly created
+
+        with patch('ansible_base.rbac.pipeline._fire_post_save') as mock_signal:
+            second = bulk_give_permissions(user_permissions=perms)
+            created_second_call = mock_signal.call_args[0][0]
+
+        assert second == []  # only-created contract: pre-existing pairs are not returned
+        assert created_second_call == []  # nothing newly created, so no create signals
+        assert RoleUserAssignment.objects.filter(user=user, role_definition=inv_rd).count() == n
+
     def test_audit_no_cross_product(self, organization, inv_rd):
         """Audit logging must not fire for pre-existing assignments outside the batch."""
         inv1 = Inventory.objects.create(name='audit-xp-inv1', organization=organization)
@@ -615,12 +658,11 @@ class TestBulkGivePermissions:
                 ],
                 fire_signals_on_create=False,
             )
-            args = mock_audit.call_args
-            db_assignments = args[0][0]
-            existing_pks = args[0][1]
-            new_assignments = [a for a in db_assignments if a.pk not in existing_pks]
-            new_pairs = {(a.user_id, a.object_id) for a in new_assignments}
+            # _audit_log_created now receives only the newly-created assignments.
+            created_assignments = mock_audit.call_args[0][0]
+            new_pairs = {(a.user_id, a.object_id) for a in created_assignments}
             assert (user1.pk, str(inv2.pk)) not in new_pairs, "Pre-existing assignment leaked into new set"
+            assert new_pairs == {(user1.pk, str(inv1.pk)), (user2.pk, str(inv2.pk))}
 
 
 @pytest.mark.django_db

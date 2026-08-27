@@ -15,6 +15,20 @@ def test_invalid_actor(inventory, org_inv_rd):
 
 
 @pytest.mark.django_db
+def test_give_permission_idempotent_returns_existing(rando, organization, org_inv_change_rd):
+    """give_permission returns the saved assignment even when it already existed.
+
+    The bulk path returns only newly-created rows, so on a repeat call give_permission must
+    fetch the pre-existing assignment itself rather than returning None/raising.
+    """
+    first = org_inv_change_rd.give_permission(rando, organization)
+    second = org_inv_change_rd.give_permission(rando, organization)
+    assert second is not None
+    assert second.pk == first.pk
+    assert RoleUserAssignment.objects.filter(user=rando, role_definition=org_inv_change_rd).count() == 1
+
+
+@pytest.mark.django_db
 def test_child_object_permission(rando, organization, inventory, org_inv_change_rd, admin_user):
     assert inventory.organization == organization
 
