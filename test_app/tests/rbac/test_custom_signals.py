@@ -233,6 +233,24 @@ class TestGlobalAssignmentSignals:
         finally:
             dab_rbac_assignments_pre_delete.disconnect(mck.signal_handler, dispatch_uid='test-global-team-rm')
 
+    def test_give_global_returns_identity_preserving_assignment(self, rando, team, global_inv_rd):
+        """give_global_permission must return an assignment whose role_definition/actor are
+        the exact objects passed in (the old get_or_create path did; downstream relies on
+        `assignment.role_definition is rd`). AAP-90170."""
+        user_assignment = global_inv_rd.give_global_permission(rando)
+        assert user_assignment.role_definition is global_inv_rd
+        assert user_assignment.user is rando
+        assert user_assignment.content_type is None
+
+        team_assignment = global_inv_rd.give_global_permission(team)
+        assert team_assignment.role_definition is global_inv_rd
+        assert team_assignment.team is team
+
+        # Idempotent re-give (already exists) must also preserve identity
+        again = global_inv_rd.give_global_permission(rando)
+        assert again.role_definition is global_inv_rd
+        assert again.user is rando
+
     def test_remove_global_nonexistent_no_signal(self, rando, global_inv_rd):
         mck = MagicMock()
         dab_rbac_assignments_pre_delete.connect(mck.signal_handler, dispatch_uid='test-global-noop-rm')

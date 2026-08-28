@@ -252,6 +252,12 @@ class RoleDefinition(CommonModel):
             else:
                 # Already existed: the pipeline returns only newly-created rows, so fetch it.
                 assignment = cls.objects.get(role_definition=self, object_role__isnull=True, **actor_filter)
+            # The pipeline returns DB-refetched rows; reattach the caller's in-memory role
+            # definition and actor so the returned assignment preserves object identity (the
+            # old get_or_create path did) and callers avoid a lazy re-fetch.
+            assignment.role_definition = self
+            for field_name, obj in actor_filter.items():
+                setattr(assignment, field_name, obj)
         else:
             # Capture the row for the return value before the pipeline deletes it.
             assignment = cls.objects.filter(role_definition=self, object_role__isnull=True, **actor_filter).first()
