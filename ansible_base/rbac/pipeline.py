@@ -7,7 +7,6 @@ from typing import NamedTuple, Union
 from django.conf import settings
 from django.db import connection, models
 from django.db.models import Q
-from django.db.models.signals import post_save
 
 from ansible_base.lib.utils.models import current_user_or_system_user
 from ansible_base.rbac.caching import (
@@ -21,6 +20,7 @@ from ansible_base.rbac.models.content_type import DABContentType
 from ansible_base.rbac.models.role import AssignmentBase, ObjectRole, RoleDefinition, RoleTeamAssignment, RoleUserAssignment
 from ansible_base.rbac.permission_registry import permission_registry
 from ansible_base.rbac.remote import RemoteObject
+from ansible_base.rbac.triggers import dab_rbac_assignments_created, dab_rbac_assignments_pre_delete
 from ansible_base.rbac.validators import validate_assignment, validate_team_assignment_enabled
 
 logger = logging.getLogger(__name__)
@@ -54,17 +54,47 @@ def _resolve_content_object(obj: models.Model | RemoteObject) -> tuple[DABConten
     )
 
 
-def _resolve_triples(triples: Iterable[PermissionTriple]) -> list[ResolvedAssignment]:
-    """Convert permission triples to ResolvedAssignments (no validation, no DB queries beyond content type lookup)."""
-    return [ResolvedAssignment(rd, actor, *_resolve_content_object(obj)) for rd, actor, obj in triples]
+def _resolve_triples(
+    triples: Iterable[PermissionTriple],
+    collect_content_objects: bool = False,
+) -> tuple[list[ResolvedAssignment], dict[tuple[int, str], ContentObject] | None]:
+    """Convert permission triples to ResolvedAssignments (no validation, no DB queries beyond content type lookup).
+
+    Args:
+        collect_content_objects: If True, also build a dict mapping (content_type_id, object_id)
+            to content objects for signal use.
+
+    Returns:
+        (resolved_assignments, content_objects_dict or None)
+    """
+    resolved = []
+    content_objects: dict[tuple[int, str], ContentObject] | None = {} if collect_content_objects else None
+
+    for rd, actor, obj in triples:
+        ct, object_id, parent_ref = _resolve_content_object(obj)
+        resolved.append(ResolvedAssignment(rd, actor, ct, object_id, parent_ref))
+        if content_objects is not None:
+            content_objects[(ct.id, object_id)] = obj
+
+    return resolved, content_objects
 
 
 def _resolve_assignments(
     user_permissions: Sequence[PermissionTriple],
     team_permissions: Sequence[PermissionTriple],
-) -> tuple[list[ResolvedAssignment], list[ResolvedAssignment]]:
-    """Validate permissions and build the resolved assignment lists."""
+    collect_content_objects: bool = False,
+) -> tuple[list[ResolvedAssignment], list[ResolvedAssignment], dict[tuple[int, str], ContentObject] | None]:
+    """Validate permissions and build the resolved assignment lists.
+
+    Args:
+        collect_content_objects: If True, also build a dict mapping (content_type_id, object_id)
+            to content objects for signal use. This avoids double-looping and double-resolving.
+
+    Returns:
+        (user_resolved, team_resolved, content_objects_dict or None)
+    """
     validated_pairs: set[tuple[int, int]] = set()
+    content_objects: dict[tuple[int, str], ContentObject] | None = {} if collect_content_objects else None
 
     user_resolved: list[ResolvedAssignment] = []
     for rd, actor, obj in user_permissions:
@@ -74,6 +104,8 @@ def _resolve_assignments(
             validate_assignment(rd, actor, obj)
             validated_pairs.add(key)
         user_resolved.append(ResolvedAssignment(rd, actor, obj_ct, object_id, parent_ref))
+        if content_objects is not None:
+            content_objects[(obj_ct.id, object_id)] = obj
 
     team_validated_pairs: set[tuple[int, int]] = set()
     team_resolved: list[ResolvedAssignment] = []
@@ -89,8 +121,10 @@ def _resolve_assignments(
             validate_team_assignment_enabled(obj_ct, has_team_perm=has_team_perm, has_org_member=has_org_member)
             team_validated_pairs.add(key)
         team_resolved.append(ResolvedAssignment(rd, actor, obj_ct, object_id, parent_ref))
+        if content_objects is not None:
+            content_objects[(obj_ct.id, object_id)] = obj
 
-    return user_resolved, team_resolved
+    return user_resolved, team_resolved, content_objects
 
 
 def _lookup_object_roles(resolved: list[ResolvedAssignment]) -> ObjectRoleLookup:
@@ -176,21 +210,23 @@ def _insert_new(assignments: list[AssignmentBase], actor_id_field: str, model: t
     return [row for row in model.objects.filter(id__gt=max_before) if (getattr(row, actor_id_field), row.object_role_id) in batch_pairs]
 
 
-def _fire_post_save(created_assignments: list[AssignmentBase]) -> None:
-    """Fire post_save signals for newly-created assignments (skipped by bulk_create)."""
-    for assignment in created_assignments:
-        post_save.send(sender=type(assignment), instance=assignment, created=True, raw=False, using='default', update_fields=None)
-
-
 def _create_assignments(
     user_resolved: list[ResolvedAssignment],
     team_resolved: list[ResolvedAssignment],
     lookup: ObjectRoleLookup,
-    fire_signals_on_create: bool = True,
 ) -> list[AssignmentBase]:
-    """Bulk-create user and team assignment objects, return all resulting assignments."""
+    """Bulk-create user and team assignment objects; return only the newly-created rows.
+
+    Pre-existing (idempotent) pairs are deliberately omitted -- see _insert_new for why.
+
+    Newly-created rows are audit-logged directly via _audit_log_created. bulk_create bypasses
+    the per-row post_save that would otherwise drive DAB's own activity-stream audit, so we
+    replay it here. External consumers (AWX, Hub) no longer observe per-row post_save for
+    assignments; they connect to the bulk signals (dab_rbac_assignments_created /
+    dab_rbac_assignments_pre_delete) fired by give_assignments / remove_assignments instead.
+    """
     created_by = current_user_or_system_user()
-    all_assignments = []
+    created_assignments: list[AssignmentBase] = []
 
     user_assignments = [
         RoleUserAssignment(
@@ -205,11 +241,8 @@ def _create_assignments(
     ]
     if user_assignments:
         created_users = _insert_new(user_assignments, 'user_id', RoleUserAssignment)
-        all_assignments.extend(created_users)
-        if fire_signals_on_create:
-            _fire_post_save(created_users)
-        else:
-            _audit_log_created(created_users)
+        created_assignments.extend(created_users)
+        _audit_log_created(created_users)
 
     team_assignments = [
         RoleTeamAssignment(
@@ -224,13 +257,10 @@ def _create_assignments(
     ]
     if team_assignments:
         created_teams = _insert_new(team_assignments, 'team_id', RoleTeamAssignment)
-        all_assignments.extend(created_teams)
-        if fire_signals_on_create:
-            _fire_post_save(created_teams)
-        else:
-            _audit_log_created(created_teams)
+        created_assignments.extend(created_teams)
+        _audit_log_created(created_teams)
 
-    return all_assignments
+    return created_assignments
 
 
 def _collect_recompute_team_ids(object_roles: Iterable[ObjectRole]) -> set[int]:
@@ -324,14 +354,28 @@ def _recompute_after_remove(
 def remove_assignments(
     user_assignments: Sequence[RoleUserAssignment] = (),
     team_assignments: Sequence[RoleTeamAssignment] = (),
+    content_objects: dict[tuple[int, str], ContentObject] | None = None,
 ) -> None:
     """Remove assignments by reference and recompute affected permissions.
 
     Lower-level alternative to bulk_remove_permissions — accepts assignment objects
     directly, avoiding the triple resolution and GFK lookups that the bulk API requires.
+
+    Args:
+        content_objects: Optional dict mapping (content_type_id, object_id) to model instances.
+            When provided, these are included in the bulk signal. When None, signal fires
+            with None for content objects (consumer can fetch if needed).
     """
     if not user_assignments and not team_assignments:
         return
+
+    # Always fire bulk signal BEFORE deletion with whatever content_objects we have (may be empty dict)
+    all_assignments = list(user_assignments) + list(team_assignments)
+    dab_rbac_assignments_pre_delete.send(
+        sender=None,
+        assignments=all_assignments,
+        content_objects=content_objects or {},
+    )
 
     object_role_ids: set[int] = set()
     actor_team_ids: set[int] = set()
@@ -352,7 +396,7 @@ def remove_assignments(
 def give_assignments(
     user_resolved: Sequence[ResolvedAssignment] = (),
     team_resolved: Sequence[ResolvedAssignment] = (),
-    fire_signals_on_create: bool = True,
+    content_objects: dict[tuple[int, str], ContentObject] | None = None,
 ) -> list[AssignmentBase]:
     """Assign roles from already-resolved assignments (skips validation).
 
@@ -362,20 +406,33 @@ def give_assignments(
     Returns only the *newly-created* assignments. Pairs that already existed are omitted:
     bulk_create(ignore_conflicts=True) cannot report skipped rows, and fetching them back
     is the query that does not scale. Callers needing pre-existing rows must fetch them.
+
+    Args:
+        content_objects: Optional dict mapping (content_type_id, object_id) to model instances.
+            When provided, these are included in the dab_rbac_assignments_created signal.
+            When None, the signal fires with an empty dict (consumer can fetch if needed).
     """
     if not user_resolved and not team_resolved:
         return []
 
     lookup = _ensure_object_roles(list(user_resolved) + list(team_resolved))
-    assignments = _create_assignments(list(user_resolved), list(team_resolved), lookup, fire_signals_on_create=fire_signals_on_create)
-    _recompute_after_give(lookup, assignments)
-    return assignments
+    created_assignments = _create_assignments(list(user_resolved), list(team_resolved), lookup)
+
+    # Fire the bulk signal only when rows were actually created (idempotent re-gives are silent).
+    if created_assignments:
+        dab_rbac_assignments_created.send(
+            sender=None,
+            assignments=created_assignments,
+            content_objects=content_objects or {},
+        )
+
+    _recompute_after_give(lookup, created_assignments)
+    return created_assignments
 
 
 def bulk_give_permissions(
     user_permissions: Sequence[PermissionTriple] = (),
     team_permissions: Sequence[PermissionTriple] = (),
-    fire_signals_on_create: bool = True,
 ) -> list[AssignmentBase]:
     """Convenience API: validates triples, resolves, and delegates to give_assignments.
 
@@ -384,8 +441,10 @@ def bulk_give_permissions(
     if not user_permissions and not team_permissions:
         return []
 
-    user_resolved, team_resolved = _resolve_assignments(user_permissions, team_permissions)
-    return give_assignments(user_resolved, team_resolved, fire_signals_on_create=fire_signals_on_create)
+    # Resolve and collect content_objects in one pass
+    user_resolved, team_resolved, content_objects = _resolve_assignments(user_permissions, team_permissions, collect_content_objects=True)
+    # Signal fires in give_assignments with the content_objects we pass
+    return give_assignments(user_resolved, team_resolved, content_objects=content_objects)
 
 
 def bulk_remove_permissions(
@@ -403,12 +462,18 @@ def bulk_remove_permissions(
     if not user_permissions and not team_permissions:
         return
 
-    user_resolved = _resolve_triples(user_permissions)
-    team_resolved = _resolve_triples(team_permissions)
+    # Resolve and collect content_objects in one pass
+    user_resolved, user_content_objects = _resolve_triples(user_permissions, collect_content_objects=True)
+    team_resolved, team_content_objects = _resolve_triples(team_permissions, collect_content_objects=True)
+
+    # Merge content_objects dicts
+    content_objects = {**(user_content_objects or {}), **(team_content_objects or {})}
+
     lookup = _lookup_object_roles(user_resolved + team_resolved)
     if not lookup:
         return
 
     user_found = _find_assignments(user_resolved, lookup, RoleUserAssignment, 'user_id')
     team_found = _find_assignments(team_resolved, lookup, RoleTeamAssignment, 'team_id')
-    remove_assignments(user_assignments=user_found, team_assignments=team_found)
+    # Signal fires in remove_assignments with the content_objects we pass
+    remove_assignments(user_assignments=user_found, team_assignments=team_found, content_objects=content_objects)

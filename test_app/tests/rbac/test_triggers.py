@@ -634,21 +634,21 @@ class TestBulkGivePermissions:
         first = bulk_give_permissions(user_permissions=perms)
         assert len(first) == n  # all newly created
 
-        with patch('ansible_base.rbac.pipeline._fire_post_save') as mock_signal:
+        with patch('ansible_base.rbac.pipeline._audit_log_created') as mock_audit:
             second = bulk_give_permissions(user_permissions=perms)
-            created_second_call = mock_signal.call_args[0][0]
+            created_second_call = mock_audit.call_args[0][0]
 
         assert second == []  # only-created contract: pre-existing pairs are not returned
-        assert created_second_call == []  # nothing newly created, so no create signals
+        assert created_second_call == []  # nothing newly created, so nothing to audit/signal
         assert RoleUserAssignment.objects.filter(user=user, role_definition=inv_rd).count() == n
 
     @pytest.mark.skipif('ansible_base.activitystream' not in settings.INSTALLED_APPS, reason="activitystream not installed")
-    def test_fire_signals_false_audits_created_without_post_save(self, organization, team, rando, inv_rd):
-        """fire_signals_on_create=False audits newly-created user AND team assignments via
-        _audit_log_created (not post_save), and no-ops when nothing new is created.
+    def test_created_assignments_audited_without_entry(self, organization, team, rando, inv_rd):
+        """Newly-created user AND team assignments are audited via _audit_log_created (audit
+        logs, no activity-stream Entry rows), and re-giving the same batch audits nothing.
 
-        Exercises the audit branch for both actor types plus the empty-created early return,
-        which the demo-data bulk load (the only fire_signals_on_create=False caller) relies on.
+        bulk_create bypasses the per-row post_save, so _audit_log_created is the sole audit
+        path. Exercises both actor types plus the empty-created early return.
         """
         from ansible_base.activitystream.models import Entry
 
@@ -660,11 +660,8 @@ class TestBulkGivePermissions:
         }
         entries_before = Entry.objects.count()
 
-        with patch('ansible_base.rbac.pipeline._fire_post_save') as mock_signal:
-            with patch('ansible_base.activitystream.signals.log_auth_event') as log_auth_event:
-                bulk_give_permissions(**perms, fire_signals_on_create=False)
-            # post_save must be skipped; auditing happens via _audit_log_created instead
-            mock_signal.assert_not_called()
+        with patch('ansible_base.activitystream.signals.log_auth_event') as log_auth_event:
+            bulk_give_permissions(**perms)
 
         # One audit log per newly-created assignment (user + team), no activity-stream rows
         assert log_auth_event.call_count == 2
@@ -672,7 +669,7 @@ class TestBulkGivePermissions:
 
         # Re-giving the same batch creates nothing: _audit_log_created gets an empty list and returns early
         with patch('ansible_base.activitystream.signals.log_auth_event') as log_auth_event_again:
-            second = bulk_give_permissions(**perms, fire_signals_on_create=False)
+            second = bulk_give_permissions(**perms)
         assert second == []
         log_auth_event_again.assert_not_called()
 
@@ -691,7 +688,6 @@ class TestBulkGivePermissions:
                     (inv_rd, user1, inv1),
                     (inv_rd, user2, inv2),
                 ],
-                fire_signals_on_create=False,
             )
             # _audit_log_created now receives only the newly-created assignments.
             created_assignments = mock_audit.call_args[0][0]

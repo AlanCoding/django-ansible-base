@@ -359,7 +359,7 @@ def save_user_claims(user: Model, objects: dict, object_roles: dict, global_role
 
     # Pass 2: bulk assign all desired permissions
     if desired_permissions:
-        bulk_give_permissions(user_permissions=desired_permissions, fire_signals_on_create=False)
+        bulk_give_permissions(user_permissions=desired_permissions)
 
     # Pass 3: remove stale assignments not in the desired set
     desired_keys = {(rd.pk, obj.pk) for rd, _user, obj in desired_permissions}
