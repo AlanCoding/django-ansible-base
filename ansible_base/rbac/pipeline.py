@@ -140,31 +140,46 @@ def _ensure_object_roles(requested_assignments: list[ResolvedAssignment]) -> Obj
     return lookup
 
 
-def _audit_log_created(db_assignments: list[AssignmentBase], existing_pks: set[int]) -> None:
+def _audit_log_created(created_assignments: list[AssignmentBase]) -> None:
     """Emit audit logs for newly-created assignments (not idempotent re-assignments)."""
-    if not db_assignments or 'ansible_base.activitystream' not in settings.INSTALLED_APPS:
+    if not created_assignments or 'ansible_base.activitystream' not in settings.INSTALLED_APPS:
         return
 
     from ansible_base.activitystream.signals import _store_activitystream_entry
 
-    for assignment in db_assignments:
-        if assignment.pk not in existing_pks:
-            _store_activitystream_entry(None, assignment, 'create')
+    for assignment in created_assignments:
+        _store_activitystream_entry(None, assignment, 'create')
 
 
-def _pair_filter(assignments: list[AssignmentBase], actor_field: str) -> Q:
-    """Build a Q filter matching exact (actor, object_role) pairs — no cross-product."""
-    q = Q()
-    for a in assignments:
-        q |= Q(**{actor_field: getattr(a, actor_field), 'object_role': a.object_role})
-    return q
+def _insert_new(assignments: list[AssignmentBase], actor_id_field: str, model: type[AssignmentBase]) -> list[AssignmentBase]:
+    """Bulk-insert assignments and return only the newly-created rows.
+
+    New rows are detected by PK range -- id greater than the max seen before the insert --
+    rather than a per-pair filter, so the query is constant-size regardless of batch shape
+    (skinny or fat) and rides the existing PK index. Results are narrowed to the batch's
+    exact (actor, object_role) pairs so a row a concurrent caller commits in the id gap
+    doesn't leak in. (A genuine same-pair concurrent insert can still be double-counted as
+    created -- the same race window as before this change.)
+
+    Pre-existing pairs are deliberately NOT returned. bulk_create(ignore_conflicts=True)
+    reports neither which rows it skipped nor their PKs, and fetching them back is precisely
+    the query that does not scale (an OR-of-pairs SQLite rejects past ~1000 terms). Callers
+    needing a pre-existing row must fetch it themselves -- see RoleDefinition.give_permission.
+
+    Callers guard against the empty case (see _create_assignments), so ``assignments`` is
+    always non-empty here.
+    """
+    batch_pairs = {(getattr(a, actor_id_field), a.object_role_id) for a in assignments}
+    max_before = model.objects.aggregate(_m=models.Max('id'))['_m'] or 0
+    model.objects.bulk_create(assignments, ignore_conflicts=True)
+
+    return [row for row in model.objects.filter(id__gt=max_before) if (getattr(row, actor_id_field), row.object_role_id) in batch_pairs]
 
 
-def _fire_post_save(db_assignments: list[AssignmentBase], existing_pks: set[int]) -> None:
+def _fire_post_save(created_assignments: list[AssignmentBase]) -> None:
     """Fire post_save signals for newly-created assignments (skipped by bulk_create)."""
-    for assignment in db_assignments:
-        if assignment.pk not in existing_pks:
-            post_save.send(sender=type(assignment), instance=assignment, created=True, raw=False, using='default', update_fields=None)
+    for assignment in created_assignments:
+        post_save.send(sender=type(assignment), instance=assignment, created=True, raw=False, using='default', update_fields=None)
 
 
 def _create_assignments(
@@ -177,53 +192,43 @@ def _create_assignments(
     created_by = current_user_or_system_user()
     all_assignments = []
 
-    user_assignments = []
-    for ra in user_resolved:
-        obj_role = lookup[(ra.role_definition.pk, ra.object_id)]
-        user_assignments.append(
-            RoleUserAssignment(
-                user=ra.actor,
-                object_role=obj_role,
-                role_definition=ra.role_definition,
-                content_type=ra.content_type,
-                object_id=ra.object_id,
-                created_by=created_by,
-            )
+    user_assignments = [
+        RoleUserAssignment(
+            user=ra.actor,
+            object_role=lookup[(ra.role_definition.pk, ra.object_id)],
+            role_definition=ra.role_definition,
+            content_type=ra.content_type,
+            object_id=ra.object_id,
+            created_by=created_by,
         )
+        for ra in user_resolved
+    ]
     if user_assignments:
-        pair_q = _pair_filter(user_assignments, 'user')
-        existing_user_pks = set(RoleUserAssignment.objects.filter(pair_q).values_list('pk', flat=True))
-        RoleUserAssignment.objects.bulk_create(user_assignments, ignore_conflicts=True)
-        db_users = list(RoleUserAssignment.objects.filter(pair_q))
-        all_assignments.extend(db_users)
+        created_users = _insert_new(user_assignments, 'user_id', RoleUserAssignment)
+        all_assignments.extend(created_users)
         if fire_signals_on_create:
-            _fire_post_save(db_users, existing_user_pks)
+            _fire_post_save(created_users)
         else:
-            _audit_log_created(db_users, existing_user_pks)
+            _audit_log_created(created_users)
 
-    team_assignments = []
-    for ra in team_resolved:
-        obj_role = lookup[(ra.role_definition.pk, ra.object_id)]
-        team_assignments.append(
-            RoleTeamAssignment(
-                team=ra.actor,
-                object_role=obj_role,
-                role_definition=ra.role_definition,
-                content_type=ra.content_type,
-                object_id=ra.object_id,
-                created_by=created_by,
-            )
+    team_assignments = [
+        RoleTeamAssignment(
+            team=ra.actor,
+            object_role=lookup[(ra.role_definition.pk, ra.object_id)],
+            role_definition=ra.role_definition,
+            content_type=ra.content_type,
+            object_id=ra.object_id,
+            created_by=created_by,
         )
+        for ra in team_resolved
+    ]
     if team_assignments:
-        pair_q = _pair_filter(team_assignments, 'team')
-        existing_team_pks = set(RoleTeamAssignment.objects.filter(pair_q).values_list('pk', flat=True))
-        RoleTeamAssignment.objects.bulk_create(team_assignments, ignore_conflicts=True)
-        db_teams = list(RoleTeamAssignment.objects.filter(pair_q))
-        all_assignments.extend(db_teams)
+        created_teams = _insert_new(team_assignments, 'team_id', RoleTeamAssignment)
+        all_assignments.extend(created_teams)
         if fire_signals_on_create:
-            _fire_post_save(db_teams, existing_team_pks)
+            _fire_post_save(created_teams)
         else:
-            _audit_log_created(db_teams, existing_team_pks)
+            _audit_log_created(created_teams)
 
     return all_assignments
 
@@ -353,6 +358,10 @@ def give_assignments(
 
     Lower-level alternative to bulk_give_permissions — accepts ResolvedAssignment
     lists directly, for callers that have already resolved and validated.
+
+    Returns only the *newly-created* assignments. Pairs that already existed are omitted:
+    bulk_create(ignore_conflicts=True) cannot report skipped rows, and fetching them back
+    is the query that does not scale. Callers needing pre-existing rows must fetch them.
     """
     if not user_resolved and not team_resolved:
         return []
@@ -368,7 +377,10 @@ def bulk_give_permissions(
     team_permissions: Sequence[PermissionTriple] = (),
     fire_signals_on_create: bool = True,
 ) -> list[AssignmentBase]:
-    """Convenience API: validates triples, resolves, and delegates to give_assignments."""
+    """Convenience API: validates triples, resolves, and delegates to give_assignments.
+
+    Returns only the newly-created assignments (see give_assignments for why).
+    """
     if not user_permissions and not team_permissions:
         return []
 
