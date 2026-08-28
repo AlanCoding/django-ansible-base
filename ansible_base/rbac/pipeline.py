@@ -165,10 +165,10 @@ def _insert_new(assignments: list[AssignmentBase], actor_id_field: str, model: t
     reports neither which rows it skipped nor their PKs, and fetching them back is precisely
     the query that does not scale (an OR-of-pairs SQLite rejects past ~1000 terms). Callers
     needing a pre-existing row must fetch it themselves -- see RoleDefinition.give_permission.
-    """
-    if not assignments:
-        return []
 
+    Callers guard against the empty case (see _create_assignments), so ``assignments`` is
+    always non-empty here.
+    """
     batch_pairs = {(getattr(a, actor_id_field), a.object_role_id) for a in assignments}
     max_before = model.objects.aggregate(_m=models.Max('id'))['_m'] or 0
     model.objects.bulk_create(assignments, ignore_conflicts=True)

@@ -2,6 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from django.apps import apps
+from django.conf import settings
 from django.test.utils import override_settings
 from rest_framework.exceptions import ValidationError
 
@@ -640,6 +641,40 @@ class TestBulkGivePermissions:
         assert second == []  # only-created contract: pre-existing pairs are not returned
         assert created_second_call == []  # nothing newly created, so no create signals
         assert RoleUserAssignment.objects.filter(user=user, role_definition=inv_rd).count() == n
+
+    @pytest.mark.skipif('ansible_base.activitystream' not in settings.INSTALLED_APPS, reason="activitystream not installed")
+    def test_fire_signals_false_audits_created_without_post_save(self, organization, team, rando, inv_rd):
+        """fire_signals_on_create=False audits newly-created user AND team assignments via
+        _audit_log_created (not post_save), and no-ops when nothing new is created.
+
+        Exercises the audit branch for both actor types plus the empty-created early return,
+        which the demo-data bulk load (the only fire_signals_on_create=False caller) relies on.
+        """
+        from ansible_base.activitystream.models import Entry
+
+        inv1 = Inventory.objects.create(name='audit-sig-inv1', organization=organization)
+        inv2 = Inventory.objects.create(name='audit-sig-inv2', organization=organization)
+        perms = {
+            'user_permissions': [(inv_rd, rando, inv1)],
+            'team_permissions': [(inv_rd, team, inv2)],
+        }
+        entries_before = Entry.objects.count()
+
+        with patch('ansible_base.rbac.pipeline._fire_post_save') as mock_signal:
+            with patch('ansible_base.activitystream.signals.log_auth_event') as log_auth_event:
+                bulk_give_permissions(**perms, fire_signals_on_create=False)
+            # post_save must be skipped; auditing happens via _audit_log_created instead
+            mock_signal.assert_not_called()
+
+        # One audit log per newly-created assignment (user + team), no activity-stream rows
+        assert log_auth_event.call_count == 2
+        assert Entry.objects.count() == entries_before
+
+        # Re-giving the same batch creates nothing: _audit_log_created gets an empty list and returns early
+        with patch('ansible_base.activitystream.signals.log_auth_event') as log_auth_event_again:
+            second = bulk_give_permissions(**perms, fire_signals_on_create=False)
+        assert second == []
+        log_auth_event_again.assert_not_called()
 
     def test_audit_no_cross_product(self, organization, inv_rd):
         """Audit logging must not fire for pre-existing assignments outside the batch."""
