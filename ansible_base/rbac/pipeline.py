@@ -7,6 +7,7 @@ from typing import NamedTuple, Union
 from django.conf import settings
 from django.db import connection, models
 from django.db.models import Q
+from django.db.models.signals import post_save  # TEMPORARY: see _fire_post_save / AAP-90162 merge-order note
 
 from ansible_base.lib.utils.models import current_user_or_system_user
 from ansible_base.rbac.caching import (
@@ -175,7 +176,14 @@ def _ensure_object_roles(requested_assignments: list[ResolvedAssignment]) -> Obj
 
 
 def _audit_log_created(created_assignments: list[AssignmentBase]) -> None:
-    """Emit audit logs for newly-created assignments (not idempotent re-assignments)."""
+    """Emit audit logs for newly-created assignments (not idempotent re-assignments).
+
+    This is the END-STATE audit path for bulk-created assignments: DAB audits its own rows
+    directly without re-firing post_save. It is intentionally retained but NOT called during
+    the AAP-90162 merge window -- _create_assignments calls _fire_post_save instead so
+    not-yet-migrated consumers keep working. The final cleanup PR swaps the call back here
+    and deletes _fire_post_save. See _fire_post_save for the full rationale.
+    """
     if not created_assignments or 'ansible_base.activitystream' not in settings.INSTALLED_APPS:
         return
 
@@ -210,6 +218,31 @@ def _insert_new(assignments: list[AssignmentBase], actor_id_field: str, model: t
     return [row for row in model.objects.filter(id__gt=max_before) if (getattr(row, actor_id_field), row.object_role_id) in batch_pairs]
 
 
+def _fire_post_save(created_assignments: list[AssignmentBase]) -> None:
+    """Re-fire post_save (created=True) for rows bulk_create inserted without signalling.
+
+    ~~~ TEMPORARY -- REMOVE WITH AAP-90162 CONSUMER MIGRATION ~~~
+
+    This exists ONLY to keep the merge order clean. The end state (see _audit_log_created)
+    is that DAB does NOT re-fire post_save for bulk-created assignments: DAB audits its own
+    rows directly, and external consumers (AWX, Hub) move to the bulk signals
+    (dab_rbac_assignments_created / dab_rbac_assignments_pre_delete).
+
+    But until the AWX (AAP-90164) and Hub (AAP-90165) patches land, those consumers still
+    have per-row post_save receivers on RoleUserAssignment / RoleTeamAssignment. If DAB
+    stopped firing post_save before they migrate, their old-RBAC mirroring and activity
+    stream would silently break (their downstream test suites fail). So we keep firing it.
+
+    This knowingly re-introduces the per-row-signal performance cost in AWX for the interim.
+    That regression is self-correcting: once the AWX patch removes its post_save receivers
+    and connects to the bulk signals, this call does nothing for AWX, and the FINAL DAB
+    cleanup PR deletes _fire_post_save (and this import) and switches back to
+    _audit_log_created. DO NOT build anything new on top of this re-fire.
+    """
+    for assignment in created_assignments:
+        post_save.send(sender=type(assignment), instance=assignment, created=True, raw=False, using='default', update_fields=None)
+
+
 def _create_assignments(
     user_resolved: list[ResolvedAssignment],
     team_resolved: list[ResolvedAssignment],
@@ -219,11 +252,12 @@ def _create_assignments(
 
     Pre-existing (idempotent) pairs are deliberately omitted -- see _insert_new for why.
 
-    Newly-created rows are audit-logged directly via _audit_log_created. bulk_create bypasses
-    the per-row post_save that would otherwise drive DAB's own activity-stream audit, so we
-    replay it here. External consumers (AWX, Hub) no longer observe per-row post_save for
-    assignments; they connect to the bulk signals (dab_rbac_assignments_created /
-    dab_rbac_assignments_pre_delete) fired by give_assignments / remove_assignments instead.
+    Newly-created rows drive audit + downstream mirroring. The END STATE is a direct
+    _audit_log_created() call (DAB audits itself; consumers use the bulk signals). During
+    the AAP-90162 merge window we instead re-fire post_save via _fire_post_save() so
+    not-yet-migrated consumers (AWX, Hub) keep working -- see that function's docstring.
+    We must call ONE of the two, never both: post_save re-drives DAB's own
+    activitystream_create receiver, so pairing it with _audit_log_created would double-audit.
     """
     created_by = current_user_or_system_user()
     created_assignments: list[AssignmentBase] = []
@@ -242,7 +276,8 @@ def _create_assignments(
     if user_assignments:
         created_user_assignments = _insert_new(user_assignments, 'user_id', RoleUserAssignment)
         created_assignments.extend(created_user_assignments)
-        _audit_log_created(created_user_assignments)
+        # TEMPORARY (AAP-90162 merge order): _fire_post_save instead of _audit_log_created.
+        _fire_post_save(created_user_assignments)
 
     team_assignments = [
         RoleTeamAssignment(
@@ -258,7 +293,8 @@ def _create_assignments(
     if team_assignments:
         created_team_assignments = _insert_new(team_assignments, 'team_id', RoleTeamAssignment)
         created_assignments.extend(created_team_assignments)
-        _audit_log_created(created_team_assignments)
+        # TEMPORARY (AAP-90162 merge order): _fire_post_save instead of _audit_log_created.
+        _fire_post_save(created_team_assignments)
 
     return created_assignments
 

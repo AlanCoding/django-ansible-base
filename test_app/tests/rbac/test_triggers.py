@@ -634,12 +634,12 @@ class TestBulkGivePermissions:
         first = bulk_give_permissions(user_permissions=perms)
         assert len(first) == n  # all newly created
 
-        with patch('ansible_base.rbac.pipeline._audit_log_created') as mock_audit:
+        with patch('ansible_base.rbac.pipeline._fire_post_save') as mock_signal:
             second = bulk_give_permissions(user_permissions=perms)
-            created_second_call = mock_audit.call_args[0][0]
+            created_second_call = mock_signal.call_args[0][0]
 
         assert second == []  # only-created contract: pre-existing pairs are not returned
-        assert created_second_call == []  # nothing newly created, so nothing to audit/signal
+        assert created_second_call == []  # nothing newly created, so nothing to signal/audit
         assert RoleUserAssignment.objects.filter(user=user, role_definition=inv_rd).count() == n
 
     @pytest.mark.skipif('ansible_base.activitystream' not in settings.INSTALLED_APPS, reason="activitystream not installed")
@@ -682,18 +682,40 @@ class TestBulkGivePermissions:
 
         inv_rd.give_permission(user1, inv2)
 
-        with patch('ansible_base.rbac.pipeline._audit_log_created') as mock_audit:
+        with patch('ansible_base.rbac.pipeline._fire_post_save') as mock_signal:
             bulk_give_permissions(
                 user_permissions=[
                     (inv_rd, user1, inv1),
                     (inv_rd, user2, inv2),
                 ],
             )
-            # _audit_log_created now receives only the newly-created assignments.
-            created_assignments = mock_audit.call_args[0][0]
+            # The create hook (_fire_post_save today, _audit_log_created end-state) receives
+            # only the newly-created assignments.
+            created_assignments = mock_signal.call_args[0][0]
             new_pairs = {(a.user_id, a.object_id) for a in created_assignments}
             assert (user1.pk, str(inv2.pk)) not in new_pairs, "Pre-existing assignment leaked into new set"
             assert new_pairs == {(user1.pk, str(inv1.pk)), (user2.pk, str(inv2.pk))}
+
+    @pytest.mark.skipif('ansible_base.activitystream' not in settings.INSTALLED_APPS, reason="activitystream not installed")
+    def test_audit_log_created_end_state_path(self, organization, rando, inv_rd):
+        """_audit_log_created (the end-state audit path, not wired in during the AAP-90162
+        merge window) audits each created assignment once and no-ops on an empty list.
+
+        Called directly because _create_assignments temporarily uses _fire_post_save instead;
+        this keeps the restore target covered so the final cleanup PR is a safe swap-back.
+        """
+        from ansible_base.rbac.pipeline import _audit_log_created
+
+        inv = Inventory.objects.create(name='audit-endstate-inv', organization=organization)
+        assignment = inv_rd.give_permission(rando, inv)
+
+        with patch('ansible_base.activitystream.signals.log_auth_event') as log_auth_event:
+            _audit_log_created([assignment])
+        log_auth_event.assert_called_once()
+
+        with patch('ansible_base.activitystream.signals.log_auth_event') as log_auth_event_empty:
+            _audit_log_created([])
+        log_auth_event_empty.assert_not_called()
 
 
 @pytest.mark.django_db

@@ -126,11 +126,12 @@ class TestBulkAssignmentCreatedSignal:
         finally:
             dab_rbac_assignments_created.disconnect(mck.signal_handler, dispatch_uid='test-mixed')
 
-    def test_created_signal_is_the_only_creation_hook(self, organization, rando, org_inv_rd):
-        """The bulk signal is the sole creation notification — it fires once with the new rows.
+    def test_created_signal_fires_once_with_new_rows(self, organization, rando, org_inv_rd):
+        """The bulk created signal fires once per operation with the newly-created rows.
 
-        There is no longer a per-row post_save re-fire or a fire_signals_on_create toggle;
-        consumers rely exclusively on this signal.
+        The fire_signals_on_create toggle is gone. (DAB also temporarily re-fires per-row
+        post_save during the AAP-90162 merge window so not-yet-migrated consumers keep
+        working — that is orthogonal to this signal, which is the migration target.)
         """
         mck = MagicMock()
         dab_rbac_assignments_created.connect(mck.signal_handler, dispatch_uid='test-only-hook')
