@@ -240,9 +240,9 @@ def _create_assignments(
         for ra in user_resolved
     ]
     if user_assignments:
-        created_users = _insert_new(user_assignments, 'user_id', RoleUserAssignment)
-        created_assignments.extend(created_users)
-        _audit_log_created(created_users)
+        created_user_assignments = _insert_new(user_assignments, 'user_id', RoleUserAssignment)
+        created_assignments.extend(created_user_assignments)
+        _audit_log_created(created_user_assignments)
 
     team_assignments = [
         RoleTeamAssignment(
@@ -256,9 +256,9 @@ def _create_assignments(
         for ra in team_resolved
     ]
     if team_assignments:
-        created_teams = _insert_new(team_assignments, 'team_id', RoleTeamAssignment)
-        created_assignments.extend(created_teams)
-        _audit_log_created(created_teams)
+        created_team_assignments = _insert_new(team_assignments, 'team_id', RoleTeamAssignment)
+        created_assignments.extend(created_team_assignments)
+        _audit_log_created(created_team_assignments)
 
     return created_assignments
 
