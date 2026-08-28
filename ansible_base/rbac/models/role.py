@@ -223,28 +223,39 @@ class RoleDefinition(CommonModel):
         return self.give_or_remove_global_permission(actor, giving=False)
 
     def give_or_remove_global_permission(self, actor, giving=True):
+        # Routes through the shared bulk pipeline so global assignments emit the same audit +
+        # bulk signals (dab_rbac_assignments_created/_pre_delete) as object assignments. See AAP-90170.
+        from ansible_base.rbac.pipeline import give_global_assignments, remove_global_assignments
+
         if giving and (self.content_type is not None):
             raise ValidationError('Role definition content type must be null to assign globally')
 
         if actor._meta.model_name == 'user':
             if giving and (not settings.ANSIBLE_BASE_ALLOW_SINGLETON_USER_ROLES):
                 raise ValidationError('Global roles are not enabled for users')
-            kwargs = {'object_role': None, 'user': actor, 'role_definition': self}
             cls = RoleUserAssignment
+            actor_filter = {'user': actor}
+            actor_kwarg = 'users'
         elif isinstance(actor, permission_registry.team_model):
             if not settings.ANSIBLE_BASE_ALLOW_SINGLETON_TEAM_ROLES:
                 raise ValidationError('Global roles are not enabled for teams')
-            kwargs = {'object_role': None, 'team': actor, 'role_definition': self}
             cls = RoleTeamAssignment
+            actor_filter = {'team': actor}
+            actor_kwarg = 'teams'
         else:
             raise RuntimeError(f'Cannot {giving and "give" or "remove"} permission for {actor}, must be a user or team')
 
         if giving:
-            assignment, _ = cls.objects.get_or_create(**kwargs)
+            created = give_global_assignments(self, **{actor_kwarg: [actor]})
+            if created:
+                assignment = created[0]
+            else:
+                # Already existed: the pipeline returns only newly-created rows, so fetch it.
+                assignment = cls.objects.get(role_definition=self, object_role__isnull=True, **actor_filter)
         else:
-            assignment = cls.objects.filter(**kwargs).first()
-            if assignment:
-                assignment.delete()
+            # Capture the row for the return value before the pipeline deletes it.
+            assignment = cls.objects.filter(role_definition=self, object_role__isnull=True, **actor_filter).first()
+            remove_global_assignments(self, **{actor_kwarg: [actor]})
 
         # Clear any cached permissions
         if actor._meta.model_name == 'user':

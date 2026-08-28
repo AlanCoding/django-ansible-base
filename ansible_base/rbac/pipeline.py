@@ -466,6 +466,80 @@ def give_assignments(
     return created_assignments
 
 
+def give_global_assignments(
+    role_definition: RoleDefinition,
+    users: Sequence[models.Model] = (),
+    teams: Sequence[models.Model] = (),
+) -> list[AssignmentBase]:
+    """Create global (singleton) role assignments through the shared pipeline.
+
+    Global roles have no content object: object_role, content_type, and object_id are all
+    null. They therefore bypass ObjectRole creation and RoleEvaluation recompute entirely --
+    global roles do not populate RoleEvaluation (see RoleDefinition.user_global_permissions),
+    so there is nothing to recompute. Routing them here funnels them through the same audit +
+    bulk-signal path (dab_rbac_assignments_created) as object assignments, so consumers
+    (activity stream, AWX/Hub mirroring) observe every assignment uniformly. See AAP-90170.
+
+    Returns only the newly-created assignments (idempotent re-gives are omitted, same as
+    give_assignments); the partial unique constraints unique_global_{user,team}_assignment
+    let bulk_create(ignore_conflicts=True) dedupe.
+    """
+    if not users and not teams:
+        return []
+
+    created_by = current_user_or_system_user()
+    created_assignments: list[AssignmentBase] = []
+
+    user_assignments = [RoleUserAssignment(user=user, role_definition=role_definition, created_by=created_by) for user in users]
+    if user_assignments:
+        created_user_assignments = _insert_new(user_assignments, 'user_id', RoleUserAssignment)
+        created_assignments.extend(created_user_assignments)
+        # TEMPORARY (AAP-90162 merge order): _fire_post_save instead of _audit_log_created.
+        _fire_post_save(created_user_assignments)
+
+    team_assignments = [RoleTeamAssignment(team=team, role_definition=role_definition, created_by=created_by) for team in teams]
+    if team_assignments:
+        created_team_assignments = _insert_new(team_assignments, 'team_id', RoleTeamAssignment)
+        created_assignments.extend(created_team_assignments)
+        # TEMPORARY (AAP-90162 merge order): _fire_post_save instead of _audit_log_created.
+        _fire_post_save(created_team_assignments)
+
+    # Fire the bulk signal only when rows were actually created (idempotent re-gives are silent).
+    # content_objects is empty: global assignments have no content object.
+    if created_assignments:
+        dab_rbac_assignments_created.send(sender=None, assignments=created_assignments, content_objects={})
+
+    # No recompute: global roles do not populate RoleEvaluation.
+    return created_assignments
+
+
+def remove_global_assignments(
+    role_definition: RoleDefinition,
+    users: Sequence[models.Model] = (),
+    teams: Sequence[models.Model] = (),
+) -> None:
+    """Remove global (singleton) role assignments through the shared pipeline.
+
+    Fires dab_rbac_assignments_pre_delete before deletion (FKs still readable). No
+    RoleEvaluation recompute -- global roles do not populate it. Unlike the create side,
+    no post_delete re-fire is needed: QuerySet.delete() emits per-row post_delete, so
+    not-yet-migrated consumers keep working on the delete side. See AAP-90170.
+    """
+    user_found = list(RoleUserAssignment.objects.filter(role_definition=role_definition, object_role__isnull=True, user__in=users)) if users else []
+    team_found = list(RoleTeamAssignment.objects.filter(role_definition=role_definition, object_role__isnull=True, team__in=teams)) if teams else []
+    all_found = user_found + team_found
+    if not all_found:
+        return
+
+    # content_objects is empty: global assignments have no content object.
+    dab_rbac_assignments_pre_delete.send(sender=None, assignments=all_found, content_objects={})
+
+    if user_found:
+        RoleUserAssignment.objects.filter(pk__in=[a.pk for a in user_found]).delete()
+    if team_found:
+        RoleTeamAssignment.objects.filter(pk__in=[a.pk for a in team_found]).delete()
+
+
 def bulk_give_permissions(
     user_permissions: Sequence[PermissionTriple] = (),
     team_permissions: Sequence[PermissionTriple] = (),

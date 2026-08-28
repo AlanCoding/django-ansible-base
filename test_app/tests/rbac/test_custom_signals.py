@@ -152,6 +152,98 @@ class TestBulkAssignmentCreatedSignal:
 
 
 @pytest.mark.django_db
+class TestGlobalAssignmentSignals:
+    """Global (singleton) role assignments must fire the same bulk signals (AAP-90170)."""
+
+    def test_give_global_user_fires_created_signal(self, rando, global_inv_rd):
+        mck = MagicMock()
+        dab_rbac_assignments_created.connect(mck.signal_handler, dispatch_uid='test-global-user')
+        try:
+            assignment = global_inv_rd.give_global_permission(rando)
+
+            mck.signal_handler.assert_called_once()
+            call_kwargs = mck.signal_handler.call_args.kwargs
+            assert call_kwargs['assignments'] == [assignment]
+            # Global assignments carry no content object
+            assert assignment.object_role is None
+            assert assignment.content_type_id is None
+            assert assignment.object_id is None
+            assert call_kwargs['content_objects'] == {}
+        finally:
+            dab_rbac_assignments_created.disconnect(mck.signal_handler, dispatch_uid='test-global-user')
+
+    def test_give_global_team_fires_created_signal(self, team, global_inv_rd):
+        mck = MagicMock()
+        dab_rbac_assignments_created.connect(mck.signal_handler, dispatch_uid='test-global-team')
+        try:
+            assignment = global_inv_rd.give_global_permission(team)
+
+            mck.signal_handler.assert_called_once()
+            call_kwargs = mck.signal_handler.call_args.kwargs
+            assert call_kwargs['assignments'] == [assignment]
+            assert assignment.team == team
+            assert assignment.object_role is None
+        finally:
+            dab_rbac_assignments_created.disconnect(mck.signal_handler, dispatch_uid='test-global-team')
+
+    def test_give_global_idempotent_no_signal(self, rando, global_inv_rd):
+        """Re-granting an existing global role must not fire the created signal."""
+        global_inv_rd.give_global_permission(rando)
+
+        mck = MagicMock()
+        dab_rbac_assignments_created.connect(mck.signal_handler, dispatch_uid='test-global-idem')
+        try:
+            # Idempotent re-grant returns the existing assignment but creates nothing
+            assignment = global_inv_rd.give_global_permission(rando)
+            assert assignment is not None
+            mck.signal_handler.assert_not_called()
+        finally:
+            dab_rbac_assignments_created.disconnect(mck.signal_handler, dispatch_uid='test-global-idem')
+
+    def test_remove_global_user_fires_pre_delete_signal(self, rando, global_inv_rd):
+        global_inv_rd.give_global_permission(rando)
+
+        captured = {}
+
+        def capture(sender, assignments, content_objects, **kwargs):
+            captured['assignments'] = list(assignments)
+            captured['user_id'] = assignments[0].user_id
+            captured['object_role'] = assignments[0].object_role
+
+        dab_rbac_assignments_pre_delete.connect(capture, dispatch_uid='test-global-rm')
+        try:
+            global_inv_rd.remove_global_permission(rando)
+
+            assert captured['user_id'] == rando.pk
+            assert captured['object_role'] is None
+            assert len(captured['assignments']) == 1
+        finally:
+            dab_rbac_assignments_pre_delete.disconnect(capture, dispatch_uid='test-global-rm')
+
+    def test_remove_global_team_fires_pre_delete_signal(self, team, global_inv_rd):
+        global_inv_rd.give_global_permission(team)
+
+        mck = MagicMock()
+        dab_rbac_assignments_pre_delete.connect(mck.signal_handler, dispatch_uid='test-global-team-rm')
+        try:
+            global_inv_rd.remove_global_permission(team)
+
+            mck.signal_handler.assert_called_once()
+            assert mck.signal_handler.call_args.kwargs['assignments'][0].team == team
+        finally:
+            dab_rbac_assignments_pre_delete.disconnect(mck.signal_handler, dispatch_uid='test-global-team-rm')
+
+    def test_remove_global_nonexistent_no_signal(self, rando, global_inv_rd):
+        mck = MagicMock()
+        dab_rbac_assignments_pre_delete.connect(mck.signal_handler, dispatch_uid='test-global-noop-rm')
+        try:
+            global_inv_rd.remove_global_permission(rando)
+            mck.signal_handler.assert_not_called()
+        finally:
+            dab_rbac_assignments_pre_delete.disconnect(mck.signal_handler, dispatch_uid='test-global-noop-rm')
+
+
+@pytest.mark.django_db
 class TestBulkAssignmentPreDeleteSignal:
     """Tests for dab_rbac_assignments_pre_delete signal."""
 
