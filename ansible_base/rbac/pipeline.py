@@ -22,7 +22,7 @@ from ansible_base.rbac.models.role import AssignmentBase, ObjectRole, RoleDefini
 from ansible_base.rbac.permission_registry import permission_registry
 from ansible_base.rbac.remote import RemoteObject
 from ansible_base.rbac.triggers import dab_rbac_assignments_created, dab_rbac_assignments_pre_delete
-from ansible_base.rbac.validators import validate_assignment, validate_global_assignment, validate_team_assignment_enabled
+from ansible_base.rbac.validators import validate_assignment, validate_assignment_actor, validate_global_assignment, validate_team_assignment_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -110,9 +110,10 @@ def _resolve_assignments(
         if obj is None:
             validate_global_assignment(rd, actor)
         else:
+            validate_assignment_actor(actor)  # per-actor: must run for every triple, not deduped
             key = (rd.pk, obj_ct.id)
             if key not in validated_pairs:
-                validate_assignment(rd, actor, obj)
+                validate_assignment(rd, obj)  # rd<->object check depends only on (rd, content type)
                 validated_pairs.add(key)
             content_objects[(obj_ct.id, object_id)] = obj
         user_resolved.append(ResolvedAssignment(rd, actor, obj_ct, object_id, parent_ref))
@@ -124,9 +125,10 @@ def _resolve_assignments(
         if obj is None:
             validate_global_assignment(rd, actor)
         else:
+            validate_assignment_actor(actor)  # per-actor: must run for every triple, not deduped
             key = (rd.pk, obj_ct.id)
             if key not in validated_pairs:
-                validate_assignment(rd, actor, obj)
+                validate_assignment(rd, obj)  # rd<->object check depends only on (rd, content type)
                 validated_pairs.add(key)
             if key not in team_validated_pairs:
                 has_team_perm = rd.permissions.filter(codename=permission_registry.team_permission).exists()

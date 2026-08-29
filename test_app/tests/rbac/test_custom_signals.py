@@ -277,6 +277,25 @@ class TestGlobalAssignmentSignals:
         with pytest.raises(ValidationError, match='not enabled for users'):
             bulk_give_permissions(user_permissions=[(global_inv_rd, rando, None), (global_inv_rd, second_user, None)])
 
+    def test_pipeline_validates_every_actor_not_just_first(self, organization, rando, inv_rd):
+        """The actor-type check must run for every actor, even when object triples share the same
+        (role_definition, content_type). A bad (non-user/team) actor riding behind a valid one
+        must still be rejected -- the (rd, content_type) dedup applies only to the rd<->object
+        check, never to the per-actor check."""
+        inv1 = Inventory.objects.create(name='actor-gate-inv-1', organization=organization)
+        inv2 = Inventory.objects.create(name='actor-gate-inv-2', organization=organization)
+
+        with pytest.raises(ValidationError, match='must be a user or team'):
+            bulk_give_permissions(
+                user_permissions=[
+                    (inv_rd, rando, inv1),  # valid -- primes the (inv_rd, inventory-ct) dedup key
+                    (inv_rd, organization, inv2),  # same (rd, ct); organization is not a user/team
+                ]
+            )
+
+        # nothing was persisted -- validation aborts before any creation
+        assert not RoleUserAssignment.objects.filter(role_definition=inv_rd).exists()
+
     def test_bulk_mixes_global_and_object_triples(self, organization, rando, global_inv_rd, org_inv_rd, inv_rd):
         """A single bulk_give/remove call handles global (content object None) and object-scoped
         triples across multiple role definitions in one creation pass -- the unified contract.
