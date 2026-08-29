@@ -329,6 +329,34 @@ def _create_assignments(
     return created_assignments
 
 
+def _clear_singleton_caches(assignments: Iterable[AssignmentBase]) -> None:
+    """Invalidate the in-memory singleton (global) permission cache after global assignments change.
+
+    Global (singleton) role assignments are the only thing that populates a user's cached
+    ``_singleton_permissions``, so giving or removing one must invalidate that cache -- otherwise
+    an in-memory actor reused later in the request would answer permission checks from stale data.
+    This is part of the pipeline's contract: the in-memory actor rides along in the assignment
+    data, so callers should not have to think about clearing the cache themselves.
+
+    For users we clear the cache on the exact in-memory instance carried by the assignment. For
+    teams, membership makes the set of affected users unknowable, so we raise the process-wide
+    clear signal (the same mechanism the legacy give/remove_global_permission methods used).
+    """
+    team_changed = False
+    for a in assignments:
+        if a.object_role_id is not None:
+            continue  # object-scoped assignment -- does not affect singleton_permissions
+        if isinstance(a, RoleUserAssignment):
+            if hasattr(a.user, '_singleton_permissions'):
+                delattr(a.user, '_singleton_permissions')
+        else:
+            team_changed = True
+    if team_changed:
+        from ansible_base.rbac.evaluations import bound_singleton_permissions
+
+        bound_singleton_permissions._team_clear_signal = True
+
+
 def _collect_recompute_team_ids(object_roles: Iterable[ObjectRole]) -> set[int]:
     """Identify team IDs that need member-role recomputation."""
     rd_has_team_perm: dict[int, bool] = {}
@@ -452,6 +480,9 @@ def remove_assignments(
         content_objects=content_objects or {},
     )
 
+    # Removing a global assignment changes the actor's singleton permissions -- clear the cache.
+    _clear_singleton_caches(all_assignments)
+
     # Global assignments (object_role is None) don't populate RoleEvaluation, so they
     # contribute nothing to recompute -- skip them here.
     object_role_ids: set[int] = set()
@@ -496,6 +527,9 @@ def give_assignments(
 
     lookup = _ensure_object_roles(list(user_resolved) + list(team_resolved))
     created_assignments = _create_assignments(list(user_resolved), list(team_resolved), lookup)
+
+    # A newly-created global assignment changes the actor's singleton permissions -- clear the cache.
+    _clear_singleton_caches(created_assignments)
 
     # Fire the bulk signal only when rows were actually created (idempotent re-gives are silent).
     if created_assignments:
@@ -552,6 +586,14 @@ def bulk_remove_permissions(
     # Resolve and collect content_objects (from the input triples, no re-fetch) in one pass
     user_resolved, user_content_objects = _resolve_triples(user_permissions)
     team_resolved, team_content_objects = _resolve_triples(team_permissions)
+
+    # Clear the caller's in-memory singleton cache for global user removals. remove_assignments
+    # only sees DB-fetched rows, so the actor instance the caller passed (and may reuse for later
+    # permission checks) can only be invalidated here, where the original triples are in scope.
+    # Global team removals are handled by the process-wide signal in remove_assignments.
+    for ra in user_resolved:
+        if ra.content_type is None and hasattr(ra.actor, '_singleton_permissions'):
+            delattr(ra.actor, '_singleton_permissions')
 
     # Merge content_objects dicts
     content_objects = {**user_content_objects, **team_content_objects}

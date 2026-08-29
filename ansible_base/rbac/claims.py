@@ -374,12 +374,6 @@ def save_user_claims(user: Model, objects: dict, object_roles: dict, global_role
         logger.info(f"Removing {len(stale_user_assignments)} stale role assignments for user {user.username}")
         remove_assignments(user_assignments=stale_user_assignments)
 
-    # The bulk pipeline doesn't clear the per-user singleton-permission cache the way
-    # give_global_permission/remove_global_permission did, so clear it here in case a global
-    # role changed and this user instance is later reused for permission checks in-request.
-    if hasattr(user, '_singleton_permissions'):
-        delattr(user, '_singleton_permissions')
-
 
 # ---- for claims hashing ----
 

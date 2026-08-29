@@ -260,17 +260,8 @@ class RoleDefinition(CommonModel):
             assignment = cls.objects.filter(role_definition=self, object_role__isnull=True, **actor_filter).first()
             bulk_remove_permissions(user_permissions=perm if is_user else [], team_permissions=[] if is_user else perm)
 
-        # Clear any cached permissions
-        if actor._meta.model_name == 'user':
-            if hasattr(actor, '_singleton_permissions'):
-                delattr(actor, '_singleton_permissions')
-        else:
-            # when team permissions change, users in memory may be affected by this
-            # but there is no way to know what users, so we use a global flag
-            from ansible_base.rbac.evaluations import bound_singleton_permissions
-
-            bound_singleton_permissions._team_clear_signal = True
-
+        # The bulk pipeline clears the in-memory singleton-permission cache for global assignments
+        # (users by instance, teams via the process-wide signal), so no cache handling is needed here.
         return assignment
 
     def give_permission(self, actor, content_object):
