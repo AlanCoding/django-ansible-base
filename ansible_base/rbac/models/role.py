@@ -225,20 +225,15 @@ class RoleDefinition(CommonModel):
     def give_or_remove_global_permission(self, actor, giving=True):
         # Routes through the shared bulk pipeline so global assignments emit the same audit +
         # bulk signals (dab_rbac_assignments_created/_pre_delete) as object assignments. See AAP-90170.
+        # The enablement/content-type gates live in the pipeline (validate_global_assignment) so
+        # they can't be bypassed by callers that hit the bulk functions with lists directly.
         from ansible_base.rbac.pipeline import give_global_assignments, remove_global_assignments
 
-        if giving and (self.content_type is not None):
-            raise ValidationError('Role definition content type must be null to assign globally')
-
         if actor._meta.model_name == 'user':
-            if giving and (not settings.ANSIBLE_BASE_ALLOW_SINGLETON_USER_ROLES):
-                raise ValidationError('Global roles are not enabled for users')
             cls = RoleUserAssignment
             actor_filter = {'user': actor}
             actor_kwarg = 'users'
         elif isinstance(actor, permission_registry.team_model):
-            if not settings.ANSIBLE_BASE_ALLOW_SINGLETON_TEAM_ROLES:
-                raise ValidationError('Global roles are not enabled for teams')
             cls = RoleTeamAssignment
             actor_filter = {'team': actor}
             actor_kwarg = 'teams'

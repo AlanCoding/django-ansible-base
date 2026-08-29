@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock
 
 import pytest
+from rest_framework.exceptions import ValidationError
 
 from ansible_base.rbac.pipeline import bulk_give_permissions, bulk_remove_permissions
 from ansible_base.rbac.triggers import dab_rbac_assignments_created, dab_rbac_assignments_pre_delete
@@ -259,6 +260,23 @@ class TestGlobalAssignmentSignals:
             mck.signal_handler.assert_not_called()
         finally:
             dab_rbac_assignments_pre_delete.disconnect(mck.signal_handler, dispatch_uid='test-global-noop-rm')
+
+    def test_pipeline_enforces_gates_for_list_callers(self, rando, global_inv_rd, inv_rd, settings):
+        """The enablement/content-type gates must be enforced in the pipeline, not just the
+        per-actor model method -- a bulk caller passing a list of actors must not bypass them.
+        AAP-90170 (validate_global_assignment)."""
+        from ansible_base.rbac.pipeline import give_global_assignments
+
+        second_user = User.objects.create(username='global-gate-user-2')
+
+        # content_type gate: inv_rd is object-scoped, cannot be assigned globally
+        with pytest.raises(ValidationError, match='content type must be null'):
+            give_global_assignments(inv_rd, users=[rando])
+
+        # user-enablement gate applies to the whole list, not just the first actor
+        settings.ANSIBLE_BASE_ALLOW_SINGLETON_USER_ROLES = False
+        with pytest.raises(ValidationError, match='not enabled for users'):
+            give_global_assignments(global_inv_rd, users=[rando, second_user])
 
 
 @pytest.mark.django_db

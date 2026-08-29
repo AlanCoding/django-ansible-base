@@ -22,7 +22,7 @@ from ansible_base.rbac.models.role import AssignmentBase, ObjectRole, RoleDefini
 from ansible_base.rbac.permission_registry import permission_registry
 from ansible_base.rbac.remote import RemoteObject
 from ansible_base.rbac.triggers import dab_rbac_assignments_created, dab_rbac_assignments_pre_delete
-from ansible_base.rbac.validators import validate_assignment, validate_team_assignment_enabled
+from ansible_base.rbac.validators import validate_assignment, validate_global_assignment, validate_team_assignment_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -487,6 +487,9 @@ def give_global_assignments(
     if not users and not teams:
         return []
 
+    # Validate here (not in the caller) so bulk callers passing lists can't bypass the gates.
+    validate_global_assignment(role_definition, has_users=bool(users), has_teams=bool(teams), giving=True)
+
     created_by = current_user_or_system_user()
     created_assignments: list[AssignmentBase] = []
 
@@ -525,6 +528,12 @@ def remove_global_assignments(
     no post_delete re-fire is needed: QuerySet.delete() emits per-row post_delete, so
     not-yet-migrated consumers keep working on the delete side. See AAP-90170.
     """
+    if not users and not teams:
+        return
+
+    # Validate here (not in the caller) so bulk callers passing lists can't bypass the gates.
+    validate_global_assignment(role_definition, has_users=bool(users), has_teams=bool(teams), giving=False)
+
     user_found = list(RoleUserAssignment.objects.filter(role_definition=role_definition, object_role__isnull=True, user__in=users)) if users else []
     team_found = list(RoleTeamAssignment.objects.filter(role_definition=role_definition, object_role__isnull=True, team__in=teams)) if teams else []
     all_found = user_found + team_found
