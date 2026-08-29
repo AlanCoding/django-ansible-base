@@ -279,23 +279,24 @@ def validate_assignment(rd, actor, obj) -> None:
         raise ValidationError(f'Role type {rd_model} does not match object {obj_ct.model}')
 
 
-def validate_global_assignment(rd, has_users: bool, has_teams: bool, giving: bool = True) -> None:
-    """Validate a global (singleton) role assignment request.
+def validate_global_assignment(rd, actor) -> None:
+    """Validate a single global (singleton) role assignment (the give path).
 
-    Enforced at the pipeline level (give_global_assignments / remove_global_assignments) so
-    that bulk callers passing lists of actors cannot bypass the gates -- the object path
-    likewise validates in bulk_give_permissions rather than in the per-actor model method.
+    Mirrors validate_assignment for object assignments: it is called per (rd, actor) from
+    the pipeline's _resolve_assignments, so a bulk caller passing a list of global triples
+    (rd, actor, None) cannot bypass the content-type / enablement gates.
 
-    The give/remove asymmetry is preserved from the historical RoleDefinition method:
-    the content-type and user-enablement gates apply only when giving (you must be able to
-    remove a global assignment even if the role definition later became object-scoped or the
-    setting was turned off), while the team-enablement gate applies to removal too.
+    Only the give path validates. Removal is intentionally not gated -- you must always be
+    able to clean up a global assignment regardless of the current enablement settings or the
+    role definition's content type (which may have changed after the grant).
     """
-    if giving and rd.content_type is not None:
+    if actor._meta.model_name not in ('user', 'team'):
+        raise ValidationError(f'Cannot give permission to {actor}, must be a user or team')
+    if rd.content_type is not None:
         raise ValidationError('Role definition content type must be null to assign globally')
-    if giving and has_users and not settings.ANSIBLE_BASE_ALLOW_SINGLETON_USER_ROLES:
+    if actor._meta.model_name == 'user' and not settings.ANSIBLE_BASE_ALLOW_SINGLETON_USER_ROLES:
         raise ValidationError('Global roles are not enabled for users')
-    if has_teams and not settings.ANSIBLE_BASE_ALLOW_SINGLETON_TEAM_ROLES:
+    if actor._meta.model_name == 'team' and not settings.ANSIBLE_BASE_ALLOW_SINGLETON_TEAM_ROLES:
         raise ValidationError('Global roles are not enabled for teams')
 
 

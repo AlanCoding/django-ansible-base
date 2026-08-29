@@ -41,8 +41,8 @@ dab_post_migrate = Signal()
 
 # Sent after assignments are created, ONLY for rows that were actually created (idempotent
 # re-grants send nothing -- equivalent to post_save with created=True). Fired by:
-#   - give_assignments / bulk_give_permissions / RoleDefinition.give_permission  (object roles)
-#   - give_global_assignments / RoleDefinition.give_global_permission            (global roles)
+#   - give_assignments / bulk_give_permissions / RoleDefinition.give_permission        (object roles)
+#   - bulk_give_permissions (triple with content object None) / give_global_permission (global roles)
 # These are the SUPPORTED grant entry points. A raw RoleUserAssignment.objects.create(...) or
 # .get_or_create(...) does NOT fire this signal -- route grants through the methods above.
 # kwargs:
@@ -61,8 +61,8 @@ dab_post_migrate = Signal()
 dab_rbac_assignments_created = Signal()
 
 # Sent BEFORE assignments are deleted (all FKs still readable). Fired by:
-#   - remove_assignments / bulk_remove_permissions / RoleDefinition.remove_permission  (object roles)
-#   - remove_global_assignments / RoleDefinition.remove_global_permission              (global roles)
+#   - remove_assignments / bulk_remove_permissions / RoleDefinition.remove_permission      (object roles)
+#   - bulk_remove_permissions (triple with content object None) / remove_global_permission (global roles)
 # kwargs:
 #   - assignments: list[AssignmentBase] - RoleUserAssignment/RoleTeamAssignment instances about to be deleted
 #   - content_objects: dict[tuple[int, str], ContentObject] - optional lookup by (content_type_id, object_id)

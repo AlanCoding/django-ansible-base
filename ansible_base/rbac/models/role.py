@@ -223,40 +223,42 @@ class RoleDefinition(CommonModel):
         return self.give_or_remove_global_permission(actor, giving=False)
 
     def give_or_remove_global_permission(self, actor, giving=True):
-        # Routes through the shared bulk pipeline so global assignments emit the same audit +
-        # bulk signals (dab_rbac_assignments_created/_pre_delete) as object assignments. See AAP-90170.
-        # The enablement/content-type gates live in the pipeline (validate_global_assignment) so
-        # they can't be bypassed by callers that hit the bulk functions with lists directly.
-        from ansible_base.rbac.pipeline import give_global_assignments, remove_global_assignments
+        # Routes through the shared bulk pipeline as an ordinary triple with a None content
+        # object, so global assignments emit the same audit + bulk signals
+        # (dab_rbac_assignments_created/_pre_delete) as object assignments, and the enablement/
+        # content-type gates (validate_global_assignment) can't be bypassed. See AAP-90170.
+        from ansible_base.rbac.pipeline import bulk_give_permissions, bulk_remove_permissions
 
         if actor._meta.model_name == 'user':
             cls = RoleUserAssignment
             actor_filter = {'user': actor}
-            actor_kwarg = 'users'
+            is_user = True
         elif isinstance(actor, permission_registry.team_model):
             cls = RoleTeamAssignment
             actor_filter = {'team': actor}
-            actor_kwarg = 'teams'
+            is_user = False
         else:
             raise RuntimeError(f'Cannot {giving and "give" or "remove"} permission for {actor}, must be a user or team')
 
+        # A None content object marks this as a global (singleton) assignment.
+        perm = [(self, actor, None)]
         if giving:
-            created = give_global_assignments(self, **{actor_kwarg: [actor]})
+            created = bulk_give_permissions(user_permissions=perm if is_user else [], team_permissions=[] if is_user else perm)
             if created:
                 assignment = created[0]
             else:
                 # Already existed: the pipeline returns only newly-created rows, so fetch it.
                 assignment = cls.objects.get(role_definition=self, object_role__isnull=True, **actor_filter)
-            # The pipeline returns DB-refetched rows; reattach the caller's in-memory role
-            # definition and actor so the returned assignment preserves object identity (the
-            # old get_or_create path did) and callers avoid a lazy re-fetch.
+            # Reattach the caller's in-memory role definition and actor so the returned assignment
+            # preserves object identity (the old get_or_create path did) -- this matters for the
+            # fetched branch above, which returns DB-refetched instances.
             assignment.role_definition = self
             for field_name, obj in actor_filter.items():
                 setattr(assignment, field_name, obj)
         else:
             # Capture the row for the return value before the pipeline deletes it.
             assignment = cls.objects.filter(role_definition=self, object_role__isnull=True, **actor_filter).first()
-            remove_global_assignments(self, **{actor_kwarg: [actor]})
+            bulk_remove_permissions(user_permissions=perm if is_user else [], team_permissions=[] if is_user else perm)
 
         # Clear any cached permissions
         if actor._meta.model_name == 'user':

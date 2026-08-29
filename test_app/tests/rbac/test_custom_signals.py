@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 import pytest
 from rest_framework.exceptions import ValidationError
 
+from ansible_base.rbac.models import RoleUserAssignment
 from ansible_base.rbac.pipeline import bulk_give_permissions, bulk_remove_permissions
 from ansible_base.rbac.triggers import dab_rbac_assignments_created, dab_rbac_assignments_pre_delete
 from test_app.models import Inventory, User
@@ -263,20 +264,52 @@ class TestGlobalAssignmentSignals:
 
     def test_pipeline_enforces_gates_for_list_callers(self, rando, global_inv_rd, inv_rd, settings):
         """The enablement/content-type gates must be enforced in the pipeline, not just the
-        per-actor model method -- a bulk caller passing a list of actors must not bypass them.
-        AAP-90170 (validate_global_assignment)."""
-        from ansible_base.rbac.pipeline import give_global_assignments
-
+        per-actor model method -- a bulk caller passing a list of global triples (content
+        object None) must not bypass them. AAP-90170 (validate_global_assignment)."""
         second_user = User.objects.create(username='global-gate-user-2')
 
         # content_type gate: inv_rd is object-scoped, cannot be assigned globally
         with pytest.raises(ValidationError, match='content type must be null'):
-            give_global_assignments(inv_rd, users=[rando])
+            bulk_give_permissions(user_permissions=[(inv_rd, rando, None)])
 
-        # user-enablement gate applies to the whole list, not just the first actor
+        # user-enablement gate applies to every actor in the list, not just the first
         settings.ANSIBLE_BASE_ALLOW_SINGLETON_USER_ROLES = False
         with pytest.raises(ValidationError, match='not enabled for users'):
-            give_global_assignments(global_inv_rd, users=[rando, second_user])
+            bulk_give_permissions(user_permissions=[(global_inv_rd, rando, None), (global_inv_rd, second_user, None)])
+
+    def test_bulk_mixes_global_and_object_triples(self, organization, rando, global_inv_rd, org_inv_rd, inv_rd):
+        """A single bulk_give/remove call handles global (content object None) and object-scoped
+        triples across multiple role definitions in one creation pass -- the unified contract.
+        AAP-90170."""
+        inv = Inventory.objects.create(name='mixed-global-inv', organization=organization)
+
+        created = bulk_give_permissions(
+            user_permissions=[
+                (global_inv_rd, rando, None),  # global
+                (org_inv_rd, rando, organization),  # object-scoped (organization)
+                (inv_rd, rando, inv),  # object-scoped (inventory)
+            ]
+        )
+        assert len(created) == 3
+        # exactly one global row (object_role None) and two object rows
+        assert len([a for a in created if a.object_role_id is None]) == 1
+        assert len([a for a in created if a.object_role_id is not None]) == 2
+        # returned rows keep the in-memory role definition (no re-fetch)
+        assert any(a.role_definition is global_inv_rd for a in created)
+        assert any(a.role_definition is org_inv_rd for a in created)
+        assert any(a.role_definition is inv_rd for a in created)
+
+        # Removal mixes the same shapes and clears the global row too
+        bulk_remove_permissions(
+            user_permissions=[
+                (global_inv_rd, rando, None),
+                (org_inv_rd, rando, organization),
+                (inv_rd, rando, inv),
+            ]
+        )
+        assert not RoleUserAssignment.objects.filter(user=rando, role_definition=global_inv_rd, object_role__isnull=True).exists()
+        assert not RoleUserAssignment.objects.filter(user=rando, role_definition=org_inv_rd).exists()
+        assert not RoleUserAssignment.objects.filter(user=rando, role_definition=inv_rd).exists()
 
 
 @pytest.mark.django_db
