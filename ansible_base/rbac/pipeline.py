@@ -428,7 +428,21 @@ def _find_assignments(
                 q |= Q(object_role_id=obj_role.pk, **{actor_field: ra.actor.pk})
     if not q:
         return []
-    return list(model.objects.filter(q))
+    assignments = list(model.objects.filter(q))
+
+    # We already hold the materialized role_definition and actor on the resolved triples we
+    # filtered by, so re-fetching them (even via a select_related JOIN) is wasteful. Attach
+    # them back onto the freshly-loaded rows so signal consumers can read role_definition.name
+    # and user/team with no per-row query. Every returned row was matched on one of these
+    # actor pks and role definitions, so the maps are guaranteed to cover it.
+    # The GFK content_object is not attachable this way; it travels via the content_objects dict.
+    actor_relation = actor_field[:-3]  # 'user_id' -> 'user', 'team_id' -> 'team'
+    actor_by_pk = {ra.actor.pk: ra.actor for ra in resolved}
+    rd_by_pk = {ra.role_definition.pk: ra.role_definition for ra in resolved}
+    for assignment in assignments:
+        setattr(assignment, actor_relation, actor_by_pk[getattr(assignment, actor_field)])
+        assignment.role_definition = rd_by_pk[assignment.role_definition_id]
+    return assignments
 
 
 def _recompute_after_remove(

@@ -370,6 +370,10 @@ def save_user_claims(user: Model, objects: dict, object_roles: dict, global_role
         for assignment in RoleUserAssignment.objects.filter(user=user, role_definition__name__in=managed_roles).select_related('role_definition')
         if (assignment.role_definition_id, assignment.cache_id) not in desired_keys
     ]
+    # Every stale row belongs to this one user, which we already hold -- attach it so signal
+    # consumers reading assignment.user don't trigger a per-row refetch of what we have.
+    for assignment in stale_user_assignments:
+        assignment.user = user
     if stale_user_assignments:
         logger.info(f"Removing {len(stale_user_assignments)} stale role assignments for user {user.username}")
         remove_assignments(user_assignments=stale_user_assignments)
