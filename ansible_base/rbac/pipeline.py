@@ -488,7 +488,18 @@ def remove_assignments(
     if not user_assignments and not team_assignments:
         return
 
-    # Always fire bulk signal BEFORE deletion with whatever content_objects we have (may be empty dict)
+    # Fire the bulk signal BEFORE deletion (and thus before recomputation) with whatever
+    # content_objects we have (may be empty dict). pre_delete must fire here: consumers rely
+    # on the rows still existing and their content objects still being resolvable -- essential
+    # for cascade deletes where the content object is itself being removed. This is the
+    # deliberate counterpart to the "created" signal, which fires *after* recomputation (a
+    # completed creation) because an additive op can carry both the rows and settled
+    # evaluations at once; a destructive op cannot.
+    #
+    # Reserved extension point: if a consumer ever needs the *post-removal* settled state
+    # (fresh RoleEvaluation after recompute), add a new post-recompute signal named
+    # dab_rbac_assignments_deleted (past tense, mirroring "created") rather than overloading
+    # this one. Do not add a pre_create signal -- see give_assignments for why it is redundant.
     all_assignments = list(user_assignments) + list(team_assignments)
     dab_rbac_assignments_pre_delete.send(
         sender=None,
@@ -547,7 +558,13 @@ def give_assignments(
     # A newly-created global assignment changes the actor's singleton permissions -- clear the cache.
     _clear_singleton_caches(created_assignments)
 
+    _recompute_after_give(lookup, created_assignments)
+
     # Fire the bulk signal only when rows were actually created (idempotent re-gives are silent).
+    # Sent *after* recomputation so consumers see fully-settled state: the assignment rows exist
+    # and RoleEvaluation already reflects them (has_obj_perm / accessible_objects are accurate in
+    # the handler). This mirrors the "created" (past-tense) semantics -- unlike the removal signal,
+    # which is pre_delete by design and necessarily fires before deletion and recomputation.
     if created_assignments:
         dab_rbac_assignments_created.send(
             sender=None,
@@ -555,7 +572,6 @@ def give_assignments(
             content_objects=content_objects or {},
         )
 
-    _recompute_after_give(lookup, created_assignments)
     return created_assignments
 
 

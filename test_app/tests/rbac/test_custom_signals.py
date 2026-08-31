@@ -152,6 +152,25 @@ class TestBulkAssignmentCreatedSignal:
         finally:
             dab_rbac_assignments_created.disconnect(mck.signal_handler, dispatch_uid='test-only-hook')
 
+    def test_created_signal_fires_after_recompute(self, inventory, rando, inv_rd):
+        """The created signal fires *after* recomputation: RoleEvaluation is already settled.
+
+        A handler that queries effective permissions inline sees accurate results -- this is
+        the documented contract (see docs/apps/rbac/bulk_operations.md). Before the signal was
+        moved below recompute, has_obj_perm would have been stale (False) at this point.
+        """
+        seen = {}
+
+        def handler(sender, assignments, content_objects, **kwargs):
+            seen['has_perm'] = rando.has_obj_perm(inventory, 'change_inventory')
+
+        dab_rbac_assignments_created.connect(handler, dispatch_uid='test-created-ordering')
+        try:
+            bulk_give_permissions(user_permissions=[(inv_rd, rando, inventory)])
+            assert seen['has_perm'] is True
+        finally:
+            dab_rbac_assignments_created.disconnect(handler, dispatch_uid='test-created-ordering')
+
 
 @pytest.mark.django_db
 class TestGlobalAssignmentSignals:
@@ -415,6 +434,27 @@ class TestBulkAssignmentPreDeleteSignal:
             assert captured_data['content_object'] == organization
         finally:
             dab_rbac_assignments_pre_delete.disconnect(capture_assignment_data, dispatch_uid='test-valid')
+
+    def test_pre_delete_signal_fires_before_recompute(self, inventory, rando, inv_rd):
+        """The pre_delete signal fires *before* deletion and recomputation.
+
+        At signal time the row still exists and RoleEvaluation still reflects the
+        pre-removal state, so has_obj_perm is still True. This is the deliberate counterpart
+        to the created signal firing after recompute (see docs/apps/rbac/bulk_operations.md).
+        """
+        inv_rd.give_permission(rando, inventory)
+        seen = {}
+
+        def handler(sender, assignments, content_objects, **kwargs):
+            seen['has_perm_at_signal'] = rando.has_obj_perm(inventory, 'change_inventory')
+
+        dab_rbac_assignments_pre_delete.connect(handler, dispatch_uid='test-pre-delete-ordering')
+        try:
+            bulk_remove_permissions(user_permissions=[(inv_rd, rando, inventory)])
+            assert seen['has_perm_at_signal'] is True  # still present before delete/recompute
+            assert rando.has_obj_perm(inventory, 'change_inventory') is False  # gone afterward
+        finally:
+            dab_rbac_assignments_pre_delete.disconnect(handler, dispatch_uid='test-pre-delete-ordering')
 
     def test_remove_nonexistent_no_signal(self, organization, rando, org_inv_rd):
         """Removing permissions that don't exist should not fire signal."""
