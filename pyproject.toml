@@ -179,7 +179,6 @@ legacy_tox_ini = """
 """
 
 [tool.mypy]
-python_version = "3.11"
 plugins = ["mypy_django_plugin.main", "mypy_drf_plugin.main"]
 ignore_missing_imports = true
 follow_imports = "silent"
